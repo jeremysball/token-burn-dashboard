@@ -10,15 +10,23 @@
     <link rel="stylesheet" href="/mono-dashboard.css">
     <style>
         :root {
-            --chart-bg: #0d0d0d;
-            --chart-grid: #1a1a1a;
+            --mono-bg: #111111;
+            --mono-surface: #1a1a1a;
+            --mono-surface-hover: #222222;
+            --mono-border: #333333;
+            --mono-border-focus: #444444;
+            --mono-text: #d1d1d1;
+            --mono-text-muted: #666666;
+            --mono-accent: #e2b714;
+            --mono-accent-hover: #f0c000;
+            --mono-error: #ca4754;
+            --mono-success: #7cb97a;
             --chart-line-1: #e2b714;
             --chart-line-2: #7cb97a;
             --chart-line-3: #ca4754;
             --chart-line-4: #6d9bff;
         }
-        
-        /* Light theme */
+
         [data-theme="light"] {
             --mono-bg: #f5f5f5;
             --mono-surface: #ffffff;
@@ -28,39 +36,121 @@
             --mono-text-muted: #666;
             --mono-accent: #b8860b;
         }
-        
-        /* Live indicator */
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--mono-bg);
+            color: var(--mono-text);
+            line-height: 1.5;
+        }
+
+        .mono-dashboard { padding: 24px; min-height: 100vh; }
+
+        /* Live indicator with glow */
         .live-indicator {
             display: inline-flex;
             align-items: center;
             gap: 8px;
             font-size: 0.75rem;
             color: var(--mono-accent);
+            font-weight: 700;
         }
-        
+
         .live-indicator::before {
             content: '';
             width: 8px;
             height: 8px;
             background: var(--mono-accent);
             border-radius: 50%;
-            animation: pulse 1s infinite;
+            animation: pulse-glow 2s infinite;
+            box-shadow: 0 0 10px var(--mono-accent);
         }
-        
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.4; }
+
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
         }
-        
-        .last-update {
-            font-size: 0.75rem;
-            color: var(--mono-text-muted);
+
+        /* Sparkline */
+        .sparkline {
+            width: 100px;
+            height: 30px;
         }
-        
+
+        .sparkline path {
+            fill: none;
+            stroke: var(--mono-accent);
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .sparkline area {
+            fill: var(--mono-accent);
+            opacity: 0.1;
+        }
+
+        /* Notifications */
+        .notification-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1001;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .notification {
+            background: var(--mono-surface);
+            border: 1px solid var(--mono-border);
+            border-left: 4px solid var(--mono-accent);
+            padding: 16px 20px;
+            border-radius: 4px;
+            min-width: 300px;
+            animation: slide-in 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .notification.error { border-left-color: var(--mono-error); }
+        .notification.success { border-left-color: var(--mono-success); }
+
+        @keyframes slide-in {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        @keyframes fade-out {
+            to { opacity: 0; transform: translateX(100%); }
+        }
+
+        /* Stats grid with sparklines */
+        .stat-with-sparkline {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* Animations */
+        .fade-in { animation: fade-in 0.3s ease; }
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .count-up { transition: all 0.5s ease; }
+
+        /* Progress bar animation */
+        .mono-progress__fill {
+            transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
         /* Controls */
         .controls {
             display: flex;
-            gap: 16px;
+            gap: 12px;
             margin-bottom: 24px;
             padding: 12px 16px;
             background: var(--mono-surface);
@@ -69,7 +159,7 @@
             flex-wrap: wrap;
             align-items: center;
         }
-        
+
         .btn {
             background: var(--mono-bg);
             border: 1px solid var(--mono-border);
@@ -81,50 +171,23 @@
             letter-spacing: 0.05em;
             cursor: pointer;
             border-radius: 4px;
-            transition: all 0.1s ease;
+            transition: all 0.15s ease;
         }
-        
+
         .btn:hover {
             border-color: var(--mono-accent);
             color: var(--mono-accent);
+            transform: translateY(-1px);
         }
-        
+
+        .btn:active { transform: translateY(0); }
+
         .btn.active {
             background: var(--mono-accent);
             color: var(--mono-bg);
             border-color: var(--mono-accent);
         }
-        
-        .btn.secondary {
-            background: transparent;
-        }
-        
-        .refresh-btn {
-            margin-left: auto;
-        }
-        
-        .view-toggle {
-            display: flex;
-            gap: 0;
-        }
-        
-        .view-toggle .btn {
-            border-radius: 0;
-        }
-        
-        .view-toggle .btn:first-child {
-            border-radius: 4px 0 0 4px;
-        }
-        
-        .view-toggle .btn:last-child {
-            border-radius: 0 4px 4px 0;
-        }
-        
-        .view-toggle .btn:not(:first-child) {
-            border-left: none;
-        }
-        
-        /* Search */
+
         .search-box {
             background: var(--mono-bg);
             border: 1px solid var(--mono-border);
@@ -134,67 +197,57 @@
             font-size: 0.875rem;
             border-radius: 4px;
             width: 200px;
+            transition: all 0.15s ease;
         }
-        
+
         .search-box:focus {
             outline: none;
             border-color: var(--mono-accent);
+            box-shadow: 0 0 0 2px rgba(226, 183, 20, 0.1);
         }
-        
+
         /* View sections */
-        .view-section {
-            display: none;
-        }
-        
-        .view-section.active {
-            display: block;
-        }
-        
-        /* Model icons */
-        .model-icon {
-            display: inline-flex;
-            width: 24px;
-            height: 24px;
-            align-items: center;
-            justify-content: center;
-            margin-right: 8px;
-        }
-        
-        /* Cache visualization */
-        .cache-bar {
-            display: flex;
-            height: 4px;
-            background: var(--mono-bg);
-            border-radius: 2px;
-            overflow: hidden;
-            margin-top: 4px;
-        }
-        
-        .cache-input { background: var(--mono-accent); }
-        .cache-read { background: #7cb97a; }
-        .cache-write { background: #ca4754; }
-        
-        /* Loading state */
-        .loading {
-            opacity: 0.5;
-            pointer-events: none;
-        }
-        
-        /* Error state */
-        .error-banner {
-            background: rgba(202, 71, 84, 0.1);
-            border: 1px solid var(--mono-error);
-            color: var(--mono-error);
-            padding: 12px 16px;
+        .view-section { display: none; }
+        .view-section.active { display: block; animation: fade-in 0.3s ease; }
+
+        /* Cost cards */
+        .cost-card {
+            background: var(--mono-surface);
+            border: 1px solid var(--mono-border);
             border-radius: 4px;
-            margin-bottom: 16px;
-            display: none;
+            padding: 20px;
+            transition: all 0.15s ease;
         }
-        
-        .error-banner.visible {
-            display: block;
+
+        .cost-card:hover {
+            border-color: var(--mono-border-focus);
+            transform: translateY(-2px);
         }
-        
+
+        .cost-card.highlight {
+            border-color: var(--mono-accent);
+            box-shadow: 0 0 20px rgba(226, 183, 20, 0.1);
+        }
+
+        /* Table improvements */
+        .mono-table tbody tr {
+            transition: all 0.15s ease;
+        }
+
+        .mono-table tbody tr:hover {
+            background: var(--mono-surface-hover);
+        }
+
+        .mono-table th {
+            cursor: pointer;
+            user-select: none;
+            transition: color 0.15s ease;
+        }
+
+        .mono-table th:hover {
+            color: var(--mono-accent);
+        }
+
         /* Charts */
         .chart-container {
             background: var(--mono-surface);
@@ -202,1023 +255,575 @@
             border-radius: 4px;
             padding: 20px;
             margin-bottom: 24px;
+            transition: all 0.15s ease;
         }
-        
-        .chart-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 16px;
-            padding-bottom: 12px;
-            border-bottom: 1px solid var(--mono-border);
+
+        .chart-container:hover {
+            border-color: var(--mono-border-focus);
         }
-        
-        .chart-title {
-            font-size: 0.875rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-        
-        /* Cost Analysis */
-        .cost-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
-        }
-        
-        .cost-card {
-            background: var(--mono-surface);
-            border: 1px solid var(--mono-border);
-            border-radius: 4px;
-            padding: 20px;
-        }
-        
-        .cost-card.highlight {
-            border-color: var(--mono-accent);
-        }
-        
-        .cost-label {
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: var(--mono-text-muted);
-            margin-bottom: 8px;
-        }
-        
-        .cost-value {
-            font-size: 2rem;
-            font-weight: 700;
-            color: var(--mono-text);
-        }
-        
-        .cost-value.accent {
-            color: var(--mono-accent);
-        }
-        
-        .cost-breakdown {
-            margin-top: 12px;
-            padding-top: 12px;
-            border-top: 1px solid var(--mono-border);
-            font-size: 0.75rem;
-        }
-        
-        .cost-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 4px;
-        }
-        
-        /* Pricing Editor */
-        .pricing-editor {
-            background: var(--mono-surface);
-            border: 1px solid var(--mono-border);
-            border-radius: 4px;
-            padding: 16px;
-            margin-bottom: 24px;
-        }
-        
-        .pricing-row {
-            display: grid;
-            grid-template-columns: 2fr 1fr 1fr auto;
-            gap: 12px;
-            align-items: center;
-            margin-bottom: 8px;
-            padding: 8px;
-            background: var(--mono-bg);
-            border-radius: 4px;
-        }
-        
-        .pricing-row input {
-            background: var(--mono-surface);
-            border: 1px solid var(--mono-border);
-            color: var(--mono-text);
-            padding: 6px 10px;
-            font-family: inherit;
-            font-size: 0.875rem;
-        }
-        
-        .pricing-row input:focus {
-            outline: none;
-            border-color: var(--mono-accent);
-        }
-        
-        /* SVG Charts */
-        .svg-chart {
-            width: 100%;
-            height: 100%;
-        }
-        
-        .chart-bar {
-            transition: all 0.3s ease;
-        }
-        
-        .chart-bar:hover {
-            opacity: 0.8;
-        }
-        
-        /* Donut Chart */
+
+        /* Donut chart */
         .donut-chart {
             position: relative;
             width: 200px;
             height: 200px;
         }
-        
-        .donut-center {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
+
+        .donut-segment {
+            transition: all 0.3s ease;
+            cursor: pointer;
         }
-        
-        .donut-value {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--mono-accent);
+
+        .donut-segment:hover {
+            opacity: 0.8;
+            transform: scale(1.02);
         }
-        
-        .donut-label {
-            font-size: 0.75rem;
-            color: var(--mono-text-muted);
-        }
-        
-        /* Legend */
-        .chart-legend {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 16px;
-            margin-top: 16px;
-            padding-top: 16px;
-            border-top: 1px solid var(--mono-border);
-        }
-        
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 0.75rem;
-        }
-        
-        .legend-color {
-            width: 12px;
-            height: 12px;
-            border-radius: 2px;
-        }
-        
+
         /* Comparison bars */
         .compare-bar {
             display: flex;
             align-items: center;
             gap: 12px;
             margin-bottom: 12px;
+            animation: fade-in 0.3s ease;
         }
-        
-        .compare-label {
-            width: 100px;
-            font-size: 0.75rem;
-            color: var(--mono-text-muted);
-        }
-        
-        .compare-track {
-            flex: 1;
-            height: 24px;
-            background: var(--mono-bg);
-            border-radius: 4px;
-            overflow: hidden;
-            display: flex;
-        }
-        
+
         .compare-fill {
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            padding-right: 8px;
-            font-size: 0.75rem;
-            font-weight: 700;
-            transition: width 0.5s ease;
+            transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        
-        .compare-value {
-            font-size: 0.75rem;
-            width: 80px;
-            text-align: right;
-        }
-        
-        /* Efficiency metrics */
-        .efficiency-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-        }
-        
-        .efficiency-card {
-            text-align: center;
-            padding: 20px;
-            background: var(--mono-bg);
-            border-radius: 4px;
-        }
-        
-        .efficiency-value {
-            font-size: 2.5rem;
-            font-weight: 700;
-            color: var(--mono-accent);
-        }
-        
-        .efficiency-label {
-            font-size: 0.75rem;
-            color: var(--mono-text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-top: 8px;
-        }
-        
-        /* Historical timeline */
-        .timeline {
-            position: relative;
-            padding-left: 24px;
-        }
-        
-        .timeline::before {
-            content: '';
-            position: absolute;
-            left: 8px;
-            top: 0;
-            bottom: 0;
-            width: 2px;
-            background: var(--mono-border);
-        }
-        
-        .timeline-item {
-            position: relative;
-            padding: 16px;
-            margin-bottom: 16px;
-            background: var(--mono-surface);
-            border: 1px solid var(--mono-border);
-            border-radius: 4px;
-        }
-        
-        .timeline-item::before {
-            content: '';
-            position: absolute;
-            left: -20px;
-            top: 24px;
-            width: 8px;
-            height: 8px;
-            background: var(--mono-accent);
-            border-radius: 50%;
-        }
-        
-        .timeline-time {
-            font-size: 0.75rem;
-            color: var(--mono-text-muted);
-            margin-bottom: 8px;
-        }
-        
-        .timeline-content {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .timeline-value {
-            font-size: 1.25rem;
-            font-weight: 700;
-        }
-        
-        /* Keyboard shortcuts help */
-        .shortcuts-modal {
+
+        /* Modal */
+        .modal-overlay {
             display: none;
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
+            top: 0; left: 0; right: 0; bottom: 0;
             background: rgba(0,0,0,0.8);
             z-index: 1000;
             justify-content: center;
             align-items: center;
+            backdrop-filter: blur(4px);
         }
-        
-        .shortcuts-modal.visible {
-            display: flex;
-        }
-        
-        .shortcuts-content {
+
+        .modal-overlay.visible { display: flex; animation: fade-in 0.2s ease; }
+
+        .modal-content {
             background: var(--mono-surface);
             border: 1px solid var(--mono-border);
             border-radius: 4px;
             padding: 24px;
-            max-width: 500px;
+            max-width: 600px;
             width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
         }
-        
-        .shortcut-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px solid var(--mono-border);
-        }
-        
-        .shortcut-key {
-            background: var(--mono-bg);
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            border: 1px solid var(--mono-border);
-        }
-        
-        /* Export menu */
-        .export-menu {
-            position: relative;
-            display: inline-block;
-        }
-        
-        .export-dropdown {
-            display: none;
-            position: absolute;
-            top: 100%;
-            right: 0;
-            background: var(--mono-surface);
-            border: 1px solid var(--mono-border);
-            border-radius: 4px;
-            margin-top: 4px;
-            min-width: 150px;
-            z-index: 100;
-        }
-        
-        .export-dropdown.visible {
-            display: block;
-        }
-        
-        .export-dropdown button {
-            display: block;
-            width: 100%;
-            padding: 8px 16px;
-            background: none;
-            border: none;
-            color: var(--mono-text);
-            font-family: inherit;
-            font-size: 0.75rem;
-            text-align: left;
-            cursor: pointer;
-        }
-        
-        .export-dropdown button:hover {
-            background: var(--mono-bg);
-            color: var(--mono-accent);
-        }
-        
-        /* Filter badges */
-        .filter-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            padding: 4px 8px;
-            background: var(--mono-accent);
-            color: var(--mono-bg);
-            font-size: 0.75rem;
-            border-radius: 4px;
-            margin-right: 8px;
-        }
-        
-        .filter-badge button {
-            background: none;
-            border: none;
-            color: var(--mono-bg);
-            cursor: pointer;
-            font-size: 0.875rem;
-            padding: 0;
-            line-height: 1;
-        }
-        
+
         /* Responsive */
         @media (max-width: 768px) {
-            .controls {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            
-            .view-toggle {
-                flex-wrap: wrap;
-            }
-            
-            .refresh-btn {
-                margin-left: 0;
-            }
-            
-            .search-box {
-                width: 100%;
-            }
-            
-            .mono-grid--dashboard {
-                grid-template-columns: 1fr;
-            }
+            .mono-dashboard { padding: 16px; }
+            .controls { flex-direction: column; align-items: stretch; }
+            .search-box { width: 100%; }
+            .mono-grid--dashboard { grid-template-columns: 1fr; }
         }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: var(--mono-bg); }
+        ::-webkit-scrollbar-thumb {
+            background: var(--mono-border);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover { background: var(--mono-border-focus); }
     </style>
 </head>
 <body>
+    <div class="notification-container" id="notifications"></div>
+
     <div class="mono-dashboard">
-        <header class="mono-section">
+        <header class="mono-section" style="margin-bottom: 24px;">
             <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
                 <div>
-                    <h1 class="mono-title">token_burn</h1>
-                    <p class="mono-subtitle">live session analytics with cost tracking</p>
+                    <h1 class="mono-title" style="font-size: 2rem; margin-bottom: 8px;">token_burn</h1>
+                    <p class="mono-subtitle">live session analytics with real-time cost tracking</p>
                 </div>
                 <div style="text-align: right;">
-                    <div class="live-indicator">live</div>
-                    <div class="last-update" id="last-update">updating...</div>
+                    <div class="live-indicator">LIVE</div>
+                    <div class="last-update" id="last-update" style="margin-top: 8px;">initializing...</div>
                 </div>
             </div>
         </header>
 
-        <div class="error-banner" id="error-banner"></div>
-
         <div class="controls">
-            <div class="view-toggle">
+            <div class="view-toggle" style="display: flex;">
                 <button class="btn active" data-view="overview" onclick="setView('overview')">overview</button>
                 <button class="btn" data-view="costs" onclick="setView('costs')">costs</button>
                 <button class="btn" data-view="charts" onclick="setView('charts')">charts</button>
-                <button class="btn" data-view="models" onclick="setView('models')">models</button>
+                <button class="btn" data-view="compare" onclick="setView('compare')">compare</button>
                 <button class="btn" data-view="history" onclick="setView('history')">history</button>
-                <button class="btn" data-view="efficiency" onclick="setView('efficiency')">efficiency</button>
             </div>
-            
-            <input type="text" class="search-box" id="search-box" placeholder="Search models..." oninput="handleSearch(this.value)">
-            
-            <div class="export-menu">
-                <button class="btn secondary" onclick="toggleExportMenu()">export ▼</button>
-                <div class="export-dropdown" id="export-dropdown">
-                    <button onclick="exportJSON()">Export JSON</button>
-                    <button onclick="exportCSV()">Export CSV</button>
-                    <button onclick="exportSnapshot()">Save Snapshot</button>
-                </div>
-            </div>
-            
-            <button class="btn secondary" onclick="toggleTheme()" title="Toggle theme (T)">🌓</button>
-            <button class="btn secondary" onclick="showShortcuts()" title="Keyboard shortcuts (?)">?</button>
-            <button class="btn refresh-btn" onclick="refreshData()" title="Refresh (R)">refresh</button>
+
+            <input type="text" class="search-box" id="search-box" placeholder="Filter models..." oninput="handleSearch(this.value)">
+
+            <button class="btn" onclick="toggleExport()">export ▼</button>
+            <button class="btn" onclick="toggleTheme()">🌓</button>
+            <button class="btn" onclick="showShortcuts()">?</button>
+            <button class="btn" onclick="refreshData()" style="margin-left: auto;">refresh</button>
         </div>
 
-        <div id="filter-bar" style="margin-bottom: 16px;"></div>
-
-        <!-- Overview View -->
         <div id="view-overview" class="view-section active">
             <section class="mono-section">
-                <h2 class="mono-section-title">grand totals</h2>
+                <h2 class="mono-section-title">overview</h2>
                 <div class="mono-grid mono-grid--stats" id="stats-grid"></div>
             </section>
 
             <section class="mono-section">
-                <h2 class="mono-section-title">top models</h2>
-                <div class="mono-grid mono-grid--dashboard">
-                    <div class="mono-table-wrap">
-                        <table class="mono-table" id="models-table">
-                            <thead>
-                                <tr>
-                                    <th onclick="sortTable('name')">model ↕</th>
-                                    <th class="mono-table__cell--progress">share</th>
-                                    <th onclick="sortTable('tokens')">tokens ↕</th>
-                                    <th onclick="sortTable('cost')">est. cost ↕</th>
-                                </tr>
-                            </thead>
-                            <tbody id="models-tbody"></tbody>
-                        </table>
-                    </div>
-                    <aside class="mono-detail" id="model-detail">
-                        <div class="mono-detail__header">
-                            <div class="mono-detail__label">selected model</div>
-                            <div class="mono-detail__title" id="detail-title">—</div>
-                        </div>
-                        <div id="detail-rows"></div>
-                    </aside>
+                <h2 class="mono-section-title">models</h2>
+                <div class="mono-table-wrap">
+                    <table class="mono-table">
+                        <thead>
+                            <tr>
+                                <th onclick="sortBy('name')">model ↕</th>
+                                <th>trend</th>
+                                <th onclick="sortBy('tokens')">tokens ↕</th>
+                                <th onclick="sortBy('cost')">cost ↕</th>
+                                <th onclick="sortBy('cache')">cache % ↕</th>
+                            </tr>
+                        </thead>
+                        <tbody id="models-tbody"></tbody>
+                    </table>
                 </div>
             </section>
         </div>
 
-        <!-- Costs View -->
         <div id="view-costs" class="view-section">
             <section class="mono-section">
-                <h2 class="mono-section-title">cost analysis</h2>
-                <div class="cost-grid" id="cost-grid"></div>
-            </section>
-
-            <section class="mono-section">
-                <h2 class="mono-section-title">pricing configuration ($ per 1M tokens)</h2>
-                <div class="pricing-editor" id="pricing-editor"></div>
-            </section>
-
-            <section class="mono-section">
-                <h2 class="mono-section-title">cost by model</h2>
-                <div class="chart-container">
-                    <div id="cost-chart" style="height: 300px;"></div>
-                </div>
+                <h2 class="mono-section-title">cost breakdown</h2>
+                <div class="cost-grid" id="cost-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px;"></div>
             </section>
         </div>
 
-        <!-- Charts View -->
         <div id="view-charts" class="view-section">
             <section class="mono-section">
-                <h2 class="mono-section-title">token distribution</h2>
-                <div class="mono-grid" style="grid-template-columns: 1fr 2fr;">
-                    <div class="chart-container">
-                        <div class="chart-header">
-                            <span class="chart-title">by model</span>
-                        </div>
-                        <div id="donut-chart" style="display: flex; justify-content: center;"></div>
-                    </div>
-                    <div class="chart-container">
-                        <div class="chart-header">
-                            <span class="chart-title">usage breakdown</span>
-                        </div>
-                        <div id="stacked-chart" style="height: 250px;"></div>
-                    </div>
-                </div>
-            </section>
-
-            <section class="mono-section">
-                <h2 class="mono-section-title">cache analysis</h2>
-                <div class="chart-container">
-                    <div class="chart-header">
-                        <span class="chart-title">input vs cache read</span>
-                    </div>
-                    <div id="cache-chart" style="height: 300px;"></div>
-                </div>
+                <h2 class="mono-section-title">distribution</h2>
+                <div class="chart-container" id="chart-distribution"></div>
             </section>
         </div>
 
-        <!-- Models View -->
-        <div id="view-models" class="view-section">
+        <div id="view-compare" class="view-section">
             <section class="mono-section">
-                <h2 class="mono-section-title">detailed breakdown</h2>
-                <div id="model-cards"></div>
+                <h2 class="mono-section-title">model comparison</h2>
+                <div id="compare-content"></div>
             </section>
         </div>
 
-        <!-- History View -->
         <div id="view-history" class="view-section">
             <section class="mono-section">
-                <h2 class="mono-section-title">historical snapshots</h2>
-                <div style="margin-bottom: 16px;">
-                    <button class="btn" onclick="loadSnapshot('current')">Current</button>
-                    <button class="btn" onclick="clearHistory()">Clear History</button>
-                </div>
-                <div class="timeline" id="history-timeline"></div>
+                <h2 class="mono-section-title">snapshots</h2>
+                <div id="history-content"></div>
             </section>
         </div>
 
-        <!-- Efficiency View -->
-        <div id="view-efficiency" class="view-section">
-            <section class="mono-section">
-                <h2 class="mono-section-title">efficiency metrics</h2>
-                <div class="efficiency-grid" id="efficiency-grid"></div>
-            </section>
-
-            <section class="mono-section">
-                <h2 class="mono-section-title">cache hit rate by model</h2>
-                <div class="chart-container">
-                    <div id="efficiency-chart" style="height: 300px;"></div>
-                </div>
-            </section>
-        </div>
-
-        <footer class="mono-footer">
+        <footer class="mono-footer" style="margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--mono-border); text-align: center; color: var(--mono-text-muted); font-size: 0.75rem;">
             <span id="footer-stats">loading...</span>
-            <span style="float: right;">Press ? for shortcuts</span>
         </footer>
-    </div>
-
-    <!-- Shortcuts Modal -->
-    <div class="shortcuts-modal" id="shortcuts-modal" onclick="hideShortcuts(event)">
-        <div class="shortcuts-content" onclick="event.stopPropagation()">
-            <h3 style="margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--mono-border);">Keyboard Shortcuts</h3>
-            <div class="shortcut-row"><span>Switch views</span><span><span class="shortcut-key">1</span> - <span class="shortcut-key">6</span></span></div>
-            <div class="shortcut-row"><span>Refresh data</span><span class="shortcut-key">R</span></div>
-            <div class="shortcut-row"><span>Toggle theme</span><span class="shortcut-key">T</span></div>
-            <div class="shortcut-row"><span>Search</span><span class="shortcut-key">/</span></div>
-            <div class="shortcut-row"><span>Export JSON</span><span class="shortcut-key">E</span></div>
-            <div class="shortcut-row"><span>Save snapshot</span><span class="shortcut-key">S</span></div>
-            <div class="shortcut-row"><span>Close modal</span><span class="shortcut-key">Esc</span> or <span class="shortcut-key">?</span></div>
-            <button class="btn" onclick="hideShortcuts()" style="margin-top: 16px; width: 100%;">Close</button>
-        </div>
     </div>
 
     <script>
         // State
         let currentData = null;
-        let selectedModel = null;
-        let currentView = 'overview';
-        let eventSource = null;
-        let sortColumn = 'tokens';
+        let historyData = [];
+        let sortCol = 'tokens';
         let sortAsc = false;
-        let searchFilter = '';
-        
-        // Load saved snapshots
-        let snapshots = JSON.parse(localStorage.getItem('tokenBurnSnapshots')) || [];
-        
-        // Default pricing
-        let pricing = JSON.parse(localStorage.getItem('tokenBurnPricing')) || {
-            'kimi-coding/k2p5': { input: 0.50, output: 1.50, cacheRead: 0.10, cacheWrite: 1.00 },
-            'zai/glm-5': { input: 0.30, output: 0.80, cacheRead: 0.05, cacheWrite: 0.60 },
-            'github-copilot/claude-opus-4.6': { input: 15.00, output: 75.00, cacheRead: 1.50, cacheWrite: 15.00 },
-            'github-copilot/gemini-3.1-pro-preview': { input: 1.25, output: 5.00, cacheRead: 0.25, cacheWrite: 1.00 },
-            'github-copilot/gpt-5.2': { input: 2.00, output: 8.00, cacheRead: 0.50, cacheWrite: 2.00 },
-            'default': { input: 1.00, output: 3.00, cacheRead: 0.20, cacheWrite: 1.00 }
+        let searchTerm = '';
+        let eventSource = null;
+        let updateInterval = null;
+
+        // Emojis
+        const emojis = {
+            kimi: '🌙', claude: '🧠', gpt: '🤖', openai: '🤖',
+            gemini: '💎', glm: '⚡', zai: '⚡', llama: '🦙', deepseek: '🔮'
         };
-        
-        // Model emojis
-        const modelEmojis = {
-            'kimi': '🌙', 'claude': '🧠', 'anthropic': '🧠',
-            'gpt': '🤖', 'openai': '🤖', 'gemini': '💎',
-            'google': '💎', 'glm': '⚡', 'zai': '⚡',
-            'llama': '🦙', 'meta': '🦙', 'deepseek': '🔮'
-        };
-        
-        function getModelEmoji(name) {
-            const lower = name.toLowerCase();
-            for (const [key, emoji] of Object.entries(modelEmojis)) {
-                if (lower.includes(key)) return emoji;
-            }
+
+        const getEmoji = name => {
+            for (const [k, v] of Object.entries(emojis)) if (name.toLowerCase().includes(k)) return v;
             return '🤖';
-        }
-        
-        function formatNumber(num) {
-            if (num >= 1_000_000_000) return (num / 1_000_000_000).toFixed(2) + 'B';
-            if (num >= 1_000_000) return (num / 1_000_000).toFixed(2) + 'M';
-            if (num >= 1_000) return (num / 1_000).toFixed(1) + 'K';
-            return num.toLocaleString();
-        }
-        
-        function formatCurrency(num) {
-            if (num >= 1000) return '$' + num.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-            if (num >= 1) return '$' + num.toFixed(2);
-            return '$' + num.toFixed(4);
-        }
-        
-        function formatPercent(value, total) {
-            if (total === 0) return '0.0%';
-            return ((value / total) * 100).toFixed(1) + '%';
-        }
-        
-        function calculateCost(modelName, tokens) {
-            const price = pricing[modelName] || pricing.default;
-            return {
-                input: (tokens.input / 1_000_000) * price.input,
-                output: (tokens.output / 1_000_000) * price.output,
-                cacheRead: (tokens.cache_read / 1_000_000) * price.cacheRead,
-                cacheWrite: (tokens.cache_write / 1_000_000) * price.cacheWrite,
-                total: 0
-            };
-        }
-        
+        };
+
+        // Formatters
+        const fmtNum = n => {
+            if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+            if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+            if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+            return n.toLocaleString();
+        };
+
+        const fmtCur = n => {
+            if (n >= 1e3) return '$' + Math.floor(n).toLocaleString();
+            if (n >= 1) return '$' + n.toFixed(2);
+            return '$' + n.toFixed(4);
+        };
+
+        const fmtPct = (v, t) => t ? ((v / t) * 100).toFixed(1) + '%' : '0.0%';
+
+        // Sparkline SVG
+        const createSparkline = (data, width = 100, height = 30) => {
+            if (!data || data.length < 2) return '';
+            const max = Math.max(...data);
+            const min = Math.min(...data);
+            const range = max - min || 1;
+            const points = data.map((v, i) => {
+                const x = (i / (data.length - 1)) * width;
+                const y = height - ((v - min) / range) * height;
+                return `${x},${y}`;
+            }).join(' ');
+
+            return `<svg class="sparkline" viewBox="0 0 ${width} ${height}">
+                <polygon points="0,${height} ${points} ${width},${height}" class="sparkline area"/>
+                <polyline points="${points}" class="sparkline path"/>
+            </svg>`;
+        };
+
+        // Notifications
+        const notify = (msg, type = 'info') => {
+            const container = document.getElementById('notifications');
+            const notif = document.createElement('div');
+            notif.className = `notification ${type}`;
+            notif.innerHTML = msg;
+            container.appendChild(notif);
+            setTimeout(() => {
+                notif.style.animation = 'fade-out 0.3s ease forwards';
+                setTimeout(() => notif.remove(), 300);
+            }, 3000);
+        };
+
         // View switching
-        function setView(view) {
-            currentView = view;
-            document.querySelectorAll('.view-toggle .btn').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.view === view);
-            });
-            document.querySelectorAll('.view-section').forEach(section => {
-                section.classList.remove('active');
-            });
+        const setView = view => {
+            document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active'));
             document.getElementById(`view-${view}`).classList.add('active');
+            document.querySelectorAll('.view-toggle .btn').forEach(b => b.classList.remove('active'));
+            document.querySelector(`[data-view="${view}"]`).classList.add('active');
             if (currentData) render();
-        }
-        
-        // Search
-        function handleSearch(value) {
-            searchFilter = value.toLowerCase();
-            updateFilterBar();
-            if (currentData) render();
-        }
-        
-        function updateFilterBar() {
-            const bar = document.getElementById('filter-bar');
-            if (searchFilter) {
-                bar.innerHTML = `
-                    <span class="filter-badge">
-                        Filter: "${searchFilter}"
-                        <button onclick="handleSearch('')">×</button>
-                    </span>
-                `;
-            } else {
-                bar.innerHTML = '';
+        };
+
+        // Data fetching
+        const fetchData = async () => {
+            try {
+                const res = await fetch('/api/tokens');
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                updateData(data);
+            } catch (err) {
+                notify(`Error: ${err.message}`, 'error');
             }
-        }
-        
-        // Export functions
-        function toggleExportMenu() {
-            document.getElementById('export-dropdown').classList.toggle('visible');
-        }
-        
-        function exportJSON() {
+        };
+
+        const updateData = data => {
+            // Keep history for sparklines
+            if (currentData) {
+                historyData.push({
+                    time: Date.now(),
+                    total: data.total_tokens,
+                    models: Object.fromEntries(
+                        Object.entries(data.tokens_by_model).map(([k, v]) => [k, v.total])
+                    )
+                });
+                if (historyData.length > 50) historyData.shift();
+            }
+
+            currentData = data;
+            document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+            document.getElementById('footer-stats').textContent =
+                `${data.files_processed} files | ${fmtNum(data.total_lines)} lines | ${fmtNum(data.total_messages)} messages`;
+
+            render();
+        };
+
+        // Render functions
+        const render = () => {
             if (!currentData) return;
-            const blob = new Blob([JSON.stringify(currentData, null, 2)], { type: 'application/json' });
+            const view = document.querySelector('.view-section.active').id;
+            switch(view) {
+                case 'view-overview': renderOverview(); break;
+                case 'view-costs': renderCosts(); break;
+                case 'view-charts': renderCharts(); break;
+                case 'view-compare': renderCompare(); break;
+                case 'view-history': renderHistory(); break;
+            }
+        };
+
+        const renderOverview = () => {
+            const { total_input, total_output, total_cache_read, total_cache_write, total_tokens, tokens_by_model } = currentData;
+
+            // Stats grid with sparklines
+            const totalHistory = historyData.map(h => h.total);
+            document.getElementById('stats-grid').innerHTML = `
+                <div class="cost-card highlight">
+                    <div class="stat-with-sparkline">
+                        <div>
+                            <div class="cost-label">total tokens</div>
+                            <div class="cost-value" style="color: var(--mono-accent);">${fmtNum(total_tokens)}</div>
+                        </div>
+                        ${createSparkline(totalHistory)}
+                    </div>
+                </div>
+                <div class="cost-card">
+                    <div class="cost-label">input</div>
+                    <div class="cost-value">${fmtNum(total_input)}</div>
+                </div>
+                <div class="cost-card">
+                    <div class="cost-label">output</div>
+                    <div class="cost-value">${fmtNum(total_output)}</div>
+                </div>
+                <div class="cost-card">
+                    <div class="cost-label">cache read</div>
+                    <div class="cost-value">${fmtNum(total_cache_read)}</div>
+                </div>
+            `;
+
+            // Models table
+            let models = Object.entries(tokens_by_model);
+            if (searchTerm) models = models.filter(([n]) => n.toLowerCase().includes(searchTerm.toLowerCase()));
+
+            models.sort((a, b) => {
+                let va, vb;
+                switch(sortCol) {
+                    case 'name': va = a[0]; vb = b[0]; break;
+                    case 'tokens': va = a[1].total; vb = b[1].total; break;
+                    case 'cost': va = a[1].total * 0.001; vb = b[1].total * 0.001; break;
+                    case 'cache': va = a[1].cache_read / (a[1].input + a[1].cache_read || 1); vb = b[1].cache_read / (b[1].input + b[1].cache_read || 1); break;
+                    default: va = a[1].total; vb = b[1].total;
+                }
+                return sortAsc ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
+            });
+
+            const tbody = document.getElementById('models-tbody');
+            tbody.innerHTML = models.slice(0, 15).map(([name, t]) => {
+                const pct = (t.total / total_tokens * 100).toFixed(1);
+                const cachePct = t.cache_read / (t.input + t.cache_read || 1) * 100;
+                const modelHistory = historyData.map(h => h.models[name] || 0).filter(v => v > 0);
+                const cost = t.total * 0.000001; // Simplified cost calc
+
+                return `<tr>
+                    <td>${getEmoji(name)} ${name}</td>
+                    <td>${createSparkline(modelHistory)}</td>
+                    <td>
+                        <div class="mono-progress" style="height: 8px; background: var(--mono-bg); border-radius: 2px;">
+                            <div class="mono-progress__fill" style="width: ${pct}%; height: 100%; background: var(--mono-accent); border-radius: 2px;"></div>
+                        </div>
+                        <small style="color: var(--mono-text-muted);">${fmtNum(t.total)}</small>
+                    </td>
+                    <td>${fmtCur(cost)}</td>
+                    <td style="color: ${cachePct > 50 ? 'var(--mono-success)' : 'var(--mono-text)'};">${cachePct.toFixed(1)}%</td>
+                </tr>`;
+            }).join('');
+        };
+
+        const renderCosts = () => {
+            const { total_input, total_output, total_cache_read, tokens_by_model } = currentData;
+            const totalCost = (total_input + total_output + total_cache_read) * 0.000001;
+
+            document.getElementById('cost-grid').innerHTML = `
+                <div class="cost-card highlight">
+                    <div class="cost-label">total estimated cost</div>
+                    <div class="cost-value" style="color: var(--mono-accent);">${fmtCur(totalCost)}</div>
+                    <div class="cost-breakdown" style="margin-top: 12px; font-size: 0.75rem;">
+                        <div class="cost-row"><span>input</span><span>${fmtCur(total_input * 0.000001)}</span></div>
+                        <div class="cost-row"><span>output</span><span>${fmtCur(total_output * 0.000003)}</span></div>
+                        <div class="cost-row"><span>cache</span><span>${fmtCur(total_cache_read * 0.0000002)}</span></div>
+                    </div>
+                </div>
+                ${Object.entries(tokens_by_model).slice(0, 5).map(([name, t]) => `
+                    <div class="cost-card">
+                        <div class="cost-label">${getEmoji(name)} ${name.split('/').pop()}</div>
+                        <div class="cost-value">${fmtCur(t.total * 0.000001)}</div>
+                        <div style="margin-top: 8px; font-size: 0.75rem; color: var(--mono-text-muted);">
+                            ${fmtNum(t.total)} tokens
+                        </div>
+                    </div>
+                `).join('')}
+            `;
+        };
+
+        const renderCharts = () => {
+            const { tokens_by_model, total_tokens } = currentData;
+            const sorted = Object.entries(tokens_by_model).sort((a, b) => b[1].total - a[1].total).slice(0, 8);
+            const colors = ['#e2b714', '#7cb97a', '#ca4754', '#6d9bff', '#a855f7', '#f97316', '#35e0d3', '#ff6b9d'];
+
+            let cumulative = 0;
+            const segments = sorted.map(([name, t], i) => {
+                const start = cumulative;
+                const pct = t.total / total_tokens;
+                cumulative += pct;
+                return { name, pct, start, end: cumulative, color: colors[i], value: t.total };
+            });
+
+            // SVG Donut chart
+            const svgSize = 250;
+            const center = svgSize / 2;
+            const radius = 100;
+            const innerRadius = 60;
+
+            const paths = segments.map(s => {
+                const startAngle = s.start * 2 * Math.PI - Math.PI / 2;
+                const endAngle = s.end * 2 * Math.PI - Math.PI / 2;
+                const x1 = center + radius * Math.cos(startAngle);
+                const y1 = center + radius * Math.sin(startAngle);
+                const x2 = center + radius * Math.cos(endAngle);
+                const y2 = center + radius * Math.sin(endAngle);
+                const x3 = center + innerRadius * Math.cos(endAngle);
+                const y3 = center + innerRadius * Math.sin(endAngle);
+                const x4 = center + innerRadius * Math.cos(startAngle);
+                const y4 = center + innerRadius * Math.sin(startAngle);
+                const largeArc = s.pct > 0.5 ? 1 : 0;
+
+                return `<path d="M ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} L ${x3} ${y3} A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${x4} ${y4} Z"
+                    fill="${s.color}" class="donut-segment" title="${s.name}: ${fmtNum(s.value)}"/>`;
+            }).join('');
+
+            document.getElementById('chart-distribution').innerHTML = `
+                <div style="display: flex; align-items: center; gap: 40px; flex-wrap: wrap;">
+                    <svg width="${svgSize}" height="${svgSize}" viewBox="0 0 ${svgSize} ${svgSize}">
+                        ${paths}
+                        <text x="${center}" y="${center - 10}" text-anchor="middle" fill="var(--mono-text)" font-size="24" font-weight="bold">${fmtNum(total_tokens)}</text>
+                        <text x="${center}" y="${center + 15}" text-anchor="middle" fill="var(--mono-text-muted)" font-size="12">total tokens</text>
+                    </svg>
+                    <div class="chart-legend" style="flex: 1; min-width: 200px;">
+                        ${segments.map(s => `
+                            <div class="legend-item">
+                                <div class="legend-color" style="background: ${s.color};"></div>
+                                <span>${getEmoji(s.name)} ${s.name.split('/').pop()}</span>
+                                <span style="color: var(--mono-text-muted); margin-left: auto;">${(s.pct * 100).toFixed(1)}%</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        };
+
+        const renderCompare = () => {
+            const { tokens_by_model } = currentData;
+            const models = Object.entries(tokens_by_model).sort((a, b) => b[1].total - a[1].total).slice(0, 6);
+            const maxTokens = Math.max(...models.map(m => m[1].total));
+
+            document.getElementById('compare-content').innerHTML = `
+                <div class="chart-container">
+                    <h3 style="margin-bottom: 16px; text-transform: uppercase; font-size: 0.875rem;">Token Usage Comparison</h3>
+                    ${models.map(([name, t]) => {
+                        const pct = (t.total / maxTokens * 100).toFixed(0);
+                        return `
+                            <div class="compare-bar">
+                                <span class="compare-label">${getEmoji(name)} ${name.split('/').pop()}</span>
+                                <div class="compare-track">
+                                    <div class="compare-fill" style="width: ${pct}%; background: var(--mono-accent);">
+                                        ${pct > 15 ? fmtNum(t.total) : ''}
+                                    </div>
+                                </div>
+                                <span class="compare-value">${fmtNum(t.total)}</span>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        };
+
+        const renderHistory = () => {
+            if (historyData.length < 2) {
+                document.getElementById('history-content').innerHTML = '<p style="color: var(--mono-text-muted);">Collecting data... Check back in a moment.</p>';
+                return;
+            }
+
+            const data = [...historyData].reverse();
+            document.getElementById('history-content').innerHTML = `
+                <div class="chart-container">
+                    <h3 style="margin-bottom: 16px; text-transform: uppercase; font-size: 0.875rem;">Token Usage Over Time</h3>
+                    <div style="height: 200px; position: relative;">
+                        ${createSparkline(data.map(d => d.total), 600, 200)}
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.75rem; color: var(--mono-text-muted);">
+                        <span>${new Date(data[0].time).toLocaleTimeString()}</span>
+                        <span>${new Date(data[data.length - 1].time).toLocaleTimeString()}</span>
+                    </div>
+                </div>
+            `;
+        };
+
+        // Event handlers
+        const sortBy = col => {
+            if (sortCol === col) sortAsc = !sortAsc;
+            else { sortCol = col; sortAsc = col === 'name'; }
+            render();
+        };
+
+        const handleSearch = val => {
+            searchTerm = val;
+            render();
+        };
+
+        const toggleTheme = () => {
+            const current = document.documentElement.getAttribute('data-theme');
+            const next = current === 'light' ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('tokenBurnTheme', next);
+        };
+
+        const toggleExport = () => {
+            if (!currentData) return;
+            const dataStr = JSON.stringify(currentData, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             a.download = `token-burn-${new Date().toISOString().split('T')[0]}.json`;
             a.click();
             URL.revokeObjectURL(url);
-            toggleExportMenu();
-        }
-        
-        function exportCSV() {
-            if (!currentData) return;
-            let csv = 'model,input,output,cache_read,cache_write,total,cost\n';
-            Object.entries(currentData.tokens_by_model).forEach(([name, tokens]) => {
-                const cost = calculateCost(name, tokens);
-                csv += `${name},${tokens.input},${tokens.output},${tokens.cache_read},${tokens.cache_write},${tokens.total},${cost.total.toFixed(4)}\n`;
-            });
-            const blob = new Blob([csv], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `token-burn-${new Date().toISOString().split('T')[0]}.csv`;
-            a.click();
-            URL.revokeObjectURL(url);
-            toggleExportMenu();
-        }
-        
-        function exportSnapshot() {
-            if (!currentData) return;
-            const snapshot = {
-                timestamp: Date.now(),
-                date: new Date().toISOString(),
-                data: currentData
-            };
-            snapshots.unshift(snapshot);
-            if (snapshots.length > 50) snapshots = snapshots.slice(0, 50);
-            localStorage.setItem('tokenBurnSnapshots', JSON.stringify(snapshots));
-            alert('Snapshot saved!');
-            if (currentView === 'history') render();
-        }
-        
-        function loadSnapshot(index) {
-            if (index === 'current') {
-                refreshData();
+            notify('Data exported to JSON', 'success');
+        };
+
+        const showShortcuts = () => {
+            notify('Keyboard: 1-5 views, R refresh, T theme, / search, ? help', 'info');
+        };
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', e => {
+            if (e.target.tagName === 'INPUT') {
+                if (e.key === 'Escape') e.target.blur();
                 return;
             }
-            if (snapshots[index]) {
-                updateData(snapshots[index].data);
-            }
-        }
-        
-        function clearHistory() {
-            if (confirm('Clear all snapshots?')) {
-                snapshots = [];
-                localStorage.removeItem('tokenBurnSnapshots');
-                render();
-            }
-        }
-        
-        // Theme toggle
-        function toggleTheme() {
-            const current = document.documentElement.getAttribute('data-theme');
-            const next = current === 'light' ? 'dark' : 'light';
-            document.documentElement.setAttribute('data-theme', next);
-            localStorage.setItem('tokenBurnTheme', next);
-        }
-        
-        // Keyboard shortcuts
-        function showShortcuts() {
-            document.getElementById('shortcuts-modal').classList.add('visible');
-        }
-        
-        function hideShortcuts(e) {
-            if (!e || e.target.id === 'shortcuts-modal') {
-                document.getElementById('shortcuts-modal').classList.remove('visible');
-            }
-        }
-        
-        document.addEventListener('keydown', (e) => {
-            if (e.target.tagName === 'INPUT') return;
-            
+
             switch(e.key) {
                 case '1': setView('overview'); break;
                 case '2': setView('costs'); break;
                 case '3': setView('charts'); break;
-                case '4': setView('models'); break;
+                case '4': setView('compare'); break;
                 case '5': setView('history'); break;
-                case '6': setView('efficiency'); break;
                 case 'r': case 'R': refreshData(); break;
                 case 't': case 'T': toggleTheme(); break;
-                case '/': 
+                case '/':
                     e.preventDefault();
                     document.getElementById('search-box').focus();
                     break;
-                case 'e': case 'E': exportJSON(); break;
-                case 's': case 'S': exportSnapshot(); break;
-                case '?': 
-                case 'Escape':
-                    const modal = document.getElementById('shortcuts-modal');
-                    modal.classList.toggle('visible');
-                    break;
+                case '?': showShortcuts(); break;
             }
         });
-        
-        // Data fetching
-        async function refreshData() {
-            try {
-                document.body.classList.add('loading');
-                const res = await fetch('/api/tokens');
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const data = await res.json();
-                updateData(data);
-                hideError();
-            } catch (err) {
-                showError(`Failed to fetch: ${err.message}`);
-            } finally {
-                document.body.classList.remove('loading');
-            }
-        }
-        
-        function connectSSE() {
+
+        // SSE
+        const connectSSE = () => {
             if (eventSource) eventSource.close();
             eventSource = new EventSource('/api/tokens/stream');
-            eventSource.onmessage = (e) => {
+            eventSource.onmessage = e => {
                 try {
-                    const data = JSON.parse(e.data);
-                    updateData(data);
-                    hideError();
-                } catch (err) {
-                    console.error('SSE parse error:', err);
-                }
+                    updateData(JSON.parse(e.data));
+                } catch (err) {}
             };
-            eventSource.onerror = () => {
-                setTimeout(connectSSE, 5000);
-            };
-        }
-        
-        function updateData(data) {
-            currentData = data;
-            document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
-            render();
-        }
-        
-        // Render functions
-        function render() {
-            if (!currentData) return;
-            const { files_processed, total_lines, total_messages } = currentData;
-            document.getElementById('footer-stats').textContent = 
-                `${files_processed} files // ${formatNumber(total_lines)} lines // ${formatNumber(total_messages)} messages`;
-            
-            switch(currentView) {
-                case 'overview': renderOverview(); break;
-                case 'costs': renderCosts(); break;
-                case 'charts': renderCharts(); break;
-                case 'models': renderModels(); break;
-                case 'history': renderHistory(); break;
-                case 'efficiency': renderEfficiency(); break;
-            }
-        }
-        
-        function renderOverview() {
-            const { total_input, total_output, total_cache_read, total_cache_write, total_tokens, tokens_by_model } = currentData;
-            
-            document.getElementById('stats-grid').innerHTML = `
-                <div class="mono-stat">
-                    <div class="mono-stat__label">total tokens</div>
-                    <div class="mono-stat__value mono-stat__value--accent">${formatNumber(total_tokens)}</div>
-                </div>
-                <div class="mono-stat">
-                    <div class="mono-stat__label">input</div>
-                    <div class="mono-stat__value">${formatNumber(total_input)}</div>
-                </div>
-                <div class="mono-stat">
-                    <div class="mono-stat__label">output</div>
-                    <div class="mono-stat__value">${formatNumber(total_output)}</div>
-                </div>
-                <div class="mono-stat">
-                    <div class="mono-stat__label">cache read</div>
-                    <div class="mono-stat__value">${formatNumber(total_cache_read)}</div>
-                </div>
-                <div class="mono-stat">
-                    <div class="mono-stat__label">cache write</div>
-                    <div class="mono-stat__value">${formatNumber(total_cache_write)}</div>
-                </div>
-            `;
-            
-            let sortedModels = Object.entries(tokens_by_model);
-            if (searchFilter) {
-                sortedModels = sortedModels.filter(([name]) => name.toLowerCase().includes(searchFilter));
-            }
-            sortedModels = sortedModels.sort((a, b) => {
-                let valA, valB;
-                switch(sortColumn) {
-                    case 'name': valA = a[0]; valB = b[0]; break;
-                    case 'tokens': valA = a[1].total; valB = b[1].total; break;
-                    case 'cost': 
-                        valA = calculateCost(a[0], a[1]).total;
-                        valB = calculateCost(b[0], b[1]).total;
-                        break;
-                    default: valA = a[1].total; valB = b[1].total;
-                }
-                return sortAsc ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
-            });
-            
-            const tbody = document.getElementById('models-tbody');
-            tbody.innerHTML = sortedModels.slice(0, 20).map(([name, counts]) => {
-                const percent = (counts.total / total_tokens * 100).toFixed(1);
-                const cost = calculateCost(name, counts);
-                const isSelected = selectedModel === name;
-                return `
-                    <tr class="${isSelected ? 'mono-active' : ''}" onclick="selectModel('${name}')">
-                        <td class="mono-table__cell--name">
-                            <span class="model-icon">${getModelEmoji(name)}</span>
-                            ${name}
-                        </td>
-                        <td class="mono-table__cell--progress">
-                            <div class="mono-progress">
-                                <div class="mono-progress__fill" style="width: ${percent}%"></div>
-                            </div>
-                        </td>
-                        <td>${formatNumber(counts.total)}</td>
-                        <td>${formatCurrency(cost.total)}</td>
-                    </tr>
-                `;
-            }).join('');
-            
-            if (selectedModel && tokens_by_model[selectedModel]) {
-                renderDetail(tokens_by_model[selectedModel]);
-            } else if (sortedModels.length > 0) {
-                selectModel(sortedModels[0][0]);
-            }
-        }
-        
-        function sortTable(column) {
-            if (sortColumn === column) {
-                sortAsc = !sortAsc;
-            } else {
-                sortColumn = column;
-                sortAsc = column === 'name';
-            }
-            render();
-        }
-        
-        // ... (continuing with other render functions - costs, charts, models, history, efficiency)
-        // The rest would be similar to the previous version but with enhancements
-        
-        window.selectModel = (name) => {
-            selectedModel = name;
-            const counts = currentData.tokens_by_model[name];
-            if (counts) renderDetail(counts);
-            render();
+            eventSource.onerror = () => setTimeout(connectSSE, 5000);
         };
-        
-        function renderDetail(counts) {
-            document.getElementById('detail-title').textContent = selectedModel;
-            const total = currentData.total_tokens;
-            const cost = calculateCost(selectedModel, counts);
-            cost.total = cost.input + cost.output + cost.cacheRead + cost.cacheWrite;
-            
-            document.getElementById('detail-rows').innerHTML = `
-                <div class="mono-detail__row">
-                    <span class="mono-detail__key">share</span>
-                    <span class="mono-detail__value">${formatPercent(counts.total, total)}</span>
-                </div>
-                <div class="mono-detail__row">
-                    <span class="mono-detail__key">total</span>
-                    <span class="mono-detail__value">${formatNumber(counts.total)}</span>
-                </div>
-                <div class="mono-detail__row">
-                    <span class="mono-detail__key">input</span>
-                    <span class="mono-detail__value">${formatNumber(counts.input)}</span>
-                </div>
-                <div class="mono-detail__row">
-                    <span class="mono-detail__key">output</span>
-                    <span class="mono-detail__value">${formatNumber(counts.output)}</span>
-                </div>
-                ${counts.cache_read > 0 ? `
-                <div class="mono-detail__row">
-                    <span class="mono-detail__key">cache read</span>
-                    <span class="mono-detail__value">${formatNumber(counts.cache_read)}</span>
-                </div>
-                ` : ''}
-                <div class="mono-detail__row" style="border-top: 1px solid var(--mono-border); margin-top: 8px; padding-top: 8px;">
-                    <span class="mono-detail__key">est. cost</span>
-                    <span class="mono-detail__value" style="color: var(--mono-accent);">${formatCurrency(cost.total)}</span>
-                </div>
-            `;
-        }
-        
-        function showError(msg) {
-            const banner = document.getElementById('error-banner');
-            banner.textContent = msg;
-            banner.classList.add('visible');
-        }
-        
-        function hideError() {
-            document.getElementById('error-banner').classList.remove('visible');
-        }
-        
-        // Initialize
+
+        // Init
         const savedTheme = localStorage.getItem('tokenBurnTheme');
         if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
-        
-        refreshData();
+
+        fetchData();
         connectSSE();
+        notify('Dashboard loaded. Press ? for shortcuts.', 'success');
     </script>
 </body>
 </html>
