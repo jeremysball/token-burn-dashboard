@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TOKEN_BURN // DASHBOARD</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@100;400;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #050505;
+            --panel-bg: rgba(17, 17, 17, 0.85);
+            --panel-border: #2a2a2a;
+            --text-main: #f4f4f5;
+            --text-muted: #a1a1aa;
+            --accent-green: #10b981;
+            --accent-cyan: #06b6d4;
+            --accent-magenta: #ec4899;
+            --accent-yellow: #eab308;
+            --accent-purple: #8b5cf6;
+            --glow: 0 0 20px rgba(6, 182, 212, 0.15);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            padding: 2.5rem;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            gap: 2.5rem;
+            background-image: 
+                radial-gradient(circle at 50% 0%, rgba(30, 30, 35, 0.6) 0%, transparent 60%),
+                linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+            background-size: 100% 100%, 30px 30px, 30px 30px;
+            background-position: center top, -1px -1px, -1px -1px;
+        }
+
+        /* Subtle Scanline Overlay */
+        body::after {
+            content: " ";
+            display: block;
+            position: fixed;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%);
+            z-index: 999;
+            background-size: 100% 4px;
+            pointer-events: none;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--panel-border);
+            padding-bottom: 1.5rem;
+            position: relative;
+        }
+
+        header::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            width: 150px;
+            height: 1px;
+            background: var(--accent-cyan);
+            box-shadow: 0 0 10px var(--accent-cyan);
+        }
+
+        h1 {
+            font-weight: 800;
+            font-size: 2.2rem;
+            letter-spacing: -1.5px;
+            color: var(--text-main);
+            text-transform: uppercase;
+            text-shadow: 0 0 20px rgba(255,255,255,0.1);
+        }
+
+        .sys-status {
+            font-size: 0.85rem;
+            color: var(--accent-green);
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            background: rgba(16, 185, 129, 0.1);
+            padding: 0.4rem 0.8rem;
+            border-radius: 4px;
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .sys-status::before {
+            content: '';
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            background-color: var(--accent-green);
+            border-radius: 50%;
+            box-shadow: 0 0 8px var(--accent-green);
+            animation: pulse 2s infinite ease-in-out;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.8); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .card {
+            background-color: var(--panel-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--panel-border);
+            padding: 1.8rem;
+            position: relative;
+            overflow: hidden;
+            border-radius: 6px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(6, 182, 212, 0.4);
+            box-shadow: var(--glow);
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
+            transform: translateX(-100%);
+            transition: transform 0.6s ease-in-out;
+        }
+
+        .card:hover::before {
+            transform: translateX(100%);
+        }
+
+        .card-title {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 0.8rem;
+            font-weight: 700;
+        }
+
+        .card-value {
+            font-size: 2.8rem;
+            font-weight: 800;
+            line-height: 1;
+            letter-spacing: -1px;
+        }
+
+        .accent-cyan { color: var(--accent-cyan); text-shadow: 0 0 15px rgba(6,182,212,0.3); }
+        .accent-magenta { color: var(--accent-magenta); text-shadow: 0 0 15px rgba(236,72,153,0.3); }
+        .accent-yellow { color: var(--accent-yellow); text-shadow: 0 0 15px rgba(234,179,8,0.3); }
+
+        .dashboard-content {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 1.5rem;
+        }
+
+        @media (max-width: 1024px) {
+            .dashboard-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background-color: var(--panel-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--panel-border);
+            padding: 1.8rem;
+            border-radius: 6px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .panel-header {
+            font-size: 1.1rem;
+            font-weight: 800;
+            margin-bottom: 1.8rem;
+            text-transform: uppercase;
+            border-bottom: 1px dashed var(--panel-border);
+            padding-bottom: 0.8rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            letter-spacing: -0.5px;
+        }
+
+        .panel-header .sub {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            font-weight: 400;
+            letter-spacing: 1px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 0.85rem;
+        }
+
+        th, td {
+            padding: 1rem 0.8rem;
+            text-align: right;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        th {
+            color: var(--text-muted);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: color 0.2s;
+            white-space: nowrap;
+        }
+
+        th:hover {
+            color: var(--accent-cyan);
+        }
+
+        th:first-child, td:first-child {
+            text-align: left;
+        }
+
+        tbody tr {
+            transition: background-color 0.2s;
+        }
+
+        tbody tr:hover {
+            background-color: rgba(255,255,255,0.03);
+        }
+
+        .model-name {
+            font-weight: 700;
+            color: var(--accent-cyan);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .model-name::before {
+            content: '>';
+            color: var(--text-muted);
+            font-weight: 400;
+            opacity: 0.5;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 320px;
+            width: 100%;
+        }
+
+        .footer {
+            margin-top: auto;
+            text-align: center;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            border-top: 1px solid var(--panel-border);
+            padding-top: 1.5rem;
+            opacity: 0.6;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--bg-color);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--accent-cyan);
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div>
+            <h1>TOKEN_BURN <span style="font-weight:100; color:var(--text-muted)">// ANALYTICS_CORE</span></h1>
+            <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.4rem; letter-spacing: 1px;">[RESTRICTED_ACCESS // TERMINAL_ID: AX-77]</div>
+        </div>
+        <div class="sys-status">DATA_STREAM_ACTIVE</div>
+    </header>
+
+    <div class="grid">
+        <div class="card">
+            <div class="card-title">Transactions Processed</div>
+            <div class="card-value" id="stat-files">--</div>
+        </div>
+        <div class="card">
+            <div class="card-title">Network Input (TKN)</div>
+            <div class="card-value accent-cyan" id="stat-input">--</div>
+        </div>
+        <div class="card">
+            <div class="card-title">System Output (TKN)</div>
+            <div class="card-value accent-magenta" id="stat-output">--</div>
+        </div>
+        <div class="card">
+            <div class="card-title">Memory Read (TKN)</div>
+            <div class="card-value accent-yellow" id="stat-cache">--</div>
+        </div>
+    </div>
+
+    <div class="dashboard-content">
+        <div class="panel">
+            <div class="panel-header">
+                <span>Distribution</span>
+                <span class="sub">[VOL_BY_MODEL]</span>
+            </div>
+            <div class="chart-container">
+                <canvas id="distributionChart"></canvas>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header">
+                <span>Detailed Telemetry</span>
+                <span class="sub">[SORTABLE_MATRIX]</span>
+            </div>
+            <div style="overflow-x:auto;">
+                <table id="dataTable">
+                    <thead>
+                        <tr>
+                            <th onclick="sortTable(0)">Model_ID ↕</th>
+                            <th onclick="sortTable(1)">Input_Vol ↕</th>
+                            <th onclick="sortTable(2)">Output_Vol ↕</th>
+                            <th onclick="sortTable(3)">Cache_R ↕</th>
+                            <th onclick="sortTable(4)">Cache_W ↕</th>
+                            <th onclick="sortTable(5)" style="color:var(--text-main)">Total_Burn ↕</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        POWERED BY PI AGENT // TOKEN BURN PROTOCOL v1.0.0
+    </div>
+
+    <script>
+        // Number formatting utilities
+        const formatNum = (num) => {
+            if (num === 0) return '0';
+            if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+            return num.toString();
+        };
+
+        const formatFull = (num) => new Intl.NumberFormat('en-US').format(num);
+
+        let tableData = [];
+        let myChart = null;
+
+        // Fetch data and initialize
+        fetch('data.json')
+            .then(res => res.json())
+            .then(data => {
+                initDashboard(data);
+            })
+            .catch(err => {
+                console.error("Error loading data:", err);
+                document.getElementById('stat-files').innerText = "ERR";
+            });
+
+        function initDashboard(data) {
+            // Update top stats
+            document.getElementById('stat-files').innerText = formatFull(data.files_processed);
+            document.getElementById('stat-input').innerText = formatNum(data.total_input);
+            document.getElementById('stat-output').innerText = formatNum(data.total_output);
+            document.getElementById('stat-cache').innerText = formatNum(data.total_cache_read);
+
+            const models = Object.keys(data.tokens_by_model);
+            
+            const chartLabels = [];
+            const chartData = [];
+            
+            // Premium color palette
+            const chartColors = [
+                '#06b6d4', // Cyan
+                '#ec4899', // Pink
+                '#eab308', // Yellow
+                '#10b981', // Green
+                '#8b5cf6', // Purple
+                '#f97316', // Orange
+                '#3b82f6', // Blue
+                '#ef4444'  // Red
+            ];
+
+            // Sort models by total descending
+            models.sort((a, b) => data.tokens_by_model[b].total - data.tokens_by_model[a].total);
+
+            models.forEach((model, index) => {
+                const stats = data.tokens_by_model[model];
+                tableData.push({
+                    model: model,
+                    input: stats.input,
+                    output: stats.output,
+                    cache_read: stats.cache_read,
+                    cache_write: stats.cache_write,
+                    total: stats.total
+                });
+
+                chartLabels.push(model.split('/').pop() || model);
+                chartData.push(stats.total);
+            });
+
+            renderTable();
+
+            // Initialize Chart
+            const ctx = document.getElementById('distributionChart').getContext('2d');
+            
+            // Chart.js defaults for dark theme
+            Chart.defaults.color = '#a1a1aa';
+            Chart.defaults.font.family = "'JetBrains Mono', monospace";
+            
+            myChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: chartLabels,
+                    datasets: [{
+                        data: chartData,
+                        backgroundColor: chartColors.slice(0, chartLabels.length),
+                        borderColor: '#111',
+                        borderWidth: 2,
+                        hoverOffset: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: '#f4f4f5',
+                                font: { size: 11 },
+                                boxWidth: 12,
+                                padding: 20
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(24, 24, 27, 0.95)',
+                            titleColor: '#06b6d4',
+                            titleFont: { size: 13, family: "'JetBrains Mono', monospace" },
+                            bodyColor: '#f4f4f5',
+                            bodyFont: { size: 12, family: "'JetBrains Mono', monospace" },
+                            borderColor: '#3f3f46',
+                            borderWidth: 1,
+                            padding: 12,
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    if (label) {
+                                        label += ' :: ';
+                                    }
+                                    if (context.parsed !== null) {
+                                        label += formatFull(context.parsed) + ' TKN';
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    cutout: '75%',
+                    animation: {
+                        animateScale: true,
+                        animateRotate: true,
+                        duration: 1500,
+                        easing: 'easeOutQuart'
+                    }
+                }
+            });
+        }
+
+        let sortCol = 5; // Default sort by total
+        let sortAsc = false;
+
+        function renderTable() {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+            tableData.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="model-name" title="${row.model}">${row.model.split('/').pop()}</td>
+                    <td><span title="${formatFull(row.input)}">${formatNum(row.input)}</span></td>
+                    <td><span title="${formatFull(row.output)}">${formatNum(row.output)}</span></td>
+                    <td><span title="${formatFull(row.cache_read)}">${formatNum(row.cache_read)}</span></td>
+                    <td><span title="${formatFull(row.cache_write)}">${formatNum(row.cache_write)}</span></td>
+                    <td style="color:var(--text-main); font-weight:800; text-shadow: 0 0 10px rgba(255,255,255,0.2);">
+                        <span title="${formatFull(row.total)}">${formatNum(row.total)}</span>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function sortTable(colIndex) {
+            const keys = ['model', 'input', 'output', 'cache_read', 'cache_write', 'total'];
+            const key = keys[colIndex];
+            
+            if (sortCol === colIndex) {
+                sortAsc = !sortAsc;
+            } else {
+                sortCol = colIndex;
+                sortAsc = colIndex === 0; // default ascending for strings, descending for numbers
+            }
+
+            tableData.sort((a, b) => {
+                let valA = a[key];
+                let valB = b[key];
+                
+                if (typeof valA === 'string') {
+                    return sortAsc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                } else {
+                    return sortAsc ? valA - valB : valB - valA;
+                }
+            });
+
+            renderTable();
+        }
+    </script>
+</body>
+</html>

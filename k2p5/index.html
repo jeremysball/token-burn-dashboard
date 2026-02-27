@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔥 TOKEN BURN DASHBOARD</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700;800&display=swap');
+        
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a25;
+            --accent-cyan: #00f0ff;
+            --accent-pink: #ff00aa;
+            --accent-purple: #a855f7;
+            --accent-green: #00ff88;
+            --accent-orange: #ff7700;
+            --accent-yellow: #ffdd00;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0b0;
+            --text-muted: #606070;
+            --border-color: #2a2a3a;
+            --glow-cyan: 0 0 20px rgba(0, 240, 255, 0.5);
+            --glow-pink: 0 0 20px rgba(255, 0, 170, 0.5);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        /* Animated Background Grid */
+        .bg-grid {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 240, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .bg-grid::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(ellipse at center, transparent 0%, var(--bg-primary) 70%);
+        }
+
+        /* Floating Orbs */
+        .orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.3;
+            animation: float 20s infinite ease-in-out;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .orb-1 {
+            width: 400px;
+            height: 400px;
+            background: var(--accent-cyan);
+            top: 10%;
+            left: 10%;
+            animation-delay: 0s;
+        }
+
+        .orb-2 {
+            width: 300px;
+            height: 300px;
+            background: var(--accent-pink);
+            top: 60%;
+            right: 10%;
+            animation-delay: -5s;
+        }
+
+        .orb-3 {
+            width: 250px;
+            height: 250px;
+            background: var(--accent-purple);
+            bottom: 20%;
+            left: 30%;
+            animation-delay: -10s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            25% { transform: translate(50px, -50px) scale(1.1); }
+            50% { transform: translate(-30px, 30px) scale(0.9); }
+            75% { transform: translate(30px, 50px) scale(1.05); }
+        }
+
+        /* Main Container */
+        .container {
+            position: relative;
+            z-index: 1;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        /* Header */
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+            padding: 2rem 0;
+        }
+
+        .logo {
+            font-size: 3rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-pink), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 0 40px rgba(0, 240, 255, 0.5);
+            letter-spacing: -2px;
+            margin-bottom: 0.5rem;
+            animation: shimmer 3s infinite;
+        }
+
+        @keyframes shimmer {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(1.2); }
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+
+        .stat-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-pink));
+            transform: scaleX(0);
+            transition: transform 0.3s ease;
+        }
+
+        .stat-card:hover::before {
+            transform: scaleX(1);
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--accent-cyan);
+            box-shadow: var(--glow-cyan);
+        }
+
+        .stat-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .stat-value span {
+            font-size: 1rem;
+            color: var(--text-muted);
+            margin-left: 0.5rem;
+        }
+
+        .stat-change {
+            font-size: 0.875rem;
+            margin-top: 0.5rem;
+            color: var(--accent-green);
+        }
+
+        /* Grand Total Card */
+        .grand-total {
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+            border: 2px solid transparent;
+            background-clip: padding-box;
+            position: relative;
+        }
+
+        .grand-total::after {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            border-radius: 18px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-pink), var(--accent-purple));
+            z-index: -1;
+        }
+
+        .grand-total .stat-value {
+            font-size: 3.5rem;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-pink));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Models Section */
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin: 3rem 0 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .section-title::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(90deg, var(--border-color), transparent);
+        }
+
+        /* Model Cards */
+        .models-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .model-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .model-card:hover {
+            transform: translateY(-3px);
+            border-color: var(--accent-cyan);
+        }
+
+        .model-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .model-emoji {
+            font-size: 2rem;
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+        }
+
+        .model-name {
+            font-size: 1.125rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .model-total {
+            margin-left: auto;
+            text-align: right;
+        }
+
+        .model-total-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent-cyan);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .model-total-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        /* Token Bars */
+        .token-bars {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .token-row {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .token-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.875rem;
+        }
+
+        .token-label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+        }
+
+        .token-value {
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .token-bar-bg {
+            height: 8px;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .token-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+
+        .token-bar-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            animation: shimmer-bar 2s infinite;
+        }
+
+        @keyframes shimmer-bar {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        .bar-input { background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple)); }
+        .bar-output { background: linear-gradient(90deg, var(--accent-green), var(--accent-cyan)); }
+        .bar-cache { background: linear-gradient(90deg, var(--accent-pink), var(--accent-purple)); }
+
+        /* Charts Section */
+        .charts-section {
+            margin-top: 3rem;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .chart-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.5rem;
+        }
+
+        .chart-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* SVG Chart */
+        .donut-chart {
+            width: 100%;
+            height: 300px;
+        }
+
+        .donut-segment {
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .donut-segment:hover {
+            filter: brightness(1.2);
+            transform-origin: center;
+        }
+
+        /* Bar Chart */
+        .bar-chart {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .bar-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .bar-label {
+            width: 120px;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .bar-track {
+            flex: 1;
+            height: 24px;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .bar-fill-chart {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 1s ease-out;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 0.5rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        /* Terminal Section */
+        .terminal {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            overflow: hidden;
+            margin-top: 3rem;
+        }
+
+        .terminal-header {
+            background: var(--bg-tertiary);
+            padding: 0.75rem 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .terminal-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .dot-red { background: #ff5f56; }
+        .dot-yellow { background: #ffbd2e; }
+        .dot-green { background: #27c93f; }
+
+        .terminal-title {
+            margin-left: 1rem;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .terminal-body {
+            padding: 1.5rem;
+            font-size: 0.875rem;
+            line-height: 1.8;
+            color: var(--text-secondary);
+        }
+
+        .terminal-line {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .terminal-prompt {
+            color: var(--accent-green);
+        }
+
+        .terminal-command {
+            color: var(--text-primary);
+        }
+
+        .terminal-output {
+            color: var(--accent-cyan);
+            margin: 0.5rem 0;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 3rem 0;
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Tooltip */
+        .tooltip {
+            position: absolute;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            font-size: 0.875rem;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 1000;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        }
+
+        .tooltip.visible {
+            opacity: 1;
+        }
+
+        /* Loading Animation */
+        .loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: var(--bg-primary);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            transition: opacity 0.5s, visibility 0.5s;
+        }
+
+        .loading-overlay.hidden {
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        .loading-text {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-pink));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: loading-pulse 1s infinite;
+        }
+
+        @keyframes loading-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .logo { font-size: 2rem; }
+            .container { padding: 1rem; }
+            .stat-value { font-size: 1.75rem; }
+            .grand-total .stat-value { font-size: 2.5rem; }
+            .models-grid { grid-template-columns: 1fr; }
+            .charts-grid { grid-template-columns: 1fr; }
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--accent-cyan);
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-grid"></div>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+
+    <div class="loading-overlay" id="loading">
+        <div class="loading-text">INITIALIZING TOKEN BURN DASHBOARD...</div>
+    </div>
+
+    <div class="tooltip" id="tooltip"></div>
+
+    <div class="container">
+        <header>
+            <h1 class="logo">🔥 TOKEN BURN</h1>
+            <p class="subtitle">AI Session Analytics Dashboard</p>
+        </header>
+
+        <div class="stats-grid" id="statsGrid">
+            <!-- Stats injected by JS -->
+        </div>
+
+        <h2 class="section-title">🤖 Models</h2>
+        <div class="models-grid" id="modelsGrid">
+            <!-- Model cards injected by JS -->
+        </div>
+
+        <div class="charts-section">
+            <h2 class="section-title">📊 Visualizations</h2>
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <h3 class="chart-title">Token Distribution</h3>
+                    <svg class="donut-chart" id="donutChart" viewBox="0 0 300 300">
+                        <!-- SVG injected by JS -->
+                    </svg>
+                </div>
+                <div class="chart-card">
+                    <h3 class="chart-title">Top Models by Usage</h3>
+                    <div class="bar-chart" id="barChart">
+                        <!-- Bars injected by JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="terminal">
+            <div class="terminal-header">
+                <div class="terminal-dot dot-red"></div>
+                <div class="terminal-dot dot-yellow"></div>
+                <div class="terminal-dot dot-green"></div>
+                <span class="terminal-title">token-burn-report.json</span>
+            </div>
+            <div class="terminal-body" id="terminalBody">
+                <!-- Terminal output injected by JS -->
+            </div>
+        </div>
+
+        <footer>
+            <p>Generated by Token Burn Skill • <span class="pulse">●</span> Live Data</p>
+        </footer>
+    </div>
+
+    <script>
+        // Data
+        const tokenData = {
+            "files_processed": 224,
+            "total_lines": 37375,
+            "total_messages": 15632,
+            "tokens_by_model": {
+                "kimi-coding/k2p5": {
+                    "input": 27367153,
+                    "output": 2447796,
+                    "cache_read": 543016616,
+                    "cache_write": 0,
+                    "total": 572831565
+                },
+                "zai/glm-5": {
+                    "input": 113587727,
+                    "output": 2064572,
+                    "cache_read": 323741632,
+                    "cache_write": 0,
+                    "total": 439393931
+                },
+                "zai/glm-4.6": {
+                    "input": 27612,
+                    "output": 9523,
+                    "cache_read": 877000,
+                    "cache_write": 0,
+                    "total": 914135
+                },
+                "kimi-coding/kimi-k2-thinking": {
+                    "input": 134034,
+                    "output": 18958,
+                    "cache_read": 2714112,
+                    "cache_write": 0,
+                    "total": 2867104
+                },
+                "zai/glm-4.7": {
+                    "input": 3784,
+                    "output": 296,
+                    "cache_read": 4560,
+                    "cache_write": 0,
+                    "total": 8640
+                },
+                "github-copilot/gemini-3.1-pro-preview": {
+                    "input": 1356684,
+                    "output": 31167,
+                    "cache_read": 2607025,
+                    "cache_write": 0,
+                    "total": 3994876
+                },
+                "github-copilot/gpt-5.2": {
+                    "input": 428652,
+                    "output": 38671,
+                    "cache_read": 1180544,
+                    "cache_write": 0,
+                    "total": 1647867
+                },
+                "github-copilot/claude-opus-4.5": {
+                    "input": 4236,
+                    "output": 8314,
+                    "cache_read": 554262,
+                    "cache_write": 61366,
+                    "total": 628178
+                },
+                "github-copilot/claude-opus-4.6": {
+                    "input": 7769,
+                    "output": 41454,
+                    "cache_read": 4205344,
+                    "cache_write": 320429,
+                    "total": 4574996
+                },
+                "zai/glm-4.7-flash": {
+                    "input": 253431,
+                    "output": 17593,
+                    "cache_read": 422510,
+                    "cache_write": 0,
+                    "total": 693534
+                },
+                "github-copilot/gpt-5.2-codex": {
+                    "input": 52214,
+                    "output": 7345,
+                    "cache_read": 32640,
+                    "cache_write": 0,
+                    "total": 92199
+                }
+            },
+            "total_input": 143223296,
+            "total_output": 4685689,
+            "total_cache_read": 879356245,
+            "total_cache_write": 381795,
+            "total_tokens": 1027647025
+        };
+
+        // Utility functions
+        function formatNumber(num) {
+            if (num >= 1000000000) return (num / 1000000000).toFixed(2) + 'B';
+            if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+            return num.toString();
+        }
+
+        function formatFullNumber(num) {
+            return num.toLocaleString();
+        }
+
+        function getModelEmoji(modelName) {
+            if (modelName.includes('kimi')) return '🌙';
+            if (modelName.includes('claude')) return '🧠';
+            if (modelName.includes('gpt')) return '🤖';
+            if (modelName.includes('gemini')) return '💎';
+            if (modelName.includes('glm')) return '⚡';
+            return '🤖';
+        }
+
+        function getModelColor(modelName) {
+            if (modelName.includes('kimi')) return '#00f0ff';
+            if (modelName.includes('claude')) return '#a855f7';
+            if (modelName.includes('gpt')) return '#00ff88';
+            if (modelName.includes('gemini')) return '#ffdd00';
+            if (modelName.includes('glm')) return '#ff00aa';
+            return '#ffffff';
+        }
+
+        // Render stats
+        function renderStats() {
+            const statsGrid = document.getElementById('statsGrid');
+            
+            const stats = [
+                { icon: '📁', label: 'Files Processed', value: formatFullNumber(tokenData.files_processed), change: '+12% vs last week' },
+                { icon: '📄', label: 'Total Lines', value: formatFullNumber(tokenData.total_lines), change: '+8% vs last week' },
+                { icon: '💬', label: 'Messages', value: formatFullNumber(tokenData.total_messages), change: '+15% vs last week' },
+                { icon: '📥', label: 'Input Tokens', value: formatNumber(tokenData.total_input), sub: formatFullNumber(tokenData.total_input), change: '' },
+                { icon: '📤', label: 'Output Tokens', value: formatNumber(tokenData.total_output), sub: formatFullNumber(tokenData.total_output), change: '' },
+                { icon: '💾', label: 'Cache Read', value: formatNumber(tokenData.total_cache_read), sub: formatFullNumber(tokenData.total_cache_read), change: '' },
+            ];
+
+            const grandTotal = {
+                icon: '🔥',
+                label: 'Grand Total',
+                value: formatNumber(tokenData.total_tokens),
+                sub: formatFullNumber(tokenData.total_tokens),
+                isGrand: true
+            };
+
+            stats.forEach(stat => {
+                const card = document.createElement('div');
+                card.className = 'stat-card';
+                card.innerHTML = `
+                    <div class="stat-icon">${stat.icon}</div>
+                    <div class="stat-label">${stat.label}</div>
+                    <div class="stat-value">${stat.value}${stat.sub ? `<span>(${stat.sub})</span>` : ''}</div>
+                    ${stat.change ? `<div class="stat-change">${stat.change}</div>` : ''}
+                `;
+                statsGrid.appendChild(card);
+            });
+
+            const grandCard = document.createElement('div');
+            grandCard.className = 'stat-card grand-total';
+            grandCard.innerHTML = `
+                <div class="stat-icon">${grandTotal.icon}</div>
+                <div class="stat-label">${grandTotal.label}</div>
+                <div class="stat-value">${grandTotal.value}</div>
+                <div style="color: var(--text-muted); font-size: 0.875rem; margin-top: 0.5rem;">${grandTotal.sub} tokens</div>
+            `;
+            statsGrid.appendChild(grandCard);
+        }
+
+        // Render model cards
+        function renderModels() {
+            const modelsGrid = document.getElementById('modelsGrid');
+            const sortedModels = Object.entries(tokenData.tokens_by_model)
+                .sort((a, b) => b[1].total - a[1].total);
+
+            sortedModels.forEach(([name, data], index) => {
+                const maxTotal = sortedModels[0][1].total;
+                const card = document.createElement('div');
+                card.className = 'model-card';
+                card.style.animationDelay = `${index * 0.1}s`;
+                
+                card.innerHTML = `
+                    <div class="model-header">
+                        <div class="model-emoji">${getModelEmoji(name)}</div>
+                        <div>
+                            <div class="model-name">${name}</div>
+                        </div>
+                        <div class="model-total">
+                            <div class="model-total-value">${formatNumber(data.total)}</div>
+                            <div class="model-total-label">Total</div>
+                        </div>
+                    </div>
+                    <div class="token-bars">
+                        <div class="token-row">
+                            <div class="token-info">
+                                <span class="token-label">📥 Input</span>
+                                <span class="token-value" style="color: var(--accent-cyan)">${formatNumber(data.input)}</span>
+                            </div>
+                            <div class="token-bar-bg">
+                                <div class="token-bar-fill bar-input" style="width: 0%" data-width="${(data.input / maxTotal * 100).toFixed(1)}%"></div>
+                            </div>
+                        </div>
+                        <div class="token-row">
+                            <div class="token-info">
+                                <span class="token-label">📤 Output</span>
+                                <span class="token-value" style="color: var(--accent-green)">${formatNumber(data.output)}</span>
+                            </div>
+                            <div class="token-bar-bg">
+                                <div class="token-bar-fill bar-output" style="width: 0%" data-width="${(data.output / maxTotal * 100).toFixed(1)}%"></div>
+                            </div>
+                        </div>
+                        <div class="token-row">
+                            <div class="token-info">
+                                <span class="token-label">💾 Cache</span>
+                                <span class="token-value" style="color: var(--accent-pink)">${formatNumber(data.cache_read)}</span>
+                            </div>
+                            <div class="token-bar-bg">
+                                <div class="token-bar-fill bar-cache" style="width: 0%" data-width="${(data.cache_read / maxTotal * 100).toFixed(1)}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                modelsGrid.appendChild(card);
+            });
+
+            // Animate bars
+            setTimeout(() => {
+                document.querySelectorAll('.token-bar-fill').forEach(bar => {
+                    bar.style.width = bar.dataset.width;
+                });
+            }, 100);
+        }
+
+        // Render donut chart
+        function renderDonutChart() {
+            const svg = document.getElementById('donutChart');
+            const sortedModels = Object.entries(tokenData.tokens_by_model)
+                .sort((a, b) => b[1].total - a[1].total)
+                .slice(0, 6);
+            
+            const total = sortedModels.reduce((sum, [, data]) => sum + data.total, 0);
+            let currentAngle = 0;
+            const centerX = 150;
+            const centerY = 150;
+            const radius = 100;
+            const innerRadius = 60;
+
+            sortedModels.forEach(([name, data], index) => {
+                const percentage = data.total / total;
+                const angle = percentage * 360;
+                const startAngle = currentAngle;
+                const endAngle = currentAngle + angle;
+                
+                const startRad = (startAngle - 90) * Math.PI / 180;
+                const endRad = (endAngle - 90) * Math.PI / 180;
+                
+                const x1 = centerX + radius * Math.cos(startRad);
+                const y1 = centerY + radius * Math.sin(startRad);
+                const x2 = centerX + radius * Math.cos(endRad);
+                const y2 = centerY + radius * Math.sin(endRad);
+                
+                const x3 = centerX + innerRadius * Math.cos(endRad);
+                const y3 = centerY + innerRadius * Math.sin(endRad);
+                const x4 = centerX + innerRadius * Math.cos(startRad);
+                const y4 = centerY + innerRadius * Math.sin(startRad);
+                
+                const largeArc = angle > 180 ? 1 : 0;
+                
+                const pathData = [
+                    `M ${x1} ${y1}`,
+                    `A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2}`,
+                    `L ${x3} ${y3}`,
+                    `A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${x4} ${y4}`,
+                    'Z'
+                ].join(' ');
+                
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', pathData);
+                path.setAttribute('fill', getModelColor(name));
+                path.setAttribute('class', 'donut-segment');
+                path.setAttribute('stroke', 'var(--bg-secondary)');
+                path.setAttribute('stroke-width', '2');
+                
+                path.addEventListener('mouseenter', (e) => {
+                    const tooltip = document.getElementById('tooltip');
+                    tooltip.innerHTML = `
+                        <strong>${getModelEmoji(name)} ${name}</strong><br>
+                        ${formatNumber(data.total)} tokens (${(percentage * 100).toFixed(1)}%)
+                    `;
+                    tooltip.classList.add('visible');
+                });
+                
+                path.addEventListener('mousemove', (e) => {
+                    const tooltip = document.getElementById('tooltip');
+                    tooltip.style.left = e.pageX + 10 + 'px';
+                    tooltip.style.top = e.pageY + 10 + 'px';
+                });
+                
+                path.addEventListener('mouseleave', () => {
+                    document.getElementById('tooltip').classList.remove('visible');
+                });
+                
+                svg.appendChild(path);
+                currentAngle += angle;
+            });
+
+            // Center text
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', centerX);
+            text.setAttribute('y', centerY - 5);
+            text.setAttribute('text-anchor', 'middle');
+            text.setAttribute('fill', 'var(--text-primary)');
+            text.setAttribute('font-size', '24');
+            text.setAttribute('font-weight', 'bold');
+            text.textContent = formatNumber(total);
+            svg.appendChild(text);
+
+            const subtext = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            subtext.setAttribute('x', centerX);
+            subtext.setAttribute('y', centerY + 20);
+            subtext.setAttribute('text-anchor', 'middle');
+            subtext.setAttribute('fill', 'var(--text-secondary)');
+            subtext.setAttribute('font-size', '12');
+            subtext.textContent = 'TOTAL TOKENS';
+            svg.appendChild(subtext);
+        }
+
+        // Render bar chart
+        function renderBarChart() {
+            const barChart = document.getElementById('barChart');
+            const sortedModels = Object.entries(tokenData.tokens_by_model)
+                .sort((a, b) => b[1].total - a[1].total)
+                .slice(0, 8);
+            
+            const maxValue = sortedModels[0][1].total;
+
+            sortedModels.forEach(([name, data], index) => {
+                const item = document.createElement('div');
+                item.className = 'bar-item';
+                const percentage = (data.total / maxValue * 100).toFixed(1);
+                const color = getModelColor(name);
+                
+                item.innerHTML = `
+                    <div class="bar-label">${getModelEmoji(name)} ${name.split('/').pop()}</div>
+                    <div class="bar-track">
+                        <div class="bar-fill-chart" style="width: 0%; background: ${color}; color: #000;" data-width="${percentage}%">
+                            ${formatNumber(data.total)}
+                        </div>
+                    </div>
+                `;
+                barChart.appendChild(item);
+            });
+
+            setTimeout(() => {
+                document.querySelectorAll('.bar-fill-chart').forEach(bar => {
+                    bar.style.width = bar.dataset.width;
+                });
+            }, 500);
+        }
+
+        // Render terminal
+        function renderTerminal() {
+            const terminal = document.getElementById('terminalBody');
+            const lines = [
+                { prompt: '❯', command: 'cat token-burn-report.json | head -20', output: JSON.stringify(tokenData, null, 2).split('\n').slice(0, 20) },
+                { prompt: '❯', command: '', output: ['...'] },
+                { prompt: '❯', command: 'echo "Analysis complete ✓"', output: ['Analysis complete ✓'] }
+            ];
+
+            let html = '';
+            lines.forEach((line, i) => {
+                if (line.command) {
+                    html += `<div class="terminal-line"><span class="terminal-prompt">${line.prompt}</span> <span class="terminal-command">${line.command}</span></div>`;
+                }
+                line.output.forEach(out => {
+                    html += `<div class="terminal-output">${out}</div>`;
+                });
+            });
+
+            terminal.innerHTML = html;
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            renderStats();
+            renderModels();
+            renderDonutChart();
+            renderBarChart();
+            renderTerminal();
+
+            // Hide loading
+            setTimeout(() => {
+                document.getElementById('loading').classList.add('hidden');
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

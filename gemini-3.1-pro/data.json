@@ -1,0 +1,96 @@
+{
+  "files_processed": 227,
+  "total_lines": 37515,
+  "total_messages": 15681,
+  "tokens_by_model": {
+    "kimi-coding/k2p5": {
+      "input": 27379025,
+      "output": 2457708,
+      "cache_read": 543027880,
+      "cache_write": 0,
+      "total": 572864613
+    },
+    "zai/glm-5": {
+      "input": 113587727,
+      "output": 2064572,
+      "cache_read": 323741632,
+      "cache_write": 0,
+      "total": 439393931
+    },
+    "zai/glm-4.6": {
+      "input": 27612,
+      "output": 9523,
+      "cache_read": 877000,
+      "cache_write": 0,
+      "total": 914135
+    },
+    "kimi-coding/kimi-k2-thinking": {
+      "input": 134034,
+      "output": 18958,
+      "cache_read": 2714112,
+      "cache_write": 0,
+      "total": 2867104
+    },
+    "zai/glm-4.7": {
+      "input": 3784,
+      "output": 296,
+      "cache_read": 4560,
+      "cache_write": 0,
+      "total": 8640
+    },
+    "github-copilot/gemini-3.1-pro-preview": {
+      "input": 1410193,
+      "output": 31630,
+      "cache_read": 2664962,
+      "cache_write": 0,
+      "total": 4106785
+    },
+    "github-copilot/claude-opus-4.6": {
+      "input": 7778,
+      "output": 42916,
+      "cache_read": 4367851,
+      "cache_write": 368337,
+      "total": 4786882
+    },
+    "github-copilot/gpt-5.2": {
+      "input": 428652,
+      "output": 38671,
+      "cache_read": 1180544,
+      "cache_write": 0,
+      "total": 1647867
+    },
+    "github-copilot/claude-opus-4.5": {
+      "input": 4236,
+      "output": 8314,
+      "cache_read": 554262,
+      "cache_write": 61366,
+      "total": 628178
+    },
+    "zai/glm-4.7-flash": {
+      "input": 253431,
+      "output": 17593,
+      "cache_read": 422510,
+      "cache_write": 0,
+      "total": 693534
+    },
+    "github-copilot/gpt-5.2-codex": {
+      "input": 52214,
+      "output": 7345,
+      "cache_read": 32640,
+      "cache_write": 0,
+      "total": 92199
+    },
+    "zai/glm-4.6v": {
+      "input": 147776,
+      "output": 4762,
+      "cache_read": 137251,
+      "cache_write": 0,
+      "total": 289789
+    }
+  },
+  "total_input": 143436462,
+  "total_output": 4702288,
+  "total_cache_read": 879725204,
+  "total_cache_write": 429703,
+  "total_tokens": 1028293657
+}

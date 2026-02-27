@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Token Burn Dashboard</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&display=swap");
+
+      :root {
+        color-scheme: dark;
+        --bg: #0b0f1a;
+        --panel: #11162a;
+        --panel-2: #141a33;
+        --accent: #6d9bff;
+        --accent-2: #35e0d3;
+        --accent-3: #f8c76e;
+        --text: #e8ecf8;
+        --muted: #96a0c6;
+        --border: rgba(255, 255, 255, 0.08);
+        --glow: 0 0 24px rgba(109, 155, 255, 0.25);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: radial-gradient(circle at top, rgba(109, 155, 255, 0.16), transparent 55%),
+          var(--bg);
+        color: var(--text);
+        font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          "Liberation Mono", "Courier New", monospace;
+        min-height: 100vh;
+      }
+
+      .app {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 32px 24px 56px;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
+
+      header {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      header h1 {
+        margin: 0;
+        font-size: 2rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      header p {
+        margin: 0;
+        color: var(--muted);
+        max-width: 720px;
+      }
+
+      .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 16px;
+      }
+
+      .card {
+        background: linear-gradient(145deg, var(--panel), var(--panel-2));
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 16px 18px;
+        box-shadow: var(--glow);
+      }
+
+      .card h3 {
+        margin: 0;
+        font-size: 0.82rem;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+
+      .card .value {
+        margin-top: 8px;
+        font-size: 1.4rem;
+        font-weight: 600;
+      }
+
+      .card .sub {
+        margin-top: 6px;
+        font-size: 0.8rem;
+        color: var(--muted);
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        padding: 14px 16px;
+        border-radius: 14px;
+      }
+
+      .controls .left,
+      .controls .right {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      label {
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+
+      select,
+      input {
+        background: #0d1224;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        color: var(--text);
+        padding: 8px 10px;
+        font-family: inherit;
+        font-size: 0.9rem;
+      }
+
+      .badge {
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(109, 155, 255, 0.2);
+        color: #cdd8ff;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .dashboard {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 16px;
+      }
+
+      .table-wrap {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        overflow: hidden;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      thead {
+        background: rgba(109, 155, 255, 0.12);
+      }
+
+      th,
+      td {
+        padding: 12px 16px;
+        text-align: left;
+        font-size: 0.85rem;
+      }
+
+      th {
+        color: #cdd8ff;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        font-size: 0.72rem;
+        cursor: pointer;
+      }
+
+      tbody tr {
+        border-top: 1px solid var(--border);
+        transition: background 0.2s ease;
+      }
+
+      tbody tr:hover {
+        background: rgba(53, 224, 211, 0.08);
+      }
+
+      tbody tr.active {
+        background: rgba(109, 155, 255, 0.18);
+      }
+
+      .model-cell {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .model-name {
+        font-weight: 600;
+      }
+
+      .bar {
+        height: 6px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, var(--accent), var(--accent-2));
+        box-shadow: 0 0 12px rgba(53, 224, 211, 0.3);
+      }
+
+      .detail-panel {
+        background: linear-gradient(160deg, #101831, #121b3b 65%);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .detail-panel h2 {
+        margin: 0;
+        font-size: 1.1rem;
+      }
+
+      .detail-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .detail-item {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.86rem;
+        color: var(--muted);
+      }
+
+      .detail-item span:last-child {
+        color: var(--text);
+        font-weight: 600;
+      }
+
+      .pill {
+        background: rgba(248, 199, 110, 0.2);
+        color: #f8c76e;
+        padding: 6px 12px;
+        border-radius: 12px;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .footer {
+        color: var(--muted);
+        font-size: 0.75rem;
+        text-align: center;
+      }
+
+      @media (max-width: 960px) {
+        .dashboard {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header>
+        <h1>🔥 Token Burn Dashboard</h1>
+        <p>
+          Interactive, monospaced telemetry for the latest token usage sweep. Toggle metrics, sort models,
+          and drill into the hottest burns.
+        </p>
+      </header>
+
+      <section class="summary-grid" id="summary"></section>
+
+      <section class="controls">
+        <div class="left">
+          <label for="metric">Focus metric</label>
+          <select id="metric">
+            <option value="total">Total</option>
+            <option value="input">Input</option>
+            <option value="output">Output</option>
+            <option value="cache_read">Cache Read</option>
+            <option value="cache_write">Cache Write</option>
+          </select>
+          <span class="badge" id="model-count">0 models</span>
+        </div>
+        <div class="right">
+          <label for="search">Filter</label>
+          <input id="search" type="text" placeholder="Type model name" />
+        </div>
+      </section>
+
+      <section class="dashboard">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th data-key="name">Model</th>
+                <th data-key="input">Input</th>
+                <th data-key="output">Output</th>
+                <th data-key="cache_read">Cache Read</th>
+                <th data-key="cache_write">Cache Write</th>
+                <th data-key="total">Total</th>
+              </tr>
+            </thead>
+            <tbody id="table-body"></tbody>
+          </table>
+        </div>
+        <aside class="detail-panel" id="detail-panel">
+          <div>
+            <span class="pill">Selected model</span>
+            <h2 id="detail-title">—</h2>
+          </div>
+          <div class="detail-list" id="detail-list"></div>
+        </aside>
+      </section>
+
+      <div class="footer">Generated from /home/node/.pi/agent/sessions • 223 files processed</div>
+    </div>
+
+    <script>
+      const tokenData = {
+        files_processed: 223,
+        total_lines: 37289,
+        total_messages: 15609,
+        tokens_by_model: {
+          "kimi-coding/k2p5": {
+            input: 27362140,
+            output: 2447582,
+            cache_read: 543011240,
+            cache_write: 0,
+            total: 572820962,
+          },
+          "zai/glm-5": {
+            input: 113587727,
+            output: 2064572,
+            cache_read: 323741632,
+            cache_write: 0,
+            total: 439393931,
+          },
+          "zai/glm-4.6": {
+            input: 27612,
+            output: 9523,
+            cache_read: 877000,
+            cache_write: 0,
+            total: 914135,
+          },
+          "kimi-coding/kimi-k2-thinking": {
+            input: 134034,
+            output: 18958,
+            cache_read: 2714112,
+            cache_write: 0,
+            total: 2867104,
+          },
+          "zai/glm-4.7": {
+            input: 3784,
+            output: 296,
+            cache_read: 4560,
+            cache_write: 0,
+            total: 8640,
+          },
+          "github-copilot/gemini-3.1-pro-preview": {
+            input: 1318678,
+            output: 29003,
+            cache_read: 2485701,
+            cache_write: 0,
+            total: 3833382,
+          },
+          "github-copilot/gpt-5.2": {
+            input: 428652,
+            output: 38671,
+            cache_read: 1180544,
+            cache_write: 0,
+            total: 1647867,
+          },
+          "github-copilot/claude-opus-4.5": {
+            input: 4236,
+            output: 8314,
+            cache_read: 554262,
+            cache_write: 61366,
+            total: 628178,
+          },
+          "github-copilot/claude-opus-4.6": {
+            input: 7758,
+            output: 29500,
+            cache_read: 3668173,
+            cache_write: 213443,
+            total: 3918874,
+          },
+          "zai/glm-4.7-flash": {
+            input: 253431,
+            output: 17593,
+            cache_read: 422510,
+            cache_write: 0,
+            total: 693534,
+          },
+          "github-copilot/gpt-5.2-codex": {
+            input: 30601,
+            output: 583,
+            cache_read: 9728,
+            cache_write: 0,
+            total: 40912,
+          },
+        },
+        total_input: 143158653,
+        total_output: 4664595,
+        total_cache_read: 878669462,
+        total_cache_write: 274809,
+        total_tokens: 1026767519,
+      };
+
+      const state = {
+        metric: "total",
+        sortKey: "total",
+        sortDirection: "desc",
+        query: "",
+        selected: null,
+      };
+
+      const metricSelect = document.getElementById("metric");
+      const searchInput = document.getElementById("search");
+      const tableBody = document.getElementById("table-body");
+      const detailTitle = document.getElementById("detail-title");
+      const detailList = document.getElementById("detail-list");
+      const summaryContainer = document.getElementById("summary");
+      const modelCount = document.getElementById("model-count");
+
+      const formatTokens = (value) => {
+        if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`;
+        if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
+        if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+        return value.toLocaleString();
+      };
+
+      const percent = (value, total) => ((value / total) * 100).toFixed(2);
+
+      const models = Object.entries(tokenData.tokens_by_model).map(([name, stats]) => ({
+        name,
+        ...stats,
+      }));
+
+      const summaryCards = [
+        { title: "Total Tokens", value: formatTokens(tokenData.total_tokens), sub: "All usage" },
+        { title: "Input Tokens", value: formatTokens(tokenData.total_input), sub: "Prompt volume" },
+        { title: "Output Tokens", value: formatTokens(tokenData.total_output), sub: "Model output" },
+        { title: "Cache Read", value: formatTokens(tokenData.total_cache_read), sub: "Cached hits" },
+        { title: "Cache Write", value: formatTokens(tokenData.total_cache_write), sub: "Cached writes" },
+        { title: "Files", value: tokenData.files_processed.toLocaleString(), sub: "Session logs" },
+        { title: "Lines", value: tokenData.total_lines.toLocaleString(), sub: "Total rows" },
+        { title: "Messages", value: tokenData.total_messages.toLocaleString(), sub: "Usage events" },
+      ];
+
+      const renderSummary = () => {
+        summaryContainer.innerHTML = summaryCards
+          .map(
+            (card) => `
+          <div class="card">
+            <h3>${card.title}</h3>
+            <div class="value">${card.value}</div>
+            <div class="sub">${card.sub}</div>
+          </div>
+        `
+          )
+          .join("");
+      };
+
+      const renderDetail = (model) => {
+        if (!model) return;
+        detailTitle.textContent = model.name;
+        const rows = [
+          ["Share", `${percent(model.total, tokenData.total_tokens)}%`],
+          ["Input", `${formatTokens(model.input)} (${percent(model.input, tokenData.total_input)}%)`],
+          [
+            "Output",
+            `${formatTokens(model.output)} (${percent(model.output, tokenData.total_output)}%)`,
+          ],
+          [
+            "Cache Read",
+            `${formatTokens(model.cache_read)} (${percent(
+              model.cache_read,
+              tokenData.total_cache_read
+            )}%)`,
+          ],
+          [
+            "Cache Write",
+            `${formatTokens(model.cache_write)} (${percent(
+              model.cache_write,
+              tokenData.total_cache_write || 1
+            )}%)`,
+          ],
+          ["Total", `${formatTokens(model.total)}`],
+        ];
+        detailList.innerHTML = rows
+          .map(
+            ([label, value]) => `
+          <div class="detail-item">
+            <span>${label}</span>
+            <span>${value}</span>
+          </div>
+        `
+          )
+          .join("");
+      };
+
+      const renderTable = () => {
+        const filtered = models.filter((model) =>
+          model.name.toLowerCase().includes(state.query.toLowerCase())
+        );
+        const sorted = [...filtered].sort((a, b) => {
+          const valueA = a[state.sortKey];
+          const valueB = b[state.sortKey];
+          return state.sortDirection === "desc" ? valueB - valueA : valueA - valueB;
+        });
+
+        const maxMetric = Math.max(...sorted.map((model) => model[state.metric]), 1);
+
+        tableBody.innerHTML = sorted
+          .map(
+            (model) => `
+          <tr class="${state.selected?.name === model.name ? "active" : ""}" data-model="${model.name}">
+            <td class="model-cell">
+              <span class="model-name">${model.name}</span>
+              <div class="bar" style="width: ${(model[state.metric] / maxMetric) * 100}%;"></div>
+            </td>
+            <td>${formatTokens(model.input)}</td>
+            <td>${formatTokens(model.output)}</td>
+            <td>${formatTokens(model.cache_read)}</td>
+            <td>${formatTokens(model.cache_write)}</td>
+            <td>${formatTokens(model.total)}</td>
+          </tr>
+        `
+          )
+          .join("");
+
+        modelCount.textContent = `${sorted.length} models`;
+
+        if (!state.selected && sorted.length) {
+          state.selected = sorted[0];
+          renderDetail(state.selected);
+        }
+      };
+
+      const handleRowClick = (event) => {
+        const row = event.target.closest("tr");
+        if (!row) return;
+        const modelName = row.dataset.model;
+        const model = models.find((entry) => entry.name === modelName);
+        if (!model) return;
+        state.selected = model;
+        renderTable();
+        renderDetail(model);
+      };
+
+      metricSelect.addEventListener("change", (event) => {
+        state.metric = event.target.value;
+        state.sortKey = event.target.value;
+        renderTable();
+      });
+
+      searchInput.addEventListener("input", (event) => {
+        state.query = event.target.value;
+        renderTable();
+      });
+
+      document.querySelectorAll("th").forEach((header) => {
+        header.addEventListener("click", () => {
+          const key = header.dataset.key;
+          if (!key || key === "name") return;
+          state.sortKey = key;
+          state.sortDirection = state.sortDirection === "desc" ? "asc" : "desc";
+          renderTable();
+        });
+      });
+
+      tableBody.addEventListener("click", handleRowClick);
+
+      renderSummary();
+      renderTable();
+      renderDetail(state.selected || models[0]);
+    </script>
+  </body>
+</html>
