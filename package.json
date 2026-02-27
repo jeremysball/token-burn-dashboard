@@ -1,21 +1,22 @@
 {
-  "name": "mono-dashboard",
+  "name": "token-burn-dashboard",
   "version": "0.1.0",
-  "description": "Minimal, monospace analytics dashboard framework",
-  "main": "dist/mono-dashboard.js",
-  "type": "module",
+  "description": "Real-time token usage dashboard with cost analysis",
+  "main": "server.js",
+  "type": "commonjs",
   "scripts": {
-    "build": "node build.js",
+    "start": "node server.js",
     "dev": "node server.js",
-    "test": "echo \"No tests yet\"",
-    "lint": "echo \"No linter configured\""
+    "build": "node build.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["dashboard", "analytics", "monospace", "minimal"],
+  "keywords": [
+    "dashboard",
+    "analytics",
+    "tokens",
+    "cost-tracking",
+    "real-time"
+  ],
   "author": "",
-  "license": "MIT",
-  "files": [
-    "dist/",
-    "src/",
-    "README.md"
-  ]
+  "license": "MIT"
 }
