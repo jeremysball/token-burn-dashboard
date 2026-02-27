@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>token_burn // analytics</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../../src/mono-dashboard.css">
+</head>
+<body>
+    <div id="dashboard"></div>
+
+    <script type="module">
+        import { MonoDashboard } from '../../src/MonoDashboard.js';
+
+        const data = [
+            { name: "kimi-coding/k2p5", total: 572820962, input: 27362140, output: 2447582, cache: 543011240 },
+            { name: "zai/glm-5", total: 439393931, input: 113587727, output: 2064572, cache: 323741632 },
+            { name: "github-copilot/claude-opus-4.6", total: 3918874, input: 7758, output: 29500, cache: 3668173 },
+            { name: "github-copilot/gemini-3.1-pro-preview", total: 3833382, input: 1318678, output: 29003, cache: 2485701 },
+            { name: "kimi-coding/kimi-k2-thinking", total: 2867104, input: 134034, output: 18958, cache: 2714112 },
+            { name: "github-copilot/gpt-5.2", total: 1647867, input: 428652, output: 38671, cache: 1180544 },
+            { name: "zai/glm-4.7-flash", total: 693534, input: 253431, output: 17593, cache: 422510 },
+            { name: "github-copilot/claude-opus-4.5", total: 628178, input: 4236, output: 8314, cache: 554262 },
+            { name: "zai/glm-4.6", total: 914135, input: 27612, output: 9523, cache: 877000 },
+            { name: "github-copilot/gpt-5.2-codex", total: 40912, input: 30601, output: 583, cache: 9728 },
+            { name: "zai/glm-4.7", total: 8640, input: 3784, output: 296, cache: 4560 }
+        ];
+
+        const grandTotal = data.reduce((sum, d) => sum + d.total, 0);
+        const totalInput = data.reduce((sum, d) => sum + d.input, 0);
+        const totalOutput = data.reduce((sum, d) => sum + d.output, 0);
+        const totalCache = data.reduce((sum, d) => sum + d.cache, 0);
+
+        const dashboard = new MonoDashboard({
+            title: 'token_burn',
+            subtitle: 'AI session analytics // 223 files processed',
+            stats: [
+                { label: 'total tokens', value: grandTotal, accent: true },
+                { label: 'input', value: totalInput },
+                { label: 'output', value: totalOutput },
+                { label: 'cache read', value: totalCache },
+                { label: 'files', value: 223 },
+                { label: 'messages', value: 15609 }
+            ],
+            data: data,
+            container: '#dashboard'
+        });
+
+        dashboard.render();
+    </script>
+</body>
+</html>

@@ -4,9 +4,7 @@ const path = require('path');
 
 async function evaluateDashboards() {
   const dashboards = {
-    'k2p5': 'file:///workspace/token-burn-dashboard-model-faceoff/k2p5/index.html',
-    'gemini-3.1-pro': 'file:///workspace/token-burn-dashboard-model-faceoff/gemini-3.1-pro/index.html',
-    'gpt-5.2-codex': 'file:///workspace/token-burn-dashboard-model-faceoff/gpt-5.2-codex/index.html'
+    'prototype': 'file:///workspace/token-burn-dashboard-model-faceoff/prototype.html'
   };
   
   const results = {};

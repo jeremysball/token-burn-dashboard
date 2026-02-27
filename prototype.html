@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>token_burn // analytics</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #111111;
+            --surface: #1a1a1a;
+            --surface-hover: #222222;
+            --border: #333333;
+            --border-focus: #444444;
+            --text: #d1d1d1;
+            --text-muted: #666666;
+            --accent: #e2b714;
+            --accent-hover: #f0c000;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+            padding: 24px;
+            min-height: 100vh;
+        }
+
+        /* Header */
+        header {
+            margin-bottom: 32px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+
+        /* Section headers */
+        .section-title {
+            font-size: 1rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text);
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        /* Stats grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .stat-block {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 16px;
+            transition: background-color 0.1s ease;
+        }
+
+        .stat-block:hover {
+            background: var(--surface-hover);
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            font-weight: 400;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .stat-value.accent {
+            color: var(--accent);
+        }
+
+        /* Main layout */
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            gap: 24px;
+        }
+
+        @media (max-width: 900px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Table */
+        .table-wrap {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+
+        thead {
+            background: var(--bg);
+        }
+
+        th {
+            padding: 12px 16px;
+            text-align: left;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            user-select: none;
+            transition: color 0.1s ease;
+        }
+
+        th:hover {
+            color: var(--accent);
+        }
+
+        td {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        tr:hover td {
+            background: var(--surface-hover);
+        }
+
+        tr.active td {
+            background: rgba(226, 183, 20, 0.1);
+        }
+
+        .model-name {
+            font-weight: 700;
+        }
+
+        .progress-cell {
+            width: 200px;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: var(--bg);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 2px;
+            transition: width 0.2s ease;
+        }
+
+        .value-muted {
+            color: var(--text-muted);
+        }
+
+        /* Detail panel */
+        .detail-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 20px;
+        }
+
+        .detail-header {
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .detail-label {
+            font-size: 0.75rem;
+            font-weight: 400;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .detail-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-key {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+
+        .detail-value {
+            font-weight: 700;
+            font-size: 0.875rem;
+        }
+
+        /* Footer */
+        footer {
+            margin-top: 32px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border);
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>token_burn</h1>
+        <p class="subtitle">AI session analytics // 223 files processed</p>
+    </header>
+
+    <section>
+        <h2 class="section-title">overview</h2>
+        <div class="stats-grid">
+            <div class="stat-block">
+                <div class="stat-label">total tokens</div>
+                <div class="stat-value accent">1.03B</div>
+            </div>
+            <div class="stat-block">
+                <div class="stat-label">input</div>
+                <div class="stat-value">143.16M</div>
+            </div>
+            <div class="stat-block">
+                <div class="stat-label">output</div>
+                <div class="stat-value">4.66M</div>
+            </div>
+            <div class="stat-block">
+                <div class="stat-label">cache read</div>
+                <div class="stat-value">878.67M</div>
+            </div>
+            <div class="stat-block">
+                <div class="stat-label">files</div>
+                <div class="stat-value">223</div>
+            </div>
+            <div class="stat-block">
+                <div class="stat-label">messages</div>
+                <div class="stat-value">15,609</div>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <h2 class="section-title">models</h2>
+        <div class="dashboard">
+            <div class="table-wrap">
+                <table id="data-table">
+                    <thead>
+                        <tr>
+                            <th onclick="sortBy('name')">model</th>
+                            <th class="progress-cell">share</th>
+                            <th onclick="sortBy('total')">total</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+
+            <aside class="detail-panel" id="detail-panel">
+                <div class="detail-header">
+                    <div class="detail-label">selected model</div>
+                    <div class="detail-title" id="detail-title">—</div>
+                </div>
+                <div id="detail-rows">
+                    <div class="detail-row">
+                        <span class="detail-key">select a model</span>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </section>
+
+    <footer>
+        generated from /home/node/.pi/agent/sessions // mono_dashboard v0.1.0
+    </footer>
+
+    <script>
+        const data = [
+            { name: "kimi-coding/k2p5", total: 572820962, input: 27362140, output: 2447582, cache: 543011240 },
+            { name: "zai/glm-5", total: 439393931, input: 113587727, output: 2064572, cache: 323741632 },
+            { name: "github-copilot/claude-opus-4.6", total: 3918874, input: 7758, output: 29500, cache: 3668173 },
+            { name: "github-copilot/gemini-3.1-pro-preview", total: 3833382, input: 1318678, output: 29003, cache: 2485701 },
+            { name: "kimi-coding/kimi-k2-thinking", total: 2867104, input: 134034, output: 18958, cache: 2714112 },
+            { name: "github-copilot/gpt-5.2", total: 1647867, input: 428652, output: 38671, cache: 1180544 },
+            { name: "zai/glm-4.7-flash", total: 693534, input: 253431, output: 17593, cache: 422510 },
+            { name: "github-copilot/claude-opus-4.5", total: 628178, input: 4236, output: 8314, cache: 554262 },
+            { name: "zai/glm-4.6", total: 914135, input: 27612, output: 9523, cache: 877000 },
+            { name: "github-copilot/gpt-5.2-codex", total: 40912, input: 30601, output: 583, cache: 9728 },
+            { name: "zai/glm-4.7", total: 8640, input: 3784, output: 296, cache: 4560 }
+        ];
+
+        const grandTotal = data.reduce((sum, d) => sum + d.total, 0);
+        let selected = data[0];
+        let sortKey = 'total';
+        let sortAsc = false;
+
+        function formatNumber(num) {
+            if (num >= 1_000_000_000) return (num / 1_000_000_000).toFixed(2) + 'B';
+            if (num >= 1_000_000) return (num / 1_000_000).toFixed(2) + 'M';
+            if (num >= 1_000) return (num / 1_000).toFixed(1) + 'K';
+            return num.toLocaleString();
+        }
+
+        function renderTable() {
+            const sorted = [...data].sort((a, b) => {
+                const valA = a[sortKey];
+                const valB = b[sortKey];
+                return sortAsc ? valA - valB : valB - valA;
+            });
+
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = sorted.map(row => {
+                const percent = (row.total / grandTotal * 100).toFixed(1);
+                const isActive = selected?.name === row.name ? 'active' : '';
+                return `
+                    <tr class="${isActive}" onclick="select('${row.name}')">
+                        <td class="model-name">${row.name}</td>
+                        <td class="progress-cell">
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: ${percent}%"></div>
+                            </div>
+                        </td>
+                        <td>${formatNumber(row.total)}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderDetail() {
+            if (!selected) return;
+            document.getElementById('detail-title').textContent = selected.name;
+            const share = ((selected.total / grandTotal) * 100).toFixed(2);
+            document.getElementById('detail-rows').innerHTML = `
+                <div class="detail-row">
+                    <span class="detail-key">share</span>
+                    <span class="detail-value">${share}%</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-key">total</span>
+                    <span class="detail-value">${formatNumber(selected.total)}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-key">input</span>
+                    <span class="detail-value">${formatNumber(selected.input)}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-key">output</span>
+                    <span class="detail-value">${formatNumber(selected.output)}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-key">cache</span>
+                    <span class="detail-value">${formatNumber(selected.cache)}</span>
+                </div>
+            `;
+        }
+
+        function select(name) {
+            selected = data.find(d => d.name === name);
+            renderTable();
+            renderDetail();
+        }
+
+        function sortBy(key) {
+            if (sortKey === key) {
+                sortAsc = !sortAsc;
+            } else {
+                sortKey = key;
+                sortAsc = key === 'name';
+            }
+            renderTable();
+        }
+
+        renderTable();
+        renderDetail();
+    </script>
+</body>
+</html>

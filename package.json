@@ -1,16 +1,21 @@
 {
-  "name": "token-burn-dashboard-model-faceoff",
-  "version": "1.0.0",
-  "description": "",
-  "main": "evaluate-dashboards.js",
+  "name": "mono-dashboard",
+  "version": "0.1.0",
+  "description": "Minimal, monospace analytics dashboard framework",
+  "main": "dist/mono-dashboard.js",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "node build.js",
+    "dev": "node server.js",
+    "test": "echo \"No tests yet\"",
+    "lint": "echo \"No linter configured\""
   },
-  "keywords": [],
+  "keywords": ["dashboard", "analytics", "monospace", "minimal"],
   "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "dependencies": {
-    "playwright": "^1.58.2"
-  }
+  "license": "MIT",
+  "files": [
+    "dist/",
+    "src/",
+    "README.md"
+  ]
 }
