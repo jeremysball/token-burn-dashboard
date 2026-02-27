@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔥 token_burn // live</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/mono-dashboard.css">
+    <style>
+        :root {
+            --chart-bg: #0d0d0d;
+            --chart-grid: #1a1a1a;
+            --chart-line-1: #e2b714;
+            --chart-line-2: #7cb97a;
+            --chart-line-3: #ca4754;
+            --chart-line-4: #6d9bff;
+        }
+        
+        /* Live indicator */
+        .live-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.75rem;
+            color: var(--mono-accent);
+        }
+        
+        .live-indicator::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            background: var(--mono-accent);
+            border-radius: 50%;
+            animation: pulse 1s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+        
+        .last-update {
+            font-size: 0.75rem;
+            color: var(--mono-text-muted);
+        }
+        
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 24px;
+            padding: 12px 16px;
+            background: var(--mono-surface);
+            border: 1px solid var(--mono-border);
+            border-radius: 4px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            background: var(--mono-bg);
+            border: 1px solid var(--mono-border);
+            color: var(--mono-text);
+            padding: 8px 16px;
+            font-family: inherit;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.1s ease;
+        }
+        
+        .btn:hover {
+            border-color: var(--mono-accent);
+            color: var(--mono-accent);
+        }
+        
+        .btn.active {
+            background: var(--mono-accent);
+            color: var(--mono-bg);
+            border-color: var(--mono-accent);
+        }
+        
+        .refresh-btn {
+            margin-left: auto;
+        }
+        
+        .view-toggle {
+            display: flex;
+            gap: 0;
+        }
+        
+        .view-toggle .btn {
+            border-radius: 0;
+        }
+        
+        .view-toggle .btn:first-child {
+            border-radius: 4px 0 0 4px;
+        }
+        
+        .view-toggle .btn:last-child {
+            border-radius: 0 4px 4px 0;
+        }
+        
+        .view-toggle .btn:not(:first-child) {
+            border-left: none;
+        }
+        
+        /* View sections */
+        .view-section {
+            display: none;
+        }
+        
+        .view-section.active {
+            display: block;
+        }
+        
+        /* Model icons */
+        .model-icon {
+            display: inline-flex;
+            width: 24px;
+            height: 24px;
+            align-items: center;
+            justify-content: center;
+            margin-right: 8px;
+        }
+        
+        /* Cache visualization */
+        .cache-bar {
+            display: flex;
+            height: 4px;
+            background: var(--mono-bg);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+        
+        .cache-input { background: var(--mono-accent); }
+        .cache-read { background: #7cb97a; }
+        .cache-write { background: #ca4754; }
+        
+        /* Loading state */
+        .loading {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        
+        /* Error state */
+        .error-banner {
+            background: rgba(202, 71, 84, 0.1);
+            border: 1px solid var(--mono-error);
+            color: var(--mono-error);
+            padding: 12px 16px;
+            border-radius: 4px;
+            margin-bottom: 16px;
+            display: none;
+        }
+        
+        .error-banner.visible {
+            display: block;
+        }
+        
+        /* Charts */
+        .chart-container {
+            background: var(--mono-surface);
+            border: 1px solid var(--mono-border);
+            border-radius: 4px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+        
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--mono-border);
+        }
+        
+        .chart-title {
+            font-size: 0.875rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        .chart-canvas {
+            width: 100%;
+            height: 300px;
+        }
+        
+        /* Cost Analysis */
+        .cost-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        
+        .cost-card {
+            background: var(--mono-surface);
+            border: 1px solid var(--mono-border);
+            border-radius: 4px;
+            padding: 20px;
+        }
+        
+        .cost-card.highlight {
+            border-color: var(--mono-accent);
+        }
+        
+        .cost-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--mono-text-muted);
+            margin-bottom: 8px;
+        }
+        
+        .cost-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--mono-text);
+        }
+        
+        .cost-value.accent {
+            color: var(--mono-accent);
+        }
+        
+        .cost-breakdown {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--mono-border);
+            font-size: 0.75rem;
+        }
+        
+        .cost-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+        }
+        
+        /* Pricing Editor */
+        .pricing-editor {
+            background: var(--mono-surface);
+            border: 1px solid var(--mono-border);
+            border-radius: 4px;
+            padding: 16px;
+            margin-bottom: 24px;
+        }
+        
+        .pricing-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr auto;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 8px;
+            padding: 8px;
+            background: var(--mono-bg);
+            border-radius: 4px;
+        }
+        
+        .pricing-row input {
+            background: var(--mono-surface);
+            border: 1px solid var(--mono-border);
+            color: var(--mono-text);
+            padding: 6px 10px;
+            font-family: inherit;
+            font-size: 0.875rem;
+        }
+        
+        .pricing-row input:focus {
+            outline: none;
+            border-color: var(--mono-accent);
+        }
+        
+        /* SVG Charts */
+        .svg-chart {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .chart-bar {
+            transition: all 0.3s ease;
+        }
+        
+        .chart-bar:hover {
+            opacity: 0.8;
+        }
+        
+        .chart-axis {
+            stroke: var(--mono-border);
+            stroke-width: 1;
+        }
+        
+        .chart-grid {
+            stroke: var(--mono-border);
+            stroke-width: 1;
+            stroke-dasharray: 4;
+            opacity: 0.3;
+        }
+        
+        .chart-text {
+            fill: var(--mono-text-muted);
+            font-size: 10px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        /* Donut Chart */
+        .donut-chart {
+            position: relative;
+            width: 200px;
+            height: 200px;
+        }
+        
+        .donut-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+        
+        .donut-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--mono-accent);
+        }
+        
+        .donut-label {
+            font-size: 0.75rem;
+            color: var(--mono-text-muted);
+        }
+        
+        /* Legend */
+        .chart-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid var(--mono-border);
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.75rem;
+        }
+        
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+        
+        /* Comparison bars */
+        .compare-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        
+        .compare-label {
+            width: 100px;
+            font-size: 0.75rem;
+            color: var(--mono-text-muted);
+        }
+        
+        .compare-track {
+            flex: 1;
+            height: 24px;
+            background: var(--mono-bg);
+            border-radius: 4px;
+            overflow: hidden;
+            display: flex;
+        }
+        
+        .compare-fill {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 8px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            transition: width 0.5s ease;
+        }
+        
+        .compare-value {
+            font-size: 0.75rem;
+            width: 80px;
+            text-align: right;
+        }
+        
+        /* Efficiency metrics */
+        .efficiency-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+        
+        .efficiency-card {
+            text-align: center;
+            padding: 20px;
+            background: var(--mono-bg);
+            border-radius: 4px;
+        }
+        
+        .efficiency-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--mono-accent);
+        }
+        
+        .efficiency-label {
+            font-size: 0.75rem;
+            color: var(--mono-text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-top: 8px;
+        }
+        
+        /* Trend indicator */
+        .trend {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.75rem;
+        }
+        
+        .trend.up { color: #7cb97a; }
+        .trend.down { color: #ca4754; }
+    </style>
+</head>
+<body>
+    <div class="mono-dashboard">
+        <header class="mono-section">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div>
+                    <h1 class="mono-title">token_burn</h1>
+                    <p class="mono-subtitle">live session analytics with cost tracking</p>
+                </div>
+                <div style="text-align: right;">
+                    <div class="live-indicator">live</div>
+                    <div class="last-update" id="last-update">updating...</div>
+                </div>
+            </div>
+        </header>
+
+        <div class="error-banner" id="error-banner"></div>
+
+        <div class="controls">
+            <div class="view-toggle">
+                <button class="btn active" data-view="overview" onclick="setView('overview')">overview</button>
+                <button class="btn" data-view="costs" onclick="setView('costs')">costs</button>
+                <button class="btn" data-view="charts" onclick="setView('charts')">charts</button>
+                <button class="btn" data-view="models" onclick="setView('models')">models</button>
+                <button class="btn" data-view="efficiency" onclick="setView('efficiency')">efficiency</button>
+            </div>
+            <button class="btn refresh-btn" onclick="refreshData()">refresh</button>
+        </div>
+
+        <!-- Overview View -->
+        <div id="view-overview" class="view-section active">
+            <section class="mono-section">
+                <h2 class="mono-section-title">grand totals</h2>
+                <div class="mono-grid mono-grid--stats" id="stats-grid"></div>
+            </section>
+
+            <section class="mono-section">
+                <h2 class="mono-section-title">top models</h2>
+                <div class="mono-grid mono-grid--dashboard">
+                    <div class="mono-table-wrap">
+                        <table class="mono-table" id="models-table">
+                            <thead>
+                                <tr>
+                                    <th>model</th>
+                                    <th class="mono-table__cell--progress">share</th>
+                                    <th>tokens</th>
+                                    <th>est. cost</th>
+                                </tr>
+                            </thead>
+                            <tbody id="models-tbody"></tbody>
+                        </table>
+                    </div>
+                    <aside class="mono-detail" id="model-detail">
+                        <div class="mono-detail__header">
+                            <div class="mono-detail__label">selected model</div>
+                            <div class="mono-detail__title" id="detail-title">—</div>
+                        </div>
+                        <div id="detail-rows"></div>
+                    </aside>
+                </div>
+            </section>
+        </div>
+
+        <!-- Costs View -->
+        <div id="view-costs" class="view-section">
+            <section class="mono-section">
+                <h2 class="mono-section-title">cost analysis</h2>
+                <div class="cost-grid" id="cost-grid"></div>
+            </section>
+
+            <section class="mono-section">
+                <h2 class="mono-section-title">pricing configuration ($ per 1M tokens)</h2>
+                <div class="pricing-editor" id="pricing-editor"></div>
+            </section>
+
+            <section class="mono-section">
+                <h2 class="mono-section-title">cost by model</h2>
+                <div class="chart-container">
+                    <div id="cost-chart" style="height: 300px;"></div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Charts View -->
+        <div id="view-charts" class="view-section">
+            <section class="mono-section">
+                <h2 class="mono-section-title">token distribution</h2>
+                <div class="mono-grid" style="grid-template-columns: 1fr 2fr;">
+                    <div class="chart-container">
+                        <div class="chart-header">
+                            <span class="chart-title">by model</span>
+                        </div>
+                        <div id="donut-chart" style="display: flex; justify-content: center;"></div>
+                    </div>
+                    <div class="chart-container">
+                        <div class="chart-header">
+                            <span class="chart-title">usage breakdown</span>
+                        </div>
+                        <div id="stacked-chart" style="height: 250px;"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="mono-section">
+                <h2 class="mono-section-title">cache analysis</h2>
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <span class="chart-title">input vs cache read</span>
+                    </div>
+                    <div id="cache-chart" style="height: 300px;"></div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Models View -->
+        <div id="view-models" class="view-section">
+            <section class="mono-section">
+                <h2 class="mono-section-title">detailed breakdown</h2>
+                <div id="model-cards"></div>
+            </section>
+        </div>
+
+        <!-- Efficiency View -->
+        <div id="view-efficiency" class="view-section">
+            <section class="mono-section">
+                <h2 class="mono-section-title">efficiency metrics</h2>
+                <div class="efficiency-grid" id="efficiency-grid"></div>
+            </section>
+
+            <section class="mono-section">
+                <h2 class="mono-section-title">cache hit rate by model</h2>
+                <div class="chart-container">
+                    <div id="efficiency-chart" style="height: 300px;"></div>
+                </div>
+            </section>
+        </div>
+
+        <footer class="mono-footer">
+            <span id="footer-stats">loading...</span>
+        </footer>
+    </div>
+
+    <script>
+        // State
+        let currentData = null;
+        let selectedModel = null;
+        let currentView = 'overview';
+        let eventSource = null;
+        
+        // Default pricing (per 1M tokens)
+        let pricing = JSON.parse(localStorage.getItem('tokenBurnPricing')) || {
+            'kimi-coding/k2p5': { input: 0.50, output: 1.50, cacheRead: 0.10, cacheWrite: 1.00 },
+            'zai/glm-5': { input: 0.30, output: 0.80, cacheRead: 0.05, cacheWrite: 0.60 },
+            'github-copilot/claude-opus-4.6': { input: 15.00, output: 75.00, cacheRead: 1.50, cacheWrite: 15.00 },
+            'github-copilot/gemini-3.1-pro-preview': { input: 1.25, output: 5.00, cacheRead: 0.25, cacheWrite: 1.00 },
+            'github-copilot/gpt-5.2': { input: 2.00, output: 8.00, cacheRead: 0.50, cacheWrite: 2.00 },
+            'default': { input: 1.00, output: 3.00, cacheRead: 0.20, cacheWrite: 1.00 }
+        };
+        
+        // Model emojis
+        const modelEmojis = {
+            'kimi': '🌙', 'claude': '🧠', 'anthropic': '🧠',
+            'gpt': '🤖', 'openai': '🤖', 'gemini': '💎',
+            'google': '💎', 'glm': '⚡', 'zai': '⚡',
+            'llama': '🦙', 'meta': '🦙', 'deepseek': '🔮'
+        };
+        
+        function getModelEmoji(name) {
+            const lower = name.toLowerCase();
+            for (const [key, emoji] of Object.entries(modelEmojis)) {
+                if (lower.includes(key)) return emoji;
+            }
+            return '🤖';
+        }
+        
+        function formatNumber(num) {
+            if (num >= 1_000_000_000) return (num / 1_000_000_000).toFixed(2) + 'B';
+            if (num >= 1_000_000) return (num / 1_000_000).toFixed(2) + 'M';
+            if (num >= 1_000) return (num / 1_000).toFixed(1) + 'K';
+            return num.toLocaleString();
+        }
+        
+        function formatCurrency(num) {
+            if (num >= 1000) return '$' + num.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            if (num >= 1) return '$' + num.toFixed(2);
+            return '$' + num.toFixed(4);
+        }
+        
+        function formatPercent(value, total) {
+            if (total === 0) return '0.00%';
+            return ((value / total) * 100).toFixed(1) + '%';
+        }
+        
+        function calculateCost(modelName, tokens) {
+            const price = pricing[modelName] || pricing.default;
+            const inputCost = (tokens.input / 1_000_000) * price.input;
+            const outputCost = (tokens.output / 1_000_000) * price.output;
+            const cacheReadCost = (tokens.cache_read / 1_000_000) * price.cacheRead;
+            const cacheWriteCost = (tokens.cache_write / 1_000_000) * price.cacheWrite;
+            return {
+                input: inputCost,
+                output: outputCost,
+                cacheRead: cacheReadCost,
+                cacheWrite: cacheWriteCost,
+                total: inputCost + outputCost + cacheReadCost + cacheWriteCost
+            };
+        }
+        
+        // View switching
+        function setView(view) {
+            currentView = view;
+            document.querySelectorAll('.view-toggle .btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.view === view);
+            });
+            document.querySelectorAll('.view-section').forEach(section => {
+                section.classList.remove('active');
+            });
+            document.getElementById(`view-${view}`).classList.add('active');
+            if (currentData) render();
+        }
+        
+        // Fetch data
+        async function refreshData() {
+            try {
+                document.body.classList.add('loading');
+                const res = await fetch('/api/tokens');
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                updateData(data);
+                hideError();
+            } catch (err) {
+                showError(`Failed to fetch: ${err.message}`);
+            } finally {
+                document.body.classList.remove('loading');
+            }
+        }
+        
+        function connectSSE() {
+            if (eventSource) eventSource.close();
+            eventSource = new EventSource('/api/tokens/stream');
+            eventSource.onmessage = (e) => {
+                try {
+                    const data = JSON.parse(e.data);
+                    updateData(data);
+                    hideError();
+                } catch (err) {
+                    console.error('SSE parse error:', err);
+                }
+            };
+            eventSource.onerror = () => {
+                setTimeout(connectSSE, 5000);
+            };
+        }
+        
+        function updateData(data) {
+            currentData = data;
+            document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+            render();
+        }
+        
+        function render() {
+            if (!currentData) return;
+            const { files_processed, total_lines, total_messages } = currentData;
+            document.getElementById('footer-stats').textContent = 
+                `${files_processed} files // ${formatNumber(total_lines)} lines // ${formatNumber(total_messages)} messages`;
+            
+            if (currentView === 'overview') renderOverview();
+            else if (currentView === 'costs') renderCosts();
+            else if (currentView === 'charts') renderCharts();
+            else if (currentView === 'models') renderModels();
+            else if (currentView === 'efficiency') renderEfficiency();
+        }
+        
+        function renderOverview() {
+            const { total_input, total_output, total_cache_read, total_cache_write, total_tokens, tokens_by_model } = currentData;
+            
+            document.getElementById('stats-grid').innerHTML = `
+                <div class="mono-stat">
+                    <div class="mono-stat__label">total tokens</div>
+                    <div class="mono-stat__value mono-stat__value--accent">${formatNumber(total_tokens)}</div>
+                </div>
+                <div class="mono-stat">
+                    <div class="mono-stat__label">input</div>
+                    <div class="mono-stat__value">${formatNumber(total_input)}</div>
+                </div>
+                <div class="mono-stat">
+                    <div class="mono-stat__label">output</div>
+                    <div class="mono-stat__value">${formatNumber(total_output)}</div>
+                </div>
+                <div class="mono-stat">
+                    <div class="mono-stat__label">cache read</div>
+                    <div class="mono-stat__value">${formatNumber(total_cache_read)}</div>
+                </div>
+                <div class="mono-stat">
+                    <div class="mono-stat__label">cache write</div>
+                    <div class="mono-stat__value">${formatNumber(total_cache_write)}</div>
+                </div>
+            `;
+            
+            const tbody = document.getElementById('models-tbody');
+            const sortedModels = Object.entries(tokens_by_model).sort((a, b) => b[1].total - a[1].total).slice(0, 10);
+            
+            tbody.innerHTML = sortedModels.map(([name, counts]) => {
+                const percent = (counts.total / total_tokens * 100).toFixed(1);
+                const cost = calculateCost(name, counts);
+                const isSelected = selectedModel === name;
+                return `
+                    <tr class="${isSelected ? 'mono-active' : ''}" onclick="selectModel('${name}')">
+                        <td class="mono-table__cell--name">
+                            <span class="model-icon">${getModelEmoji(name)}</span>
+                            ${name}
+                        </td>
+                        <td class="mono-table__cell--progress">
+                            <div class="mono-progress">
+                                <div class="mono-progress__fill" style="width: ${percent}%"></div>
+                            </div>
+                        </td>
+                        <td>${formatNumber(counts.total)}</td>
+                        <td>${formatCurrency(cost.total)}</td>
+                    </tr>
+                `;
+            }).join('');
+            
+            if (selectedModel) renderDetail(tokens_by_model[selectedModel]);
+            else if (sortedModels.length > 0) selectModel(sortedModels[0][0]);
+        }
+        
+        function renderCosts() {
+            const { tokens_by_model, total_input, total_output, total_cache_read, total_cache_write } = currentData;
+            
+            let totalCost = 0;
+            const modelCosts = Object.entries(tokens_by_model).map(([name, tokens]) => {
+                const cost = calculateCost(name, tokens);
+                totalCost += cost.total;
+                return { name, tokens, cost };
+            }).sort((a, b) => b.cost.total - a.cost.total);
+            
+            const inputCost = modelCosts.reduce((sum, m) => sum + m.cost.input, 0);
+            const outputCost = modelCosts.reduce((sum, m) => sum + m.cost.output, 0);
+            const cacheCost = modelCosts.reduce((sum, m) => sum + m.cost.cacheRead + m.cost.cacheWrite, 0);
+            
+            document.getElementById('cost-grid').innerHTML = `
+                <div class="cost-card highlight">
+                    <div class="cost-label">total estimated cost</div>
+                    <div class="cost-value accent">${formatCurrency(totalCost)}</div>
+                    <div class="cost-breakdown">
+                        <div class="cost-row"><span>input</span><span>${formatCurrency(inputCost)}</span></div>
+                        <div class="cost-row"><span>output</span><span>${formatCurrency(outputCost)}</span></div>
+                        <div class="cost-row"><span>cache</span><span>${formatCurrency(cacheCost)}</span></div>
+                    </div>
+                </div>
+                <div class="cost-card">
+                    <div class="cost-label">input cost</div>
+                    <div class="cost-value">${formatCurrency(inputCost)}</div>
+                    <div class="cost-breakdown">${formatNumber(total_input)} tokens @ avg $${(inputCost/total_input*1_000_000).toFixed(2)}/M</div>
+                </div>
+                <div class="cost-card">
+                    <div class="cost-label">output cost</div>
+                    <div class="cost-value">${formatCurrency(outputCost)}</div>
+                    <div class="cost-breakdown">${formatNumber(total_output)} tokens @ avg $${(outputCost/total_output*1_000_000).toFixed(2)}/M</div>
+                </div>
+                <div class="cost-card">
+                    <div class="cost-label">cache savings</div>
+                    <div class="cost-value">${formatCurrency(inputCost * 0.8 - cacheCost)}</div>
+                    <div class="cost-breakdown">estimated vs no-cache</div>
+                </div>
+            `;
+            
+            renderPricingEditor();
+            renderCostChart(modelCosts);
+        }
+        
+        function renderPricingEditor() {
+            const container = document.getElementById('pricing-editor');
+            const models = Object.keys(pricing).filter(k => k !== 'default');
+            
+            container.innerHTML = `
+                ${models.map(model => `
+                    <div class="pricing-row">
+                        <span>${getModelEmoji(model)} ${model}</span>
+                        <input type="number" step="0.01" value="${pricing[model].input}" 
+                            onchange="updatePricing('${model}', 'input', this.value)" placeholder="input">
+                        <input type="number" step="0.01" value="${pricing[model].output}" 
+                            onchange="updatePricing('${model}', 'output', this.value)" placeholder="output">
+                        <button class="btn" onclick="removeModelPricing('${model}')">×</button>
+                    </div>
+                `).join('')}
+                <div class="pricing-row" style="background: transparent; padding: 0;">
+                    <input type="text" id="new-model-name" placeholder="model name">
+                    <input type="number" step="0.01" id="new-model-input" placeholder="input $/M">
+                    <input type="number" step="0.01" id="new-model-output" placeholder="output $/M">
+                    <button class="btn" onclick="addModelPricing()">+ add</button>
+                </div>
+            `;
+        }
+        
+        window.updatePricing = (model, type, value) => {
+            pricing[model][type] = parseFloat(value) || 0;
+            localStorage.setItem('tokenBurnPricing', JSON.stringify(pricing));
+            render();
+        };
+        
+        window.addModelPricing = () => {
+            const name = document.getElementById('new-model-name').value;
+            const input = parseFloat(document.getElementById('new-model-input').value) || 1;
+            const output = parseFloat(document.getElementById('new-model-output').value) || 3;
+            if (name) {
+                pricing[name] = { input, output, cacheRead: input * 0.2, cacheWrite: input };
+                localStorage.setItem('tokenBurnPricing', JSON.stringify(pricing));
+                render();
+            }
+        };
+        
+        window.removeModelPricing = (model) => {
+            delete pricing[model];
+            localStorage.setItem('tokenBurnPricing', JSON.stringify(pricing));
+            render();
+        };
+        
+        function renderCostChart(modelCosts) {
+            const maxCost = Math.max(...modelCosts.map(m => m.cost.total));
+            document.getElementById('cost-chart').innerHTML = `
+                ${modelCosts.slice(0, 8).map(({ name, cost }) => `
+                    <div class="compare-bar">
+                        <span class="compare-label">${getModelEmoji(name)} ${name.split('/').pop()}</span>
+                        <div class="compare-track">
+                            <div class="compare-fill" style="width: ${(cost.total / maxCost * 100).toFixed(0)}%; background: var(--mono-accent);">
+                                ${formatCurrency(cost.total)}
+                            </div>
+                        </div>
+                        <span class="compare-value">${formatPercent(cost.total, modelCosts.reduce((s, m) => s + m.cost.total, 0))}</span>
+                    </div>
+                `).join('')}
+            `;
+        }
+        
+        function renderCharts() {
+            const { tokens_by_model, total_tokens, total_input, total_cache_read } = currentData;
+            const sorted = Object.entries(tokens_by_model).sort((a, b) => b[1].total - a[1].total);
+            
+            // Donut chart
+            const colors = ['#e2b714', '#7cb97a', '#ca4754', '#6d9bff', '#a855f7', '#f97316'];
+            let cumulative = 0;
+            const donutData = sorted.slice(0, 6).map(([name, tokens], i) => {
+                const start = cumulative;
+                cumulative += tokens.total / total_tokens;
+                return { name, value: tokens.total, start, end: cumulative, color: colors[i % colors.length] };
+            });
+            
+            document.getElementById('donut-chart').innerHTML = `
+                <div class="donut-chart">
+                    <svg viewBox="0 0 100 100" class="svg-chart">
+                        ${donutData.map(d => {
+                            const startAngle = d.start * 2 * Math.PI - Math.PI / 2;
+                            const endAngle = d.end * 2 * Math.PI - Math.PI / 2;
+                            const x1 = 50 + 40 * Math.cos(startAngle);
+                            const y1 = 50 + 40 * Math.sin(startAngle);
+                            const x2 = 50 + 40 * Math.cos(endAngle);
+                            const y2 = 50 + 40 * Math.sin(endAngle);
+                            const largeArc = d.end - d.start > 0.5 ? 1 : 0;
+                            return `<path d="M 50 50 L ${x1} ${y1} A 40 40 0 ${largeArc} 1 ${x2} ${y2} Z" fill="${d.color}" class="chart-bar"/>`;
+                        }).join('')}
+                        <circle cx="50" cy="50" r="25" fill="var(--mono-surface)"/>
+                    </svg>
+                    <div class="donut-center">
+                        <div class="donut-value">${formatNumber(total_tokens)}</div>
+                        <div class="donut-label">total tokens</div>
+                    </div>
+                </div>
+                <div class="chart-legend">
+                    ${donutData.map(d => `
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: ${d.color}"></div>
+                            <span>${getModelEmoji(d.name)} ${d.name.split('/').pop()} (${formatPercent(d.value, total_tokens)})</span>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            
+            // Stacked bar chart
+            const maxVal = Math.max(...sorted.map(s => s[1].input + s[1].output + s[1].cache_read));
+            document.getElementById('stacked-chart').innerHTML = `
+                ${sorted.slice(0, 8).map(([name, tokens]) => `
+                    <div class="compare-bar">
+                        <span class="compare-label">${getModelEmoji(name)} ${name.split('/').pop()}</span>
+                        <div class="compare-track">
+                            <div class="compare-fill cache-input" style="width: ${(tokens.input / maxVal * 100).toFixed(0)}%">${tokens.input > maxVal * 0.1 ? 'in' : ''}</div>
+                            <div class="compare-fill cache-read" style="width: ${(tokens.cache_read / maxVal * 100).toFixed(0)}%">${tokens.cache_read > maxVal * 0.1 ? 'cache' : ''}</div>
+                            <div class="compare-fill cache-write" style="width: ${(tokens.cache_write / maxVal * 100).toFixed(0)}%">${tokens.cache_write > maxVal * 0.1 ? 'write' : ''}</div>
+                        </div>
+                        <span class="compare-value">${formatNumber(tokens.total)}</span>
+                    </div>
+                `).join('')}
+            `;
+            
+            // Cache comparison
+            document.getElementById('cache-chart').innerHTML = `
+                ${sorted.slice(0, 10).map(([name, tokens]) => {
+                    const cacheRate = tokens.cache_read / (tokens.input + tokens.cache_read) * 100;
+                    return `
+                        <div class="compare-bar">
+                            <span class="compare-label">${getModelEmoji(name)} ${name.split('/').pop()}</span>
+                            <div class="compare-track">
+                                <div class="compare-fill" style="width: ${Math.min(cacheRate, 100).toFixed(0)}%; background: ${cacheRate > 50 ? '#7cb97a' : cacheRate > 20 ? '#e2b714' : '#ca4754'}">
+                                    ${cacheRate.toFixed(0)}%
+                                </div>
+                            </div>
+                            <span class="compare-value">${formatNumber(tokens.cache_read)}</span>
+                        </div>
+                    `;
+                }).join('')}
+            `;
+        }
+        
+        function renderModels() {
+            const { tokens_by_model, total_tokens } = currentData;
+            const sorted = Object.entries(tokens_by_model).sort((a, b) => b[1].total - a[1].total);
+            
+            document.getElementById('model-cards').innerHTML = sorted.map(([name, tokens], i) => {
+                const cost = calculateCost(name, tokens);
+                const cacheRate = tokens.cache_read / (tokens.input + tokens.cache_read) * 100;
+                return `
+                    <div class="mono-detail" style="margin-bottom: 16px;">
+                        <div class="mono-detail__header">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 1.5rem;">${getModelEmoji(name)}</span>
+                                <div>
+                                    <div class="mono-detail__label">#${i + 1}</div>
+                                    <div class="mono-detail__title">${name}</div>
+                                </div>
+                                <div style="margin-left: auto; text-align: right;">
+                                    <div class="cost-value">${formatCurrency(cost.total)}</div>
+                                    <div class="cost-label">est. cost</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mono-detail__row">
+                            <span class="mono-detail__key">share</span>
+                            <span class="mono-detail__value">${formatPercent(tokens.total, total_tokens)}</span>
+                        </div>
+                        <div class="mono-detail__row">
+                            <span class="mono-detail__key">total</span>
+                            <span class="mono-detail__value">${formatNumber(tokens.total)}</span>
+                        </div>
+                        <div class="mono-detail__row">
+                            <span class="mono-detail__key">input</span>
+                            <span class="mono-detail__value">${formatNumber(tokens.input)}</span>
+                        </div>
+                        <div class="mono-detail__row">
+                            <span class="mono-detail__key">output</span>
+                            <span class="mono-detail__value">${formatNumber(tokens.output)}</span>
+                        </div>
+                        ${tokens.cache_read > 0 ? `
+                        <div class="mono-detail__row">
+                            <span class="mono-detail__key">cache read</span>
+                            <span class="mono-detail__value">${formatNumber(tokens.cache_read)} (${cacheRate.toFixed(1)}%)</span>
+                        </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function renderEfficiency() {
+            const { total_input, total_cache_read, total_cache_write, tokens_by_model } = currentData;
+            
+            const cacheHitRate = total_cache_read / (total_input + total_cache_read) * 100;
+            const savings = total_input * 0.8 - total_cache_write;
+            const avgRate = Object.values(tokens_by_model).reduce((sum, t) => 
+                sum + t.cache_read / (t.input + t.cache_read || 1), 0) / Object.keys(tokens_by_model).length * 100;
+            
+            document.getElementById('efficiency-grid').innerHTML = `
+                <div class="efficiency-card">
+                    <div class="efficiency-value">${cacheHitRate.toFixed(1)}%</div>
+                    <div class="efficiency-label">cache hit rate</div>
+                </div>
+                <div class="efficiency-card">
+                    <div class="efficiency-value">${formatNumber(savings)}</div>
+                    <div class="efficiency-label">tokens saved</div>
+                </div>
+                <div class="efficiency-card">
+                    <div class="efficiency-value">${avgRate.toFixed(1)}%</div>
+                    <div class="efficiency-label">avg by model</div>
+                </div>
+                <div class="efficiency-card">
+                    <div class="efficiency-value">${Object.keys(tokens_by_model).length}</div>
+                    <div class="efficiency-label">models used</div>
+                </div>
+            `;
+            
+            // Efficiency chart by model
+            const sorted = Object.entries(tokens_by_model)
+                .map(([name, tokens]) => ({
+                    name,
+                    rate: tokens.cache_read / (tokens.input + tokens.cache_read) * 100,
+                    tokens: tokens.cache_read
+                }))
+                .sort((a, b) => b.rate - a.rate);
+            
+            document.getElementById('efficiency-chart').innerHTML = `
+                ${sorted.map(({ name, rate, tokens }) => `
+                    <div class="compare-bar">
+                        <span class="compare-label">${getModelEmoji(name)} ${name.split('/').pop()}</span>
+                        <div class="compare-track">
+                            <div class="compare-fill" style="width: ${rate.toFixed(0)}%; background: ${rate > 70 ? '#7cb97a' : rate > 40 ? '#e2b714' : '#ca4754'}">
+                                ${rate.toFixed(0)}%
+                            </div>
+                        </div>
+                        <span class="compare-value">${formatNumber(tokens)}</span>
+                    </div>
+                `).join('')}
+            `;
+        }
+        
+        window.selectModel = (name) => {
+            selectedModel = name;
+            const counts = currentData.tokens_by_model[name];
+            renderDetail(counts);
+            render();
+        };
+        
+        function renderDetail(counts) {
+            document.getElementById('detail-title').textContent = selectedModel;
+            const total = currentData.total_tokens;
+            const cost = calculateCost(selectedModel, counts);
+            
+            document.getElementById('detail-rows').innerHTML = `
+                <div class="mono-detail__row">
+                    <span class="mono-detail__key">share</span>
+                    <span class="mono-detail__value">${formatPercent(counts.total, total)}</span>
+                </div>
+                <div class="mono-detail__row">
+                    <span class="mono-detail__key">total</span>
+                    <span class="mono-detail__value">${formatNumber(counts.total)}</span>
+                </div>
+                <div class="mono-detail__row">
+                    <span class="mono-detail__key">input</span>
+                    <span class="mono-detail__value">${formatNumber(counts.input)}</span>
+                </div>
+                <div class="mono-detail__row">
+                    <span class="mono-detail__key">output</span>
+                    <span class="mono-detail__value">${formatNumber(counts.output)}</span>
+                </div>
+                ${counts.cache_read > 0 ? `
+                <div class="mono-detail__row">
+                    <span class="mono-detail__key">cache read</span>
+                    <span class="mono-detail__value">${formatNumber(counts.cache_read)}</span>
+                </div>
+                ` : ''}
+                ${counts.cache_write > 0 ? `
+                <div class="mono-detail__row">
+                    <span class="mono-detail__key">cache write</span>
+                    <span class="mono-detail__value">${formatNumber(counts.cache_write)}</span>
+                </div>
+                ` : ''}
+                <div class="mono-detail__row" style="border-top: 1px solid var(--mono-border); margin-top: 8px; padding-top: 8px;">
+                    <span class="mono-detail__key">est. cost</span>
+                    <span class="mono-detail__value" style="color: var(--mono-accent);">${formatCurrency(cost.total)}</span>
+                </div>
+            `;
+        }
+        
+        function showError(msg) {
+            const banner = document.getElementById('error-banner');
+            banner.textContent = msg;
+            banner.classList.add('visible');
+        }
+        
+        function hideError() {
+            document.getElementById('error-banner').classList.remove('visible');
+        }
+        
+        // Initialize
+        refreshData();
+        connectSSE();
+    </script>
+</body>
+</html>
