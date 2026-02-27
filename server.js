@@ -46,7 +46,8 @@ function readFileCached(filePath) {
 // Run token-burn Python script
 function runTokenBurn() {
   return new Promise((resolve, reject) => {
-    const python = spawn('python3', [TOKEN_BURN_SCRIPT, '--json']);
+    const sessionsPath = path.join(process.env.HOME, '.pi/agent/sessions');
+    const python = spawn('python3', [TOKEN_BURN_SCRIPT, sessionsPath, '--recursive', '--json']);
     let output = '';
     let error = '';
     
