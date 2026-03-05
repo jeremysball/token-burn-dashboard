@@ -1,35 +1,29 @@
-# PRD: Deep Code Cleanup and Bugfixes
+# Token Burn Dashboard: Deep Cleanup & Stability PRD
 
-## 1. Problem Statement
-The token burn dashboard is an excellent showcase but initially behaved as a half-baked demo. It suffered from runtime data processing errors (especially dealing with missing properties on historical data arrays), layout edge cases on mobile, and an API/SSE coupling that left lingering connections or timed out ungracefully. This resulted in brittle testing and unreliable dashboard rendering when consuming real session files.
+## 1. Context & Goals
+The token burn dashboard was experiencing several stability and structural issues:
+- `EADDRINUSE` failures when trying to run the server or testing suites.
+- Brittle tests failing due to missing API configurations for chart dependencies.
+- Runtime `TypeError` crashes on the front end when missing historical keys existed in older buckets.
+- **Critical metrics bug**: Daily and historical logic falsely aggregated max-running total tokens across sessions instead of correct deltas, resulting in users appearing to spend their total all-time history balance every single day.
 
-## 2. Solution Overview
-Conduct a comprehensive, deep-level cleanup and stabilization effort. The focus is to make the dashboard resilient to partial historical data, fix the Playwright mobile test suite to correctly mock endpoints, and ensure proper server connection lifecycles (timeout/keepalive handling on SSE). 
+The goal of this cleanup was to fix the architectural data flow so metrics are truthful, ensure tests reliably pass, and improve local developer flow.
 
-## 3. Milestones & Implementation Plan
+## 2. Requirements & Acceptance Criteria
+- [x] Configure configurable server ports (Target: 7071) globally.
+- [x] Background data warmup on startup for Python `.jsonl` parsing to ensure immediate TTI (Time to Interactive).
+- [x] Safely type-check data in UI loops to eliminate undefined references.
+- [x] Mock Playwright test suites correctly to cover chart edge cases.
+- [x] Verify total token calculations reflect correct time-series daily usage logic, using deltas over cumulative maximums.
+- [x] Ensure CI automation rules out connection refused errors.
 
-### [x] Milestone 1: Stabilize Core Data Pipelines
-- Identify and patch data null-pointer exceptions in `dashboard/index.html`.
-- Safely extract model statistics during array mapping for both sparklines and model trend charts.
-- Fix historical mapping issues when `tokens_by_model` object does not include specific model keys.
+## 3. Implementation Details
+- `server.js` was refactored with a `startBackgroundUpdater` to cache the Python CLI results on startup.
+- `index.html` was refactored significantly to:
+  - Generate delta values (`data.total_tokens - currentData.total_tokens`) for `historyData` and `byDay` intervals.
+  - Utilize `+=` instead of `Math.max()` for daily bucket aggregations.
+- Test suites (`test-dashboard.spec.js` and `mobile-test.spec.js`) utilize dynamic ports (`process.env.PORT || 7071`).
+- Used tmux safely detached for full test suite verifications locally.
 
-### [x] Milestone 2: Resolve Mobile & Desktop Test Suite
-- Integrate `@playwright/test` correctly.
-- Establish robust mock API responses for `/api/tokens`, `/api/tokens/stream`, and importantly `/api/tokens/historical`.
-- Resolve failing visual verification tests for donut charts and sparklines by ensuring proper element rendering and timeouts.
-- All 18 tests passing securely.
-
-### [x] Milestone 3: Server Timeout and SSE Reconnection Lifecycle
-- Add Keep-Alive and periodic update intervals (30s and 5s respectively) to `/api/tokens/stream`.
-- Add overall request timeouts for standard API endpoints to prevent 504 gateway hangs.
-- Enable automatic connection recycling for EventSource on the client.
-
-### [ ] Milestone 4: Code Organization & Final Cleanup
-- Remove residual debugging output.
-- Clean up unused or temporary mock JSONs.
-- Prepare `index.html` structure for future componentization if needed.
-
-## 4. Success Criteria
-- 100% of Playwright tests passing reliably on local/CI environments.
-- Dashboard gracefully handles real `.pi/agent/sessions` logs without JavaScript console errors.
-- Visuals (Sparklines, Compare View, History Line Graph) consistently draw using the provided data structure.
+## 4. Status
+**Closed.** All 18 E2E and Unit Playwright tests are passing securely across mobile and desktop. Port binding and caching mechanisms are tested and merged. Daily token bugs have been permanently fixed.
