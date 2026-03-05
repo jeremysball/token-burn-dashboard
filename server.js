@@ -219,6 +219,45 @@ function serveStatic(res, filePath, contentType) {
   }
 }
 
+
+// Centralized Data Cache & Poller
+let cachedTokensData = null;
+let cachedHistoricalData = null;
+let tokensDataPromise = null;
+let historicalDataPromise = null;
+
+function startBackgroundUpdater() {
+  console.log('Starting background data warmup...');
+  
+  historicalDataPromise = extractHistoricalData().then(data => {
+    cachedHistoricalData = data;
+    console.log('✅ Historical data warmup complete');
+    return data;
+  }).catch(err => {
+    console.error('❌ Historical data warmup failed:', err.message);
+  });
+
+  const updateTokens = async () => {
+    try {
+      cachedTokensData = await runTokenBurn();
+    } catch (err) {
+      console.error('Background token update failed:', err.message);
+    }
+  };
+
+  tokensDataPromise = updateTokens().then(() => {
+    console.log('✅ Current tokens warmup complete');
+  });
+
+  setInterval(updateTokens, SSE_UPDATE_INTERVAL);
+  
+  setInterval(async () => {
+    try {
+      cachedHistoricalData = await extractHistoricalData();
+    } catch (e) {}
+  }, 60 * 60 * 1000);
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   
@@ -245,7 +284,7 @@ const server = http.createServer(async (req, res) => {
   // API: Current tokens
   if (url.pathname === '/api/tokens') {
     try {
-      const data = await runTokenBurn();
+      const data = cachedTokensData || await (tokensDataPromise || runTokenBurn());
       clearTimeout(requestTimeout);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(data));
@@ -260,7 +299,7 @@ const server = http.createServer(async (req, res) => {
   // API: Historical data from session files
   if (url.pathname === '/api/tokens/historical') {
     try {
-      const historical = await extractHistoricalData();
+      const historical = cachedHistoricalData || await (historicalDataPromise || extractHistoricalData());
       clearTimeout(requestTimeout);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(historical));
@@ -305,7 +344,7 @@ const server = http.createServer(async (req, res) => {
     const sendUpdate = async () => {
       if (!isActive || res.writableEnded) return;
       try {
-        const data = await runTokenBurn();
+        const data = cachedTokensData || await (tokensDataPromise || runTokenBurn());
         if (isActive && !res.writableEnded) {
           res.write(`data: ${JSON.stringify(data)}\n\n`);
         }
@@ -369,6 +408,9 @@ const server = http.createServer(async (req, res) => {
   res.writeHead(404, { 'Content-Type': 'text/plain' });
   res.end('Not found');
 });
+
+// Start warmup
+startBackgroundUpdater();
 
 server.listen(PORT, () => {
   console.log(`
