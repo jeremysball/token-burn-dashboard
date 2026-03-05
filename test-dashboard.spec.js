@@ -46,7 +46,7 @@ test.describe('Token Burn Dashboard', () => {
       });
     });
 
-    await page.goto('http://localhost:7070/');
+    await page.goto(`http://localhost:${process.env.PORT || 7071}/`);
     // Wait for data to load
     await page.waitForSelector('.cost-card', { timeout: 10000 });
   });

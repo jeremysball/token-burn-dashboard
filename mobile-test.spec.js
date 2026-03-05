@@ -73,7 +73,7 @@ test.describe('Mobile Responsive Tests', () => {
 
   test('iPhone SE - overview layout', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('http://localhost:7070/');
+    await page.goto(`http://localhost:${process.env.PORT || 7071}/`);
     await page.waitForSelector('.cost-card', { timeout: 10000 });
     await page.waitForTimeout(500);
     
@@ -88,7 +88,7 @@ test.describe('Mobile Responsive Tests', () => {
 
   test('iPhone 14 Pro - stats grid layout', async ({ page }) => {
     await page.setViewportSize({ width: 393, height: 852 });
-    await page.goto('http://localhost:7070/');
+    await page.goto(`http://localhost:${process.env.PORT || 7071}/`);
     await page.waitForSelector('.cost-card', { timeout: 10000 });
     await page.waitForTimeout(500);
     
@@ -101,7 +101,7 @@ test.describe('Mobile Responsive Tests', () => {
 
   test('Samsung Galaxy S8+ - table readability', async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 740 });
-    await page.goto('http://localhost:7070/');
+    await page.goto(`http://localhost:${process.env.PORT || 7071}/`);
     await page.waitForSelector('.mono-table', { timeout: 10000 });
     await page.waitForTimeout(500);
     
@@ -114,7 +114,7 @@ test.describe('Mobile Responsive Tests', () => {
 
   test('iPad Mini - tablet layout', async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 1024 });
-    await page.goto('http://localhost:7070/');
+    await page.goto(`http://localhost:${process.env.PORT || 7071}/`);
     await page.waitForSelector('.cost-card', { timeout: 10000 });
     await page.waitForTimeout(500);
     
@@ -123,7 +123,7 @@ test.describe('Mobile Responsive Tests', () => {
 
   test('Pixel 7 - controls accessibility', async ({ page }) => {
     await page.setViewportSize({ width: 412, height: 915 });
-    await page.goto('http://localhost:7070/');
+    await page.goto(`http://localhost:${process.env.PORT || 7071}/`);
     await page.waitForSelector('.controls', { timeout: 10000 });
     await page.waitForTimeout(500);
     
@@ -136,7 +136,7 @@ test.describe('Mobile Responsive Tests', () => {
 
   test('Mobile - charts view rendering', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('http://localhost:7070/');
+    await page.goto(`http://localhost:${process.env.PORT || 7071}/`);
     await page.waitForSelector('.cost-card', { timeout: 10000 });
     
     await page.click('button:has-text("charts")');
@@ -151,7 +151,7 @@ test.describe('Mobile Responsive Tests', () => {
 
   test('Mobile - costs view rendering', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('http://localhost:7070/');
+    await page.goto(`http://localhost:${process.env.PORT || 7071}/`);
     await page.waitForSelector('.cost-card', { timeout: 10000 });
     
     await page.click('button:has-text("costs")');
@@ -165,7 +165,7 @@ test.describe('Mobile Responsive Tests', () => {
 
   test('Mobile - compare view rendering', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('http://localhost:7070/');
+    await page.goto(`http://localhost:${process.env.PORT || 7071}/`);
     await page.waitForSelector('.cost-card', { timeout: 10000 });
     
     await page.click('button:has-text("compare")');
@@ -179,7 +179,7 @@ test.describe('Mobile Responsive Tests', () => {
 
   test('Mobile - history view rendering', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('http://localhost:7070/');
+    await page.goto(`http://localhost:${process.env.PORT || 7071}/`);
     await page.waitForSelector('.cost-card', { timeout: 10000 });
     
     await page.click('button:has-text("history")');
@@ -223,7 +223,7 @@ test.describe('Chart Rendering Tests', () => {
   });
 
   test('Donut chart renders with paths', async ({ page }) => {
-    await page.goto('http://localhost:7070/');
+    await page.goto(`http://localhost:${process.env.PORT || 7071}/`);
     await page.waitForSelector('.cost-card', { timeout: 10000 });
     
     await page.click('button:has-text("charts")');
@@ -237,7 +237,7 @@ test.describe('Chart Rendering Tests', () => {
   });
 
   test('Sparkline renders in stats cards', async ({ page }) => {
-    await page.goto('http://localhost:7070/');
+    await page.goto(`http://localhost:${process.env.PORT || 7071}/`);
     await page.waitForSelector('.cost-card', { timeout: 10000 });
     await page.waitForTimeout(500);
     
@@ -249,7 +249,7 @@ test.describe('Chart Rendering Tests', () => {
   });
 
   test('Compare bars render correctly', async ({ page }) => {
-    await page.goto('http://localhost:7070/');
+    await page.goto(`http://localhost:${process.env.PORT || 7071}/`);
     await page.waitForSelector('.cost-card', { timeout: 10000 });
     
     await page.click('button:has-text("compare")');
