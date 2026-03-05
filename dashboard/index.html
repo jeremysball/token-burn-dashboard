@@ -1471,6 +1471,7 @@
             
             const newSignature = getDataSignature(data);
             const hasChanged = newSignature !== lastDataSignature;
+            const dataChanged = currentData && data.total_tokens !== currentData.total_tokens;
             lastDataSignature = newSignature;
             
             // Generate delta if we have previous data
@@ -1548,7 +1549,7 @@
                 `${data.files_processed} files | ${fmtNum(data.total_lines)} lines | ${fmtNum(data.total_messages)} messages`;
 
             if (hasChanged) {
-                render();
+                render(dataChanged);
             }
         };
 
@@ -1572,16 +1573,16 @@
         // ===== RENDER FUNCTIONS =====
         let currentView = 'view-overview';
         
-        const render = () => {
+        const render = (dataChanged = true) => {
             if (!currentData) return;
             const view = document.querySelector('.view-section.active').id;
             currentView = view;
             switch(view) {
-                case 'view-overview': renderOverview(); break;
+                case 'view-overview': renderOverview(dataChanged); break;
                 case 'view-costs': renderCosts(); break;
-                case 'view-charts': renderCharts(); break;
+                case 'view-charts': renderCharts(dataChanged); break;
                 case 'view-advanced': renderAdvanced(); break;
-                case 'view-compare': renderCompare(); break;
+                case 'view-compare': renderCompare(dataChanged); break;
                 case 'view-history': renderHistory(); break;
                 case 'view-daily': renderDaily(); break;
             }
@@ -1590,7 +1591,7 @@
         // First render creates structure, subsequent renders update in place
         let overviewInitialized = false;
         
-        const renderOverview = () => {
+        const renderOverview = (dataChanged = true) => {
             const { total_input, total_output, total_cache_read, total_tokens, tokens_by_model } = currentData;
             const totalHistory = historyData.map(h => h.total);
             
@@ -1809,7 +1810,7 @@
             `;
         };
 
-        const renderCharts = () => {
+        const renderCharts = (dataChanged = true) => {
             const { tokens_by_model, total_tokens } = currentData;
             const sorted = Object.entries(tokens_by_model)
                 .sort((a, b) => b[1].total - a[1].total)
@@ -1846,6 +1847,7 @@
                     data-model="${s.name}" style="animation: fadeIn 0.5s ease ${s.index * 0.05}s backwards;"/>`;
             }).join('');
 
+            if (dataChanged) {
             document.getElementById('chart-distribution').innerHTML = `
                 <div class="donut-chart-container">
                     <div class="donut-chart" style="width: ${svgSize}px; height: ${svgSize}px;">
@@ -1877,6 +1879,17 @@
                     renderCharts();
                 });
             });
+            } else {
+                // Only update interactions without redrawing
+                document.querySelectorAll('.donut-segment, .legend-item').forEach(el => {
+                    el.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const model = el.dataset.model;
+                        selectedModel = selectedModel === model ? null : model;
+                        renderCharts(true);
+                    });
+                });
+            }
         };
 
         // Advanced view sorting state
@@ -2019,13 +2032,14 @@
             </svg>`;
         };
 
-        const renderCompare = () => {
+        const renderCompare = (dataChanged = true) => {
             const { tokens_by_model, total_tokens } = currentData;
             const models = Object.entries(tokens_by_model)
                 .sort((a, b) => b[1].total - a[1].total)
                 .slice(0, 6);
             const maxTokens = Math.max(...models.map(m => m[1].total)) || 1;
 
+            if (dataChanged) {
             document.getElementById('compare-content').innerHTML = `
                 <div class="compare-container">
                     <h3 style="margin-bottom: 20px; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.1em; color: var(--mono-text-muted);">Token Usage Comparison</h3>
@@ -2059,6 +2073,7 @@
                     el.style.width = el.dataset.width;
                 });
             }, 100);
+            }
         };
 
         const renderHistory = () => {
@@ -2398,7 +2413,10 @@
                 'all': Infinity
             };
             const cutoff = now - (ranges[timeRange] || ranges['24h']);
-            return historyData.filter(h => h.time > cutoff);
+            
+            // Prefer file historical data if available
+            const sourceData = fileHistoricalData.length > 0 ? fileHistoricalData : historyData;
+            return sourceData.filter(h => h.time > cutoff);
         };
 
         // ===== DAILY VIEW =====
