@@ -1261,6 +1261,8 @@
         const CACHE_KEY = 'tokenBurnCache';
         const HISTORY_KEY = 'tokenBurnHistory';
         const DAILY_KEY = 'tokenBurnDaily';
+        const CACHE_VERSION = 'v2'; // Bump to invalidate old cached data
+        const VERSION_KEY = 'tokenBurnCacheVersion';
         const CACHE_DURATION = 5 * 60 * 1000;
         const MAX_HISTORY_POINTS = 1000;
 
@@ -2662,6 +2664,16 @@
 
         // ===== INIT =====
         const init = async () => {
+            // Check cache version and clear if outdated
+            const cachedVersion = localStorage.getItem(VERSION_KEY);
+            if (cachedVersion !== CACHE_VERSION) {
+                console.log('Cache version mismatch, clearing old data...');
+                localStorage.removeItem(CACHE_KEY);
+                localStorage.removeItem(HISTORY_KEY);
+                localStorage.removeItem(DAILY_KEY);
+                localStorage.setItem(VERSION_KEY, CACHE_VERSION);
+            }
+            
             const savedTheme = localStorage.getItem('tokenBurnTheme');
             if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
 
