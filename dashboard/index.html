@@ -1473,21 +1473,48 @@
             const hasChanged = newSignature !== lastDataSignature;
             lastDataSignature = newSignature;
             
-            const historyPoint = {
-                time: now,
-                total: data.total_tokens,
-                total_input: data.total_input,
-                total_output: data.total_output,
-                total_cache_read: data.total_cache_read,
-                models: Object.fromEntries(
-                    Object.entries(data.tokens_by_model).map(([k, v]) => [k, v.total])
-                )
-            };
-            
-            historyData.push(historyPoint);
-            if (historyData.length > MAX_HISTORY_POINTS) {
-                historyData = historyData.slice(-MAX_HISTORY_POINTS);
+            // Generate delta if we have previous data
+            if (currentData) {
+                const dTotal = Math.max(0, data.total_tokens - currentData.total_tokens);
+                const dInput = Math.max(0, data.total_input - currentData.total_input);
+                const dOutput = Math.max(0, data.total_output - currentData.total_output);
+                const dCache = Math.max(0, data.total_cache_read - currentData.total_cache_read);
+                
+                const dModels = {};
+                Object.entries(data.tokens_by_model).forEach(([k, v]) => {
+                    const prev = currentData.tokens_by_model[k] ? currentData.tokens_by_model[k].total : 0;
+                    const diff = Math.max(0, v.total - prev);
+                    if (diff > 0) dModels[k] = diff;
+                });
+                
+                if (dTotal > 0 || hasChanged) {
+                    const historyPoint = {
+                        time: now,
+                        total: dTotal,
+                        total_input: dInput,
+                        total_output: dOutput,
+                        total_cache_read: dCache,
+                        models: dModels
+                    };
+                    
+                    historyData.push(historyPoint);
+                    if (historyData.length > MAX_HISTORY_POINTS) {
+                        historyData = historyData.slice(-MAX_HISTORY_POINTS);
+                    }
+                }
+            } else if (historyData.length === 0) {
+                historyData.push({
+                    time: now,
+                    total: 0,
+                    total_input: 0,
+                    total_output: 0,
+                    total_cache_read: 0,
+                    models: {}
+                });
             }
+
+            // Important: assign currentData!
+            currentData = data;
             
             const today = new Date().toDateString();
             const existingDay = dailyData.find(d => d.date === today);
@@ -2114,14 +2141,16 @@
                     });
                 } else {
                     const bucket = buckets.get(bucketTime);
-                    bucket.total = Math.max(bucket.total, point.total);
-                    bucket.total_input = Math.max(bucket.total_input, point.total_input);
-                    bucket.total_output = Math.max(bucket.total_output, point.total_output);
-                    bucket.total_cache_read = Math.max(bucket.total_cache_read, point.total_cache_read);
+                    bucket.total += point.total || 0;
+                    bucket.total_input += point.total_input || 0;
+                    bucket.total_output += point.total_output || 0;
+                    bucket.total_cache_read += point.total_cache_read || 0;
                     bucket.count++;
-                    Object.entries(point.models).forEach(([k, v]) => {
-                        bucket.models[k] = Math.max(bucket.models[k] || 0, v);
-                    });
+                    if (point.models) {
+                        Object.entries(point.models).forEach(([k, v]) => {
+                            bucket.models[k] = (bucket.models[k] || 0) + v;
+                        });
+                    }
                 }
             });
             return Array.from(buckets.values()).sort((a, b) => a.time - b.time);
@@ -2395,11 +2424,12 @@
                 }
                 const dayData = byDay.get(day);
                 
-                // The historical data contains per-hour deltas, so we sum them
+                // Historical data is now treated as DELTAS
+                // So we can just add point.total instead of taking the max daily value
                 dayData.tokens += point.total || 0;
-                dayData.input += point.input || 0;
-                dayData.output += point.output || 0;
-                dayData.cache += point.cache_read || 0;
+                dayData.input += point.input || point.total_input || 0;
+                dayData.output += point.output || point.total_output || 0;
+                dayData.cache += point.cache_read || point.total_cache_read || 0;
                 
                 // Sum model tokens
                 if (point.tokens_by_model) {
