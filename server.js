@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 
-const PORT = process.env.PORT || 7070;
+const PORT = process.env.PORT || 7071;
 const TOKEN_BURN_SCRIPT = '/workspace/.pi/skills/token-burn/src/token_burn.py';
 
 // Timeouts

@@ -46,7 +46,7 @@ npm start
 node server.js
 
 # Dashboard will be available at:
-open http://localhost:7070
+open http://localhost:7071
 ```
 
 ## Views

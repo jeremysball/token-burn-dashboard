@@ -15,7 +15,7 @@ Example: When using the bash tool, always specify a timeout (in seconds):
 
 ## Development Server
 
-The dashboard server runs on port 7070:
+The dashboard server runs on port 7071:
 ```bash
 cd /workspace/token-burn-dashboard-model-faceoff
 nohup node server.js > nohup.out 2>&1 &
@@ -23,7 +23,7 @@ nohup node server.js > nohup.out 2>&1 &
 
 Check health:
 ```bash
-curl -s http://localhost:7070/api/health
+curl -s http://localhost:7071/api/health
 ```
 
 ## API Endpoints
