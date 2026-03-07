@@ -54,6 +54,9 @@ export const renderDashboard = (fullRender = true) => {
     // Update hero sparklines (always refresh)
     updateHeroSparklines();
 
+    // Update burn rate gauge
+    updateBurnRateGauge();
+
     // Render top models (update in place unless full render)
     renderTopModels(tokens_by_model, fullRender);
 
@@ -82,6 +85,57 @@ const updateHeroSparklines = () => {
             return (h.total || 0) * 0.000002;
         });
         costSpark.innerHTML = createSparkline(data, 200, 40);
+    }
+};
+
+// ===== BURN RATE CALCULATION =====
+const calculateBurnRate = () => {
+    if (historyData.length < 2) return { rate: 0, level: 'low' };
+    
+    // Get last 5 data points for recent burn rate
+    const recent = historyData.slice(-5);
+    const totalTokens = recent.reduce((sum, h) => sum + (h.total || 0), 0);
+    
+    // Calculate time span in minutes
+    const firstTime = recent[0].time;
+    const lastTime = recent[recent.length - 1].time;
+    const timeSpanMinutes = (lastTime - firstTime) / (1000 * 60);
+    
+    if (timeSpanMinutes < 0.1) return { rate: 0, level: 'low' };
+    
+    // Calculate tokens per minute
+    const rate = Math.round(totalTokens / timeSpanMinutes);
+    
+    // Determine level for styling
+    let level = 'low';
+    if (rate > 1000) level = 'high';
+    else if (rate > 100) level = 'medium';
+    
+    return { rate, level };
+};
+
+const updateBurnRateGauge = () => {
+    const burnRateEl = document.getElementById('burn-rate');
+    const burnRateBar = document.getElementById('burn-rate-bar');
+    const burnRateBadge = document.getElementById('burn-rate-badge');
+    
+    if (!burnRateEl) return;
+    
+    const { rate, level } = calculateBurnRate();
+    
+    // Update text
+    burnRateEl.textContent = `${fmtNum(rate)}/min`;
+    
+    // Update bar width (max at 2000 tokens/min for full bar)
+    if (burnRateBar) {
+        const percentage = Math.min((rate / 2000) * 100, 100);
+        burnRateBar.style.width = `${percentage}%`;
+        burnRateBar.className = `burn-rate-bar ${level}`;
+    }
+    
+    // Update badge color
+    if (burnRateBadge) {
+        burnRateBadge.className = `burn-rate-badge ${level}`;
     }
 };
 

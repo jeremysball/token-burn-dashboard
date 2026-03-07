@@ -192,6 +192,45 @@
             height: 100%;
         }
 
+        /* ===== BURN RATE GAUGE ===== */
+        .hero-stat.burn-rate {
+            display: flex;
+            flex-direction: column;
+        }
+        .burn-rate-badge {
+            font-size: 0.6rem;
+            margin-left: 4px;
+        }
+        .burn-rate-badge.low { color: #22c55e; }
+        .burn-rate-badge.medium { color: #fbbf24; }
+        .burn-rate-badge.high { color: #ef4444; animation: pulse-dot 1s infinite; }
+        
+        .burn-rate-value {
+            font-size: 2rem;
+            margin-bottom: 12px;
+        }
+        
+        .burn-rate-bar-container {
+            width: 100%;
+            height: 4px;
+            background: var(--mono-border);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: auto;
+        }
+        
+        .burn-rate-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #22c55e 0%, #fbbf24 50%, #ef4444 100%);
+            border-radius: 2px;
+            transition: width 0.5s ease, opacity 0.3s ease;
+            width: 0%;
+        }
+        
+        .burn-rate-bar.low { opacity: 0.6; }
+        .burn-rate-bar.medium { opacity: 0.8; }
+        .burn-rate-bar.high { opacity: 1; box-shadow: 0 0 8px rgba(239, 68, 68, 0.5); }
+
         /* ===== SECTION HEADERS ===== */
         .section-header {
             display: flex;
