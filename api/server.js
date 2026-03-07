@@ -20,7 +20,7 @@ async function serveStatic(res, filePath, contentType) {
     const content = await readFile(filePath);
     res.writeHead(200, { 'Content-Type': contentType, ...corsHeaders });
     res.end(content);
-  } catch (err) {
+  } catch {
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('Not found');
   }
