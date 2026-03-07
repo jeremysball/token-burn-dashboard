@@ -1,5 +1,28 @@
 # Agent Guidelines
 
+## CRITICAL: tmux Requirement
+
+**MUST ALWAYS load and use the tmux skill** for any process that might hang the pi agent:
+- Interactive CLI testing or TUI automation
+- Long-running servers or daemons
+- Commands that wait for user input
+- Processes that could block indefinitely
+- Any command with unpredictable execution time
+
+**ALWAYS use this pattern:**
+```bash
+# Load the skill first
+read("/workspace/token-burn-dashboard-model-faceoff/.pi/skills/tmux/SKILL.md")
+
+# Then run in tmux
+tmux new-session -d -s session_name "your-command"
+sleep 2  # Wait for startup
+OUTPUT=$(tmux capture-pane -t session_name -p)
+tmux kill-session -t session_name
+```
+
+**NEVER run interactive or long-running commands directly** - they will hang the agent.
+
 ## Bash Commands
 
 **ALWAYS use `timeout` parameter** when running bash commands, especially:
