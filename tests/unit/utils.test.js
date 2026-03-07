@@ -86,21 +86,21 @@ describe('Utils Module', () => {
 
     it('creates notification element', () => {
       notify('Test message');
-      const notif = document.querySelector('.notif');
+      const notif = document.querySelector('.notification');
       expect(notif).toBeTruthy();
       expect(notif.textContent).toBe('Test message');
     });
 
     it('adds type class', () => {
       notify('Error message', 'error');
-      const notif = document.querySelector('.notif');
+      const notif = document.querySelector('.notification');
       expect(notif.classList.contains('error')).toBe(true);
     });
 
     it('removes notification after timeout', () => {
       notify('Test message');
       jest.advanceTimersByTime(3300);
-      const notif = document.querySelector('.notif');
+      const notif = document.querySelector('.notification');
       expect(notif).toBeFalsy();
     });
 
