@@ -21,12 +21,24 @@ test.describe('Burn Rate Gauge Feature', () => {
     });
 
     await page.route('**/api/tokens/historical', async (route) => {
+      const now = Date.now();
+      const hour = 60 * 60 * 1000;
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify([
-          { time: Date.now() - 3600000, total: 1000000, input: 600000, output: 400000, cache_read: 200000, models: { "kimi-coding/k2p5": 500000 } },
-          { time: Date.now(), total: 2050000, input: 1200000, output: 850000, cache_read: 450000, models: { "kimi-coding/k2p5": 1280000 } }
+          { time: now - hour * 12, total: 50000, input: 30000, output: 20000, cache_read: 10000, models: { "kimi-coding/k2p5": 30000 } },
+          { time: now - hour * 11, total: 80000, input: 50000, output: 30000, cache_read: 15000, models: { "kimi-coding/k2p5": 50000 } },
+          { time: now - hour * 10, total: 120000, input: 70000, output: 50000, cache_read: 20000, models: { "kimi-coding/k2p5": 70000 } },
+          { time: now - hour * 9, total: 180000, input: 100000, output: 80000, cache_read: 30000, models: { "kimi-coding/k2p5": 100000 } },
+          { time: now - hour * 8, total: 250000, input: 140000, output: 110000, cache_read: 40000, models: { "kimi-coding/k2p5": 140000 } },
+          { time: now - hour * 7, total: 350000, input: 200000, output: 150000, cache_read: 55000, models: { "kimi-coding/k2p5": 200000 } },
+          { time: now - hour * 6, total: 500000, input: 280000, output: 220000, cache_read: 80000, models: { "kimi-coding/k2p5": 280000 } },
+          { time: now - hour * 5, total: 700000, input: 400000, output: 300000, cache_read: 110000, models: { "kimi-coding/k2p5": 400000 } },
+          { time: now - hour * 4, total: 950000, input: 550000, output: 400000, cache_read: 150000, models: { "kimi-coding/k2p5": 550000 } },
+          { time: now - hour * 3, total: 1250000, input: 720000, output: 530000, cache_read: 200000, models: { "kimi-coding/k2p5": 720000 } },
+          { time: now - hour * 2, total: 1600000, input: 920000, output: 680000, cache_read: 260000, models: { "kimi-coding/k2p5": 920000 } },
+          { time: now - hour, total: 2050000, input: 1200000, output: 850000, cache_read: 450000, models: { "kimi-coding/k2p5": 1280000 } }
         ])
       });
     });
@@ -50,8 +62,8 @@ test.describe('Burn Rate Gauge Feature', () => {
     const burnRateValue = await page.locator('#burn-rate');
     await expect(burnRateValue).toBeVisible();
     
-    const burnRateBar = await page.locator('#burn-rate-bar');
-    await expect(burnRateBar).toBeVisible();
+    const burnRateHeatmap = await page.locator('#burn-rate-heatmap');
+    await expect(burnRateHeatmap).toBeVisible();
     
     // Take full dashboard screenshot
     await page.screenshot({ path: 'test-results/burn-rate-full-dashboard.png', fullPage: false });
@@ -62,9 +74,9 @@ test.describe('Burn Rate Gauge Feature', () => {
     await page.waitForSelector('.hero-stat.burn-rate', { timeout: 10000 });
     await page.waitForTimeout(2000); // Let animations settle
     
-    // Check burn rate bar has width set (indicating it's working)
-    const burnRateBar = await page.locator('#burn-rate-bar');
-    const barWidth = await burnRateBar.evaluate(el => el.style.width);
+    // Check heatmap cells are rendered
+    const heatmapCells = await page.locator('.heatmap-cell').count();
+    expect(heatmapCells).toBeGreaterThan(0);
     
     // Take close-up of burn rate section
     const burnRateSection = await page.locator('.hero-stat.burn-rate');

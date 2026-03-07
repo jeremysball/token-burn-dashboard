@@ -49,7 +49,7 @@ export const notify = (msg, type = 'info') => {
     const container = document.getElementById('notifications');
     if (!container) return;
     const notif = document.createElement('div');
-    notif.className = `notif ${type}`;
+    notif.className = `notification ${type}`;
     notif.textContent = msg;
     container.appendChild(notif);
     setTimeout(() => {

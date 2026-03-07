@@ -114,9 +114,67 @@ const calculateBurnRate = () => {
     return { rate, level };
 };
 
+// ===== BURN RATE HEATMAP =====
+const calculateBurnRateHistory = () => {
+    if (historyData.length < 2) return [];
+    
+    const rates = [];
+    for (let i = 1; i < historyData.length; i++) {
+        const prev = historyData[i - 1];
+        const curr = historyData[i];
+        const tokens = curr.total || 0;
+        const timeDiffMinutes = (curr.time - prev.time) / (1000 * 60);
+        if (timeDiffMinutes > 0) {
+            rates.push(Math.round(tokens / timeDiffMinutes));
+        }
+    }
+    return rates;
+};
+
+const getHeatmapColor = (rate, maxRate) => {
+    if (maxRate === 0) return 'var(--mono-border)';
+    const intensity = rate / maxRate;
+    
+    // Color scale: low (green) -> medium (yellow) -> high (red)
+    if (intensity < 0.33) {
+        // Green scale
+        const green = Math.round(100 + (intensity * 3) * 100);
+        return `rgba(34, ${green}, 94, ${0.4 + intensity * 0.6})`;
+    } else if (intensity < 0.66) {
+        // Yellow scale
+        return `rgba(251, 191, 36, ${0.5 + intensity * 0.5})`;
+    } else {
+        // Red scale
+        return `rgba(239, 68, 68, ${0.5 + intensity * 0.5})`;
+    }
+};
+
+const renderBurnRateHeatmap = () => {
+    const container = document.getElementById('burn-rate-heatmap');
+    if (!container) return;
+    
+    const rates = calculateBurnRateHistory();
+    if (rates.length === 0) {
+        container.innerHTML = '<div class="heatmap-empty">Collecting data...</div>';
+        return;
+    }
+    
+    // Show last 12 data points
+    const recentRates = rates.slice(-12);
+    const maxRate = Math.max(...recentRates, 1);
+    
+    const heatmapHTML = recentRates.map((rate, i) => {
+        const color = getHeatmapColor(rate, maxRate);
+        const height = Math.max((rate / maxRate) * 100, 15);
+        const tooltip = `${fmtNum(rate)}/min`;
+        return `<div class="heatmap-cell" style="background: ${color}; height: ${height}%" title="${tooltip}"></div>`;
+    }).join('');
+    
+    container.innerHTML = heatmapHTML;
+};
+
 const updateBurnRateGauge = () => {
     const burnRateEl = document.getElementById('burn-rate');
-    const burnRateBar = document.getElementById('burn-rate-bar');
     const burnRateBadge = document.getElementById('burn-rate-badge');
     
     if (!burnRateEl) return;
@@ -126,17 +184,13 @@ const updateBurnRateGauge = () => {
     // Update text
     burnRateEl.textContent = `${fmtNum(rate)}/min`;
     
-    // Update bar width (max at 2000 tokens/min for full bar)
-    if (burnRateBar) {
-        const percentage = Math.min((rate / 2000) * 100, 100);
-        burnRateBar.style.width = `${percentage}%`;
-        burnRateBar.className = `burn-rate-bar ${level}`;
-    }
-    
     // Update badge color
     if (burnRateBadge) {
         burnRateBadge.className = `burn-rate-badge ${level}`;
     }
+    
+    // Update heatmap
+    renderBurnRateHeatmap();
 };
 
 const renderTopModels = (tokens_by_model, fullRender = true) => {
