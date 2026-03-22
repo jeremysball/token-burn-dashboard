@@ -1,5 +1,26 @@
 # Agent Guidelines
 
+## QUALITY CHECK REQUIREMENT
+
+**NO TASK IS COMPLETE until:**
+1. All tests pass (`npm test`)
+2. Lint is clean (`npm run lint`)
+3. Code is formatted and follows project conventions
+
+**Always run after making changes:**
+```bash
+npm run lint        # Check for issues
+npm run lint:fix    # Auto-fix what can be fixed
+npm test            # Run test suite
+```
+
+**If lint or tests fail:**
+- Fix all errors before considering the task done
+- Do not commit or mark as complete with red tests
+- Ask for help if stuck on a failing test
+
+---
+
 ## CRITICAL: tmux Requirement
 
 **MUST ALWAYS load and use the tmux skill** for any process that might hang the pi agent:
