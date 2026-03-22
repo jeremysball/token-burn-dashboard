@@ -56,6 +56,24 @@ test.describe('Mobile Responsive Tests', () => {
     await expect(page.locator('.subnav-btn')).toHaveCount(11);
   });
 
+  test('iPhone 15 - heatmaps and git blame stay usable', async ({ page }) => {
+    await page.setViewportSize({ width: 393, height: 852 });
+    await page.goto(`http://localhost:${process.env.PORT || 7071}/`);
+    await page.click('button:has-text("Analytics")');
+
+    await page.click('button:has-text("Heatmaps")');
+    await expect(page.locator('.heatmap-cell-full[data-heatmap-cell="true"]').first()).toBeVisible({ timeout: 10000 });
+    await page.locator('.heatmap-cell-full[data-heatmap-cell="true"]').first().click();
+    await expect(page.locator('#notifications .notification.info').last()).toContainText('tokens');
+
+    await page.click('button:has-text("Git Blame")');
+    await expect(page.locator('.git-file-item')).toHaveCount(1, { timeout: 10000 });
+    const body = page.locator('body');
+    const scrollWidth = await body.evaluate(el => el.scrollWidth);
+    const clientWidth = await body.evaluate(el => el.clientWidth);
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth * 1.1);
+  });
+
   test('Mobile - git blame and spikes are reachable', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto(`http://localhost:${process.env.PORT || 7071}/`);

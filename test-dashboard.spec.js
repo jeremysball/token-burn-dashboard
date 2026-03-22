@@ -35,10 +35,10 @@ test.describe('Token Burn Dashboard', () => {
     await expect(page.locator('.subnav-btn[data-tab="compare"]')).toBeVisible({ timeout: 10000 });
 
     await page.click('button:has-text("Compare")');
-    await expect(page.locator('#compare-chart-container svg.main-svg')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#compare-chart-container svg.main-svg').first()).toBeVisible({ timeout: 10000 });
 
     await page.click('button:has-text("Distribution")');
-    await expect(page.locator('#distribution-chart-container svg.main-svg')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#distribution-chart-container svg.main-svg').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('timeline, daily, git, and spike tabs load', async ({ page }) => {
@@ -46,15 +46,15 @@ test.describe('Token Burn Dashboard', () => {
     await expect(page.locator('.subnav-btn[data-tab="timeline"]')).toBeVisible({ timeout: 10000 });
 
     await page.click('button:has-text("Timeline")');
-    await expect(page.locator('#timeline-chart-container svg.main-svg')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#timeline-chart-container svg.main-svg').first()).toBeVisible({ timeout: 10000 });
 
     await page.click('button:has-text("Daily")');
-    await expect(page.locator('#calendar-container svg.main-svg')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#calendar-container svg.main-svg').first()).toBeVisible({ timeout: 10000 });
 
     await expect(page.locator('.subnav-btn[data-tab="git"]')).toBeVisible({ timeout: 10000 });
     await page.click('button:has-text("Git Blame")');
     await expect(page.locator('#git-commits-list .git-commit-item')).toHaveCount(2, { timeout: 10000 });
-    await expect(page.locator('#git-files-list .git-file-item')).toHaveCount(3);
+    await expect(page.locator('#git-files-list .git-file-item')).toHaveCount(1);
 
     await expect(page.locator('.subnav-btn[data-tab="spikes"]')).toBeVisible({ timeout: 10000 });
     await page.click('button:has-text("Spikes")');

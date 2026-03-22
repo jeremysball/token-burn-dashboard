@@ -5,6 +5,8 @@ export const fmtNum = n => {
     return Math.round(n).toString();
 };
 
+export const fmtInt = n => Number(n || 0).toLocaleString();
+
 export const fmtCur = n => {
     if (n >= 1) return '$' + n.toFixed(2);
     if (n >= 0.01) return '$' + n.toFixed(3);

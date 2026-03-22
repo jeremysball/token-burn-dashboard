@@ -69,6 +69,9 @@ const gitBlameResponse = {
     { file: 'dashboard/styles/main.css', cost: 0.86, commits: 1 },
     { file: 'dashboard/js/main.js', cost: 1.25, commits: 1 }
   ],
+  projects: [
+    { project: 'dashboard', cost: 3.36, commits: 3, files: ['dashboard/index.html', 'dashboard/styles/main.css', 'dashboard/js/main.js'] }
+  ],
   directories: [
     { path: '', name: 'Current Directory', isGitRepo: true },
     { path: 'dashboard', name: 'dashboard', isGitRepo: false },

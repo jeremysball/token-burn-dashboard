@@ -1,6 +1,46 @@
 import { CHART_COLORS } from '../config.js';
-import { fmtNum, getPlotlyLayout } from '../utils.js';
+import { fmtNum, fmtInt, getPlotlyLayout, notify } from '../utils.js';
 import { currentData, historyData, fileHistoricalData, analyticsRange, setAnalyticsRange, setAnalyticsTab, sortCol, sortAsc, setSortCol, setSortAsc, searchTerm, setSearchTerm } from '../state.js';
+
+const isCompactViewport = () => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
+
+const bindPlotlyClick = (container, handler) => {
+    if (!container || typeof container.on !== 'function') return;
+    if (typeof container.removeAllListeners === 'function') {
+        container.removeAllListeners('plotly_click');
+    }
+    container.on('plotly_click', handler);
+};
+
+const notifyHeatmapCell = (message, type = 'info') => {
+    notify(message, type);
+};
+
+const bindHeatmapInteractions = (container) => {
+    if (!container || container.dataset.boundHeatmap === 'true') return;
+    container.dataset.boundHeatmap = 'true';
+
+    const onActivate = (event) => {
+        const cell = event.target.closest('[data-heatmap-cell="true"]');
+        if (!cell || !container.contains(cell)) return;
+        const label = cell.dataset.label || 'Value';
+        const value = cell.dataset.value || '0';
+        const suffix = cell.dataset.suffix || '';
+        const detail = cell.dataset.detail || '';
+        const suffixText = suffix ? ` ${suffix}` : '';
+        notifyHeatmapCell(`${label}: ${value}${suffixText}${detail ? ` • ${detail}` : ''}`.trim(), cell.dataset.type || 'info');
+    };
+
+    container.addEventListener('click', onActivate);
+    container.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        const cell = event.target.closest('[data-heatmap-cell="true"]');
+        if (cell) {
+            event.preventDefault();
+            cell.click();
+        }
+    });
+};
 
 // ===== ANALYTICS VIEW WITH TABS =====
 
@@ -115,9 +155,12 @@ const renderCompareTab = () => {
         return;
     }
 
+    const mobile = isCompactViewport();
+    const maxTokens = Math.max(...models.map(m => m[1].total));
+    const yLabels = models.map(m => m[0].split('/').pop());
     const data = [{
         type: 'bar',
-        y: models.map(m => m[0].split('/').pop()),
+        y: yLabels,
         x: models.map(m => m[1].total),
         orientation: 'h',
         marker: {
@@ -125,22 +168,28 @@ const renderCompareTab = () => {
             line: { color: 'rgba(255,255,255,0.1)', width: 1 }
         },
         text: models.map(m => fmtNum(m[1].total)),
-        textposition: 'outside'
+        textposition: mobile ? 'inside' : 'outside',
+        insidetextanchor: 'end',
+        cliponaxis: false,
+        textfont: { color: mobile ? '#ffffff' : undefined, size: mobile ? 10 : 11 }
     }];
 
     Plotly.newPlot('compare-chart-container', data, {
         ...getPlotlyLayout(),
-        margin: { t: 20, r: 120, b: 40, l: 240 },
+        margin: mobile ? { t: 12, r: 28, b: 40, l: 112 } : { t: 20, r: 96, b: 40, l: 220 },
         xaxis: { 
             title: 'Tokens', 
-            range: [0, Math.max(...models.map(m => m[1].total)) * 1.15],
-            fixedrange: true
+            range: [0, maxTokens * (mobile ? 1.28 : 1.15)],
+            fixedrange: true,
+            automargin: true
         },
         yaxis: { 
             autorange: 'reversed',
             fixedrange: true,
-            tickfont: { size: 11 }
+            tickfont: { size: mobile ? 10 : 11 },
+            automargin: true
         },
+        bargap: 0.3,
         dragmode: false
     }, { 
         displayModeBar: false,
@@ -170,6 +219,7 @@ const renderTimelineTab = () => {
         return;
     }
 
+    const mobile = isCompactViewport();
     const traces = [{
         x: filtered.map(d => new Date(d.time)),
         y: filtered.map(d => d.total || 0),
@@ -183,8 +233,8 @@ const renderTimelineTab = () => {
 
     Plotly.newPlot('timeline-chart-container', traces, {
         ...getPlotlyLayout(),
-        margin: { t: 20, r: 20, b: 40, l: 60 },
-        yaxis: { title: 'Tokens' }
+        margin: mobile ? { t: 16, r: 16, b: 40, l: 52 } : { t: 20, r: 20, b: 40, l: 60 },
+        yaxis: { title: 'Tokens', automargin: true }
     }, { displayModeBar: false });
 };
 
@@ -221,13 +271,16 @@ const renderCalendarTab = () => {
     // Calculate bar widths based on value (normalized between 0.3 and 1.0)
     const widths = values.map(v => 0.3 + (v / maxVal) * 0.7);
 
+    const mobile = isCompactViewport();
     const data = [{
         type: 'bar',
         y: labels,
         x: values,
         orientation: 'h',
         text: values.map(v => fmtNum(v)),
-        textposition: 'outside',
+        textposition: mobile ? 'inside' : 'outside',
+        insidetextanchor: 'end',
+        cliponaxis: false,
         marker: {
             color: values.map((v) => {
                 const intensity = v / maxVal;
@@ -245,17 +298,18 @@ const renderCalendarTab = () => {
 
     const layout = {
         ...getPlotlyLayout(),
-        margin: { t: 20, r: 80, b: 40, l: 70 },
+        margin: mobile ? { t: 16, r: 24, b: 40, l: 56 } : { t: 20, r: 96, b: 40, l: 70 },
         xaxis: {
             title: 'Tokens',
             showgrid: true,
             gridcolor: 'rgba(115,115,115,0.2)',
-            fixedrange: true  // Disable zoom
+            fixedrange: true,
+            automargin: true
         },
         yaxis: {
             automargin: true,
-            tickfont: { size: 11 },
-            fixedrange: true  // Disable zoom
+            tickfont: { size: mobile ? 10 : 11 },
+            fixedrange: true
         },
         bargap: 0.15,
         dragmode: false
@@ -267,25 +321,20 @@ const renderCalendarTab = () => {
         staticPlot: false  // Keep clicks enabled for the click handler
     });
 
-    // Add click handler for bars
+    // Bind one click handler so repeated renders don't stack notifications.
     const chartEl = document.getElementById('calendar-container');
-    if (chartEl) {
-        chartEl.on('plotly_click', (data) => {
-            const dayIndex = data.points[0].pointNumber;
-            const [fullDate, tokens] = days[dayIndex];
-            const date = new Date(fullDate);
-            const formattedDate = date.toLocaleDateString('en-US', { 
-                weekday: 'short', 
-                month: 'short', 
-                day: 'numeric' 
-            });
-            
-            // Show notification with day details
-            import('../utils.js').then(({ notify }) => {
-                notify(`${formattedDate}: ${fmtNum(tokens)} tokens`, 'info');
-            });
+    bindPlotlyClick(chartEl, (event) => {
+        const dayIndex = event.points[0].pointNumber;
+        const [fullDate, tokens] = days[dayIndex];
+        const date = new Date(fullDate);
+        const formattedDate = date.toLocaleDateString('en-US', { 
+            weekday: 'short', 
+            month: 'short', 
+            day: 'numeric' 
         });
-    }
+
+        notify(`${formattedDate}: ${fmtNum(tokens)} tokens`, 'info');
+    });
 };
 
 // ===== DEEP INSIGHTS TAB =====
@@ -623,6 +672,7 @@ const renderDistributionTab = () => {
 
     if (models.length === 0) return;
 
+    const mobile = isCompactViewport();
     const data = [{
         values: models.map(m => m[1].total),
         labels: models.map(m => m[0].split('/').pop()),
@@ -630,12 +680,13 @@ const renderDistributionTab = () => {
         hole: 0.5,
         marker: { colors: CHART_COLORS },
         textinfo: 'label+percent',
-        textposition: 'outside'
+        textposition: mobile ? 'inside' : 'outside',
+        insidetextorientation: 'radial'
     }];
 
     Plotly.newPlot('distribution-chart-container', data, {
         ...getPlotlyLayout({ showlegend: false }),
-        margin: { t: 40, r: 40, b: 80, l: 40 }
+        margin: mobile ? { t: 20, r: 16, b: 40, l: 16 } : { t: 40, r: 40, b: 80, l: 40 }
     }, { 
         displayModeBar: false,
         responsive: true
@@ -747,7 +798,7 @@ const loadGitBlame = async () => {
     document.getElementById('git-files-list').innerHTML = `
         <div class="git-blame-loading">
             <div class="loading-spinner"></div>
-            <p>Loading file costs...</p>
+            <p>Loading project costs...</p>
         </div>
     `;
     
@@ -777,8 +828,8 @@ const loadGitBlame = async () => {
         document.getElementById('git-files-list').innerHTML = `
             <div class="git-blame-empty">
                 <div class="git-blame-empty-icon">📁</div>
-                <h4>No file data</h4>
-                <p>Could not load file cost analysis</p>
+                <h4>No project data</h4>
+                <p>Could not load project cost analysis</p>
             </div>
         `;
     }
@@ -808,9 +859,9 @@ const renderGitBlameData = (data) => {
     const totalCost = data.commits.reduce((sum, c) => sum + c.cost, 0);
     const totalSessions = data.commits.reduce((sum, c) => sum + c.sessions, 0);
     
-    document.getElementById('git-total-commits').textContent = totalCommits;
+    document.getElementById('git-total-commits').textContent = fmtInt(totalCommits);
     document.getElementById('git-total-cost').textContent = `$${totalCost.toFixed(2)}`;
-    document.getElementById('git-total-sessions').textContent = totalSessions;
+    document.getElementById('git-total-sessions').textContent = fmtInt(totalSessions);
     
     // Commits list - now with files
     const commitsList = document.getElementById('git-commits-list');
@@ -830,18 +881,20 @@ const renderGitBlameData = (data) => {
             </div>
             <div class="commit-stats">
                 <span class="commit-stat cost">$${commit.cost.toFixed(2)}</span>
-                <span class="commit-stat">${fmtNum(commit.tokens)} tokens</span>
-                <span class="commit-stat">${commit.sessions} session${commit.sessions !== 1 ? 's' : ''}</span>
+                <span class="commit-stat">${fmtInt(commit.tokens)} tokens</span>
+                <span class="commit-stat">${fmtInt(commit.sessions)} session${commit.sessions !== 1 ? 's' : ''}</span>
             </div>
         </div>
     `}).join('');
     
-    // Files list
+    // Project list
+    const projects = data.projects || data.files || [];
     const filesList = document.getElementById('git-files-list');
-    filesList.innerHTML = data.files.slice(0, 10).map(file => `
+    filesList.innerHTML = projects.slice(0, 10).map(project => `
         <div class="git-file-item">
-            <div class="file-name">${escapeHtml(file.file)}</div>
-            <div class="file-cost">$${file.cost.toFixed(2)} across ${file.commits} commits</div>
+            <div class="file-name">${escapeHtml(project.project || project.file)}</div>
+            <div class="file-cost">$${project.cost.toFixed(2)} across ${fmtInt(project.commits)} commits</div>
+            ${project.files?.length ? `<div class="commit-click-hint">${project.files.map(f => escapeHtml(f.split('/').pop())).join(' · ')}</div>` : ''}
         </div>
     `).join('');
 };
@@ -1118,7 +1171,7 @@ const renderScaleTab = () => {
     container.innerHTML = `
         <div class="scale-hero">
             <div class="scale-total">
-                <span class="scale-number">${fmtNum(totalTokens)}</span>
+                <span class="scale-number">${fmtInt(totalTokens)}</span>
                 <span class="scale-label">total tokens</span>
             </div>
             <div class="scale-equivalent">
@@ -1135,7 +1188,7 @@ const renderScaleTab = () => {
                     <div class="scale-progress-bar">
                         <div class="scale-progress-fill" style="width: ${Math.min((totalTokens / nextMilestone.tokens) * 100, 100)}%"></div>
                     </div>
-                    <span class="scale-next-remaining">${fmtNum(nextMilestone.tokens - totalTokens)} tokens to go</span>
+                    <span class="scale-next-remaining">${fmtInt(nextMilestone.tokens - totalTokens)} tokens to go</span>
                 </div>
             ` : '<div class="scale-achieved">🎉 All milestones achieved!</div>'}
         </div>
@@ -1148,7 +1201,7 @@ const renderScaleTab = () => {
                         <div class="scale-icon">${comp.icon}</div>
                         <div class="scale-name">${comp.name}</div>
                         <div class="scale-desc">${comp.desc}</div>
-                        <div class="scale-tokens">${fmtNum(comp.tokens)} tokens</div>
+                        <div class="scale-tokens">${fmtInt(comp.tokens)} tokens</div>
                         ${achieved ? `<div class="scale-multiple">${multiple}×</div>` : ''}
                     </div>
                 `;
@@ -1317,10 +1370,17 @@ const renderHourlyHeatmap = (container, data) => {
                                 const intensity = val / maxVal;
                                 const opacity = 0.1 + (intensity * 0.9);
                                 return `
-                                    <div class="heatmap-cell-full" 
+                                    <button type="button" class="heatmap-cell-full" 
+                                         data-heatmap-cell="true"
+                                         data-type="info"
+                                         data-label="${days[dayIdx]} ${hour}:00"
+                                         data-value="${fmtInt(val)}"
+                                         data-suffix="tokens"
+                                         data-detail="hourly usage"
+                                         aria-label="${days[dayIdx]} ${hour}:00 - ${fmtInt(val)} tokens"
                                          style="background: rgba(251, 191, 36, ${opacity})"
-                                         title="${days[dayIdx]} ${hour}:00 - ${fmtNum(val)} tokens">
-                                    </div>
+                                         title="${days[dayIdx]} ${hour}:00 - ${fmtInt(val)} tokens">
+                                    </button>
                                 `;
                             }).join('')}
                         </div>
@@ -1334,6 +1394,8 @@ const renderHourlyHeatmap = (container, data) => {
             <span>High (${fmtNum(maxVal)} tokens)</span>
         </div>
     `;
+
+    bindHeatmapInteractions(container);
 };
 
 const renderDailyHeatmap = (container, data) => {
@@ -1364,12 +1426,19 @@ const renderDailyHeatmap = (container, data) => {
                         const intensity = val / maxVal;
                         const dayName = new Date(date).toLocaleDateString('en', { weekday: 'short' });
                         return `
-                            <div class="daily-heatmap-cell" 
+                            <button type="button" class="daily-heatmap-cell" 
+                                 data-heatmap-cell="true"
+                                 data-type="info"
+                                 data-label="${date}"
+                                 data-value="${fmtInt(val)}"
+                                 data-suffix="tokens"
+                                 data-detail="daily total"
+                                 aria-label="${date} - ${fmtInt(val)} tokens"
                                  style="background: rgba(251, 191, 36, ${0.1 + intensity * 0.9})"
-                                 title="${date} - ${fmtNum(val)} tokens">
+                                 title="${date} - ${fmtInt(val)} tokens">
                                 <span class="daily-heatmap-day">${dayName}</span>
-                                <span class="daily-heatmap-val">${fmtNum(val)}</span>
-                            </div>
+                                <span class="daily-heatmap-val">${fmtInt(val)}</span>
+                            </button>
                         `;
                     }).join('')}
                 </div>
@@ -1381,6 +1450,8 @@ const renderDailyHeatmap = (container, data) => {
             <span>High (${fmtNum(maxVal)} tokens)</span>
         </div>
     `;
+
+    bindHeatmapInteractions(container);
 };
 
 const renderModelHeatmap = (container, data) => {
@@ -1428,10 +1499,17 @@ const renderModelHeatmap = (container, data) => {
                                 const intensity = val / maxVal;
                                 const opacity = 0.1 + (intensity * 0.9);
                                 return `
-                                    <div class="heatmap-cell-full model" 
+                                    <button type="button" class="heatmap-cell-full model" 
+                                         data-heatmap-cell="true"
+                                         data-type="info"
+                                         data-label="${model.split('/').pop()} @ ${time}"
+                                         data-value="${fmtInt(val)}"
+                                         data-suffix="tokens"
+                                         data-detail="model usage"
+                                         aria-label="${model} @ ${time} - ${fmtInt(val)} tokens"
                                          style="background: rgba(251, 191, 36, ${opacity})"
-                                         title="${model} @ ${time} - ${fmtNum(val)} tokens">
-                                    </div>
+                                         title="${model} @ ${time} - ${fmtInt(val)} tokens">
+                                    </button>
                                 `;
                             }).join('')}
                         </div>
@@ -1445,6 +1523,8 @@ const renderModelHeatmap = (container, data) => {
             <span>High (${fmtNum(maxVal)} tokens)</span>
         </div>
     `;
+
+    bindHeatmapInteractions(container);
 };
 
 const renderCostHeatmap = (container, data) => {
@@ -1480,10 +1560,17 @@ const renderCostHeatmap = (container, data) => {
                                 const intensity = cost / maxCost;
                                 const opacity = 0.1 + (intensity * 0.9);
                                 return `
-                                    <div class="heatmap-cell-full cost" 
+                                    <button type="button" class="heatmap-cell-full cost" 
+                                         data-heatmap-cell="true"
+                                         data-type="info"
+                                         data-label="${days[dayIdx]} ${hour}:00"
+                                         data-value="$${cost.toFixed(3)}"
+                                         data-suffix=""
+                                         data-detail="hourly cost"
+                                         aria-label="${days[dayIdx]} ${hour}:00 - $${cost.toFixed(3)}"
                                          style="background: rgba(239, 68, 68, ${opacity})"
                                          title="${days[dayIdx]} ${hour}:00 - $${cost.toFixed(3)}">
-                                    </div>
+                                    </button>
                                 `;
                             }).join('')}
                         </div>
@@ -1497,6 +1584,8 @@ const renderCostHeatmap = (container, data) => {
             <span>High ($${maxCost.toFixed(2)}/hr)</span>
         </div>
     `;
+
+    bindHeatmapInteractions(container);
 };
 
 const updateHeatmap = () => {
