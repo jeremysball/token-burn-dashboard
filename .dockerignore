@@ -1,0 +1,15 @@
+node_modules/
+coverage/
+dist/
+test-results/
+examples/
+prds/
+.git/
+*.log
+nohup.out
+.env
+.env.*
+*.png
+*.jpg
+*.jpeg
+*.gif
