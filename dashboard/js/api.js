@@ -69,6 +69,7 @@ export const updateData = (data) => {
         total_cache_write: data?.total_cache_write || 0,
         tokens_by_model: data?.tokens_by_model || {},
         costs_by_model: data?.costs_by_model || {},
+        pricing_by_model: data?.pricing_by_model || {},
         total_cost: data?.total_cost || { total: 0 },
         files_processed: data?.files_processed || 0,
         total_lines: data?.total_lines || 0
