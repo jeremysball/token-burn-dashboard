@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/dashboard/styles/main.css?v=7">
+    <link rel="stylesheet" href="/dashboard/styles/main.css?v=11">
 </head>
 <body>
     <!-- Ambient particles background -->
@@ -68,7 +68,6 @@
                     <h2>live token flow</h2>
                     <span class="real-time-badge">REAL-TIME</span>
                 </div>
-                <div class="chart-hint">double-click to reset zoom</div>
                 <div id="dashboard-live-chart" class="live-chart-container"></div>
             </section>
 
@@ -95,6 +94,11 @@
                 <button class="subnav-btn" data-tab="calendar" onclick="setAnalyticsTab('calendar')">Daily</button>
                 <button class="subnav-btn" data-tab="distribution" onclick="setAnalyticsTab('distribution')">Distribution</button>
                 <button class="subnav-btn" data-tab="insights" onclick="setAnalyticsTab('insights')">🔍 Insights</button>
+                <button class="subnav-btn" data-tab="scale" onclick="setAnalyticsTab('scale')">📚 Scale</button>
+                <button class="subnav-btn" data-tab="code" onclick="setAnalyticsTab('code')">💻 Code</button>
+                <button class="subnav-btn" data-tab="heatmaps" onclick="setAnalyticsTab('heatmaps')">🔥 Heatmaps</button>
+                <button class="subnav-btn" data-tab="git" onclick="setAnalyticsTab('git')">📝 Git Blame</button>
+                <button class="subnav-btn" data-tab="spikes" onclick="setAnalyticsTab('spikes')">🔎 Spikes</button>
             </div>
 
             <!-- Models Tab -->
@@ -128,7 +132,6 @@
 
             <!-- Compare Tab -->
             <div id="analytics-tab-compare" class="analytics-content" style="display:none;">
-                <div class="chart-hint">double-click to reset zoom</div>
                 <div id="compare-chart-container" class="compare-container">
                     <div class="skeleton" style="height: 400px;"></div>
                 </div>
@@ -143,13 +146,11 @@
                     <button onclick="setAnalyticsRange('30d')">30d</button>
                     <button onclick="setAnalyticsRange('all')">All</button>
                 </div>
-                <div class="chart-hint">double-click to reset zoom</div>
                 <div id="timeline-chart-container" style="min-height: 400px;"></div>
             </div>
 
             <!-- Daily Tab (Horizontal Bar Chart) -->
             <div id="analytics-tab-calendar" class="analytics-content" style="display:none;">
-                <div class="chart-hint">double-click to reset zoom</div>
                 <div id="calendar-container" style="min-height: 400px;"></div>
             </div>
 
@@ -174,15 +175,138 @@
                 </div>
                 <div class="llm-insights-section">
                     <div class="llm-header">
-                        <span class="llm-icon">🤖</span>
-                        <span class="llm-title">AI-Powered Analysis</span>
+                        <span class="llm-icon">🧠</span>
+                        <span class="llm-title">Pattern Analysis</span>
+                        <span id="analysis-status" class="analysis-status">Ready</span>
                     </div>
                     <div id="llm-insights-content" class="llm-content">
-                        <p class="llm-placeholder">Click analyze to get LLM-generated insights about your usage patterns</p>
+                        <p class="llm-placeholder">Deep analysis of your usage patterns and optimization opportunities. Uses Kimi K2.5 when available, falls back to local pattern detection.</p>
                     </div>
-                    <button class="llm-analyze-btn" onclick="generateLLMInsights()">
-                        Generate AI Analysis
+                    <button class="llm-analyze-btn" id="analyze-btn" onclick="generateLLMInsights()">
+                        Generate Analysis
                     </button>
+                </div>
+            </div>
+
+            <!-- Git Blame Tab -->
+            <div id="analytics-tab-git" class="analytics-content" style="display:none;">
+                <div class="git-blame-header">
+                    <h3>🔍 Git Blame for AI</h3>
+                    <div class="git-blame-controls">
+                        <select id="git-directory-selector" onchange="loadGitBlame()" title="Select directory">
+                            <option value="">📁 Current Directory</option>
+                        </select>
+                        <select id="git-days-selector" onchange="loadGitBlame()">
+                            <option value="7">Last 7 days</option>
+                            <option value="14">Last 14 days</option>
+                            <option value="30" selected>Last 30 days</option>
+                        </select>
+                        <button class="refresh-btn" onclick="loadGitBlame()">↻ Refresh</button>
+                    </div>
+                </div>
+                <div class="git-blame-summary" id="git-blame-summary">
+                    <div class="summary-stat">
+                        <span class="stat-value" id="git-total-commits">-</span>
+                        <span class="stat-label">commits with AI</span>
+                    </div>
+                    <div class="summary-stat">
+                        <span class="stat-value" id="git-total-cost">-</span>
+                        <span class="stat-label">spent on commits</span>
+                    </div>
+                    <div class="summary-stat">
+                        <span class="stat-value" id="git-total-sessions">-</span>
+                        <span class="stat-label">total sessions</span>
+                    </div>
+                </div>
+                <div class="git-blame-sections">
+                    <div class="git-section">
+                        <h4>💰 Most Expensive Commits</h4>
+                        <div class="git-commits-list" id="git-commits-list">
+                            <div class="loading-placeholder">Loading commit data...</div>
+                        </div>
+                    </div>
+                    <div class="git-section">
+                        <h4>📁 Most Expensive Files</h4>
+                        <div class="git-files-list" id="git-files-list">
+                            <div class="loading-placeholder">Loading file data...</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Commit Details Modal -->
+                <div id="commit-details-modal" class="modal" style="display: none;" onclick="if(event.target===this)closeCommitDetails()">
+                    <div class="modal-content commit-details-modal">
+                        <div class="modal-header">
+                            <h4>📝 Commit Session Details</h4>
+                            <button class="modal-close" onclick="closeCommitDetails()">×</button>
+                        </div>
+                        <div id="commit-details-content" class="modal-body">
+                            <div class="loading-placeholder">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scale Tab -->
+            <div id="analytics-tab-scale" class="analytics-content" style="display:none;">
+                <div class="scale-header">
+                    <h3>📚 Token Scale Visualization</h3>
+                    <p class="scale-subtitle">Understanding the magnitude of your token usage</p>
+                </div>
+                <div id="scale-container" class="scale-container">
+                    <div class="scale-comparison-grid" id="scale-comparisons"></div>
+                    <div class="scale-visualization" id="scale-visualization"></div>
+                </div>
+            </div>
+
+            <!-- Code Stats Tab -->
+            <div id="analytics-tab-code" class="analytics-content" style="display:none;">
+                <div class="code-stats-header">
+                    <h3>💻 Code Statistics</h3>
+                    <p class="code-stats-subtitle">Lines of code, languages, and project metrics</p>
+                </div>
+                <div id="code-stats-container" class="code-stats-container">
+                    <div class="code-summary" id="code-summary"></div>
+                    <div class="code-breakdown" id="code-breakdown"></div>
+                </div>
+            </div>
+
+            <!-- Heatmaps Tab -->
+            <div id="analytics-tab-heatmaps" class="analytics-content" style="display:none;">
+                <div class="heatmaps-header">
+                    <h3>🔥 Usage Heatmaps</h3>
+                    <p class="heatmaps-subtitle">Visualize patterns across time and models</p>
+                </div>
+                <div class="heatmap-controls">
+                    <select id="heatmap-type" onchange="updateHeatmap()">
+                        <option value="hourly">Hourly Patterns</option>
+                        <option value="daily">Daily Patterns</option>
+                        <option value="model">Model Usage</option>
+                        <option value="cost">Cost Intensity</option>
+                    </select>
+                </div>
+                <div id="heatmaps-container" class="heatmaps-container"></div>
+            </div>
+
+            <!-- Spike Detective Tab -->
+            <div id="analytics-tab-spikes" class="analytics-content" style="display:none;">
+                <div class="spike-header">
+                    <h3>🔎 Spike Detective</h3>
+                    <p class="spike-subtitle">Click any spike to investigate what caused it</p>
+                </div>
+                <div class="spikes-list-container">
+                    <h4>Recent Spikes Detected</h4>
+                    <div id="spikes-list" class="spikes-list">
+                        <div class="loading-placeholder">Analyzing for spikes...</div>
+                    </div>
+                </div>
+                <div id="spike-investigation" class="spike-investigation" style="display:none;">
+                    <div class="investigation-header">
+                        <h4>🕵️ Investigation Results</h4>
+                        <button class="close-btn" onclick="closeInvestigation()">×</button>
+                    </div>
+                    <div id="spike-details" class="spike-details"></div>
+                    <div id="spike-sessions" class="spike-sessions"></div>
                 </div>
             </div>
         </div>
@@ -193,6 +317,6 @@
     </div>
 
     <script src="https://cdn.plot.ly/plotly-basic-2.35.2.min.js"></script>
-    <script type="module" src="/dashboard/js/main.js?v=7"></script>
+    <script type="module" src="/dashboard/js/main.js?v=11"></script>
 </body>
 </html>

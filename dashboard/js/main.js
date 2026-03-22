@@ -78,14 +78,33 @@ const initParticles = () => {
 };
 
 // ===== THRESHOLD DETECTION =====
-let lastTokenMilestone = 0;
-let lastCostMilestone = 0;
+const getShownAchievements = () => {
+    try {
+        return new Set(JSON.parse(localStorage.getItem('tokenBurnAchievements') || '[]'));
+    } catch {
+        return new Set();
+    }
+};
+
+const saveShownAchievements = (achievements) => {
+    try {
+        localStorage.setItem('tokenBurnAchievements', JSON.stringify([...achievements]));
+    } catch {
+        // Ignore localStorage errors
+    }
+};
+
+const shownAchievements = getShownAchievements();
 
 const checkThresholds = (totalTokens, totalCost) => {
+    let newAchievement = false;
+    
     // Token milestones (billions)
     const tokenBillions = Math.floor(totalTokens / 1000000000);
-    if (tokenBillions > lastTokenMilestone && tokenBillions >= 1) {
-        lastTokenMilestone = tokenBillions;
+    const tokenKey = `tokens_${tokenBillions}B`;
+    if (tokenBillions >= 1 && !shownAchievements.has(tokenKey)) {
+        shownAchievements.add(tokenKey);
+        newAchievement = true;
         notify(`🎉 Milestone Reached: ${tokenBillions}B Tokens!`, 'success');
         document.querySelector('.hero-section')?.classList.add('threshold-crossed');
         setTimeout(() => document.querySelector('.hero-section')?.classList.remove('threshold-crossed'), 1000);
@@ -93,15 +112,28 @@ const checkThresholds = (totalTokens, totalCost) => {
     
     // Cost milestones (every $100)
     const costHundreds = Math.floor(totalCost / 100);
-    if (costHundreds > lastCostMilestone && costHundreds >= 1) {
-        lastCostMilestone = costHundreds;
+    const costKey = `cost_${costHundreds}hundred`;
+    if (costHundreds >= 1 && !shownAchievements.has(costKey)) {
+        shownAchievements.add(costKey);
+        newAchievement = true;
         notify(`💰 Milestone Reached: $${costHundreds * 100} Total Spent!`, 'success');
+    }
+    
+    // Save to localStorage if any new achievements were shown
+    if (newAchievement) {
+        saveShownAchievements(shownAchievements);
     }
 };
 
 // ===== VIEW SWITCHING =====
 const setView = (view) => {
     setCurrentView(view);
+
+    // Close any open overlays when leaving analytics/dashboard views
+    if (view !== 'analytics') {
+        window.closeCommitDetails?.();
+        window.closeInvestigation?.();
+    }
 
     // Update nav
     document.querySelectorAll('.nav-btn').forEach(el => {
@@ -173,6 +205,27 @@ window.generateDeepInsights = () => {
 };
 window.generateLLMInsights = () => {
     import('./views/analytics.js').then(m => m.generateLLMInsights());
+};
+window.loadGitBlame = () => {
+    import('./views/analytics.js').then(m => m.loadGitBlame());
+};
+window.investigateSpike = (timestamp) => {
+    import('./views/analytics.js').then(m => m.investigateSpike(timestamp));
+};
+window.closeInvestigation = () => {
+    import('./views/analytics.js').then(m => m.closeInvestigation());
+};
+window.updateHeatmap = () => {
+    import('./views/analytics.js').then(m => m.updateHeatmap?.() || console.log('Heatmap update not available'));
+};
+window.showCommitDetails = (hash) => {
+    import('./views/analytics.js').then(m => m.showCommitDetails(hash));
+};
+window.toggleSessionMessages = (idx) => {
+    import('./views/analytics.js').then(m => m.toggleSessionMessages(idx));
+};
+window.closeCommitDetails = () => {
+    import('./views/analytics.js').then(m => m.closeCommitDetails());
 };
 
 // ===== INIT =====

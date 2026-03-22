@@ -12,7 +12,7 @@ export const fmtCur = n => {
 };
 
 export const fmtDate = (date) => {
-    return new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
 };
 
 // ===== SPARKLINE =====

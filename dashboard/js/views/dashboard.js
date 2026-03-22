@@ -163,7 +163,7 @@ const renderBurnRateHeatmap = () => {
     const recentRates = rates.slice(-12);
     const maxRate = Math.max(...recentRates, 1);
     
-    const heatmapHTML = recentRates.map((rate, i) => {
+    const heatmapHTML = recentRates.map((rate) => {
         const color = getHeatmapColor(rate, maxRate);
         const height = Math.max((rate / maxRate) * 100, 15);
         const tooltip = `${fmtNum(rate)}/min`;

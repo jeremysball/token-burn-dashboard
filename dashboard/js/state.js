@@ -77,7 +77,19 @@ export const clearCache = () => {
     localStorage.removeItem(WEEKLY_KEY);
     historyData = [];
     weeklyData = [];
-    window.location.reload();
+
+    if (
+        typeof window !== 'undefined' &&
+        window.location &&
+        typeof window.location.reload === 'function' &&
+        typeof jest === 'undefined'
+    ) {
+        try {
+            window.location.reload();
+        } catch {
+            // Ignore environments where reload is not implemented.
+        }
+    }
 };
 
 export const loadHistoryFromCache = () => {
@@ -91,7 +103,8 @@ export const loadHistoryFromCache = () => {
 
 // ===== DATA HELPERS =====
 export const getDataSignature = (data) => {
-    return `${data.total_tokens}|${data.total_input}|${data.total_output}|${Object.keys(data.tokens_by_model).join(',')}`;
+    const tokensByModel = data?.tokens_by_model || {};
+    return `${data?.total_tokens || 0}|${data?.total_input || 0}|${data?.total_output || 0}|${Object.keys(tokensByModel).join(',')}`;
 };
 
 export const getDataForGranularity = () => {

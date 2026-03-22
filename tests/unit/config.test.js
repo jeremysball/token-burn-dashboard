@@ -68,8 +68,8 @@ describe('Config Module', () => {
 
     it('returns default pricing for unknown models', () => {
       const pricing = getPricing('unknown-model');
-      expect(pricing.input).toBe(2);
-      expect(pricing.output).toBe(8);
+      expect(pricing.input).toBe(2.5);
+      expect(pricing.output).toBe(10);
     });
   });
 
@@ -77,21 +77,27 @@ describe('Config Module', () => {
     it('calculates cost correctly for input/output tokens', () => {
       const tokens = { input: 1_000_000, output: 500_000, cache_read: 0, cache_write: 0 };
       const cost = calculateCost(tokens, 'gpt-4o');
+      // Returns object with breakdown: {input, output, cache_read, cache_write, total}
       // (1M * 2.5 + 0.5M * 10) / 1M = 2.5 + 5 = 7.5
-      expect(cost).toBeCloseTo(7.5, 2);
+      expect(cost.total).toBeCloseTo(7.5, 2);
+      expect(cost.input).toBeCloseTo(2.5, 2);
+      expect(cost.output).toBeCloseTo(5, 2);
     });
 
     it('includes cache read costs when applicable', () => {
       const tokens = { input: 0, output: 0, cache_read: 1_000_000, cache_write: 0 };
       const cost = calculateCost(tokens, 'claude-3.5-sonnet');
       // 1M * 0.3 / 1M = 0.3
-      expect(cost).toBeCloseTo(0.3, 2);
+      expect(cost.total).toBeCloseTo(0.3, 2);
+      expect(cost.cache_read).toBeCloseTo(0.3, 2);
     });
 
     it('handles zero tokens gracefully', () => {
       const tokens = { input: 0, output: 0, cache_read: 0, cache_write: 0 };
       const cost = calculateCost(tokens, 'gpt-4o');
-      expect(cost).toBe(0);
+      expect(cost.total).toBe(0);
+      expect(cost.input).toBe(0);
+      expect(cost.output).toBe(0);
     });
   });
 

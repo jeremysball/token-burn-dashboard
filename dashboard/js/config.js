@@ -1,4 +1,4 @@
-// ===== CONFIG =====
+// ===== CACHE CONFIG =====
 export const CACHE_KEY = 'tokenBurnCache';
 export const HISTORY_KEY = 'tokenBurnHistory';
 export const WEEKLY_KEY = 'tokenBurnWeekly';
@@ -33,9 +33,10 @@ export const CHART_COLORS = [
 ];
 
 // ===== MODEL PRICING =====
+// Keep in sync with lib/pricing.js on server
 export const MODEL_PRICING = [
     // OpenAI
-    { pattern: /gpt-4o$/i, input: 2.5, output: 10, cacheRead: 1.25, cacheWrite: 0 },
+    { pattern: /^gpt-4o$/i, input: 2.5, output: 10, cacheRead: 1.25, cacheWrite: 0 },
     { pattern: /gpt-4o-mini/i, input: 0.15, output: 0.6, cacheRead: 0.075, cacheWrite: 0 },
     { pattern: /o1$/i, input: 15, output: 60, cacheRead: 7.5, cacheWrite: 0 },
     { pattern: /o3-mini/i, input: 1.1, output: 4.4, cacheRead: 0.55, cacheWrite: 0 },
@@ -51,23 +52,43 @@ export const MODEL_PRICING = [
     { pattern: /gemini-1\.5-pro/i, input: 1.25, output: 5, cacheRead: 0, cacheWrite: 0 },
     { pattern: /gemini-1\.5-flash/i, input: 0.075, output: 0.3, cacheRead: 0, cacheWrite: 0 },
     { pattern: /gemini/i, input: 0.5, output: 1.5, cacheRead: 0, cacheWrite: 0 },
-    // Default
-    { pattern: /.*/, input: 2, output: 8, cacheRead: 0, cacheWrite: 0 },
+    // Kimi
+    { pattern: /k2p5|kimi-k2/i, input: 1.5, output: 6, cacheRead: 0.375, cacheWrite: 1.875 },
+    // GLM
+    { pattern: /glm/i, input: 1, output: 3, cacheRead: 0, cacheWrite: 0 },
+    // Default fallback
+    { pattern: /.*/, input: 2.5, output: 10, cacheRead: 1.25, cacheWrite: 0 },
 ];
 
 export const getPricing = (modelName) => {
     const name = modelName.toLowerCase();
+    // Extract just the model name if it includes a provider prefix
+    const modelOnly = name.includes('/') ? name.split('/').pop() : name;
+    
     for (const p of MODEL_PRICING) {
-        if (p.pattern.test(name)) return p;
+        if (p.pattern.test(modelOnly)) return p;
     }
     return MODEL_PRICING[MODEL_PRICING.length - 1];
 };
 
-export const calculateCost = (t, modelName) => {
+export const calculateCost = (tokens, modelName) => {
     const p = getPricing(modelName);
-    const inputCost = (t.input / 1_000_000) * p.input;
-    const outputCost = (t.output / 1_000_000) * p.output;
-    const cacheReadCost = (t.cache_read / 1_000_000) * p.cacheRead;
-    const cacheWriteCost = ((t.cache_write || 0) / 1_000_000) * p.cacheWrite;
-    return inputCost + outputCost + cacheReadCost + cacheWriteCost;
+    
+    const input = tokens.input || 0;
+    const output = tokens.output || 0;
+    const cacheRead = tokens.cache_read || tokens.cacheRead || 0;
+    const cacheWrite = tokens.cache_write || tokens.cacheWrite || 0;
+    
+    const inputCost = (input / 1_000_000) * p.input;
+    const outputCost = (output / 1_000_000) * p.output;
+    const cacheReadCost = (cacheRead / 1_000_000) * p.cacheRead;
+    const cacheWriteCost = (cacheWrite / 1_000_000) * p.cacheWrite;
+    
+    return {
+        input: inputCost,
+        output: outputCost,
+        cache_read: cacheReadCost,
+        cache_write: cacheWriteCost,
+        total: inputCost + outputCost + cacheReadCost + cacheWriteCost
+    };
 };

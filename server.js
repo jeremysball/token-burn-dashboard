@@ -12,7 +12,7 @@ const { PORT, REQUEST_TIMEOUT } = require('./lib/config');
 
 // Components
 const { startBackgroundUpdater } = require('./lib/cache');
-const { handleTokensRoute, handleHistoricalRoute, handleHealthRoute, handleInsightsAnalyzeRoute } = require('./lib/routes/api');
+const { handleTokensRoute, handleHistoricalRoute, handleHealthRoute, handleInsightsAnalyzeRoute, handleGitBlameRoute, handleSpikeDetectiveRoute, handleSpikesListRoute } = require('./lib/routes/api');
 const { handleSseRoute } = require('./lib/routes/sse');
 const { handleStaticRoutes } = require('./lib/routes/static');
 
@@ -79,6 +79,24 @@ const server = http.createServer(async (req, res) => {
     return result;
   }
 
+  if (url.pathname === '/api/git/blame') {
+    const result = await handleGitBlameRoute(req, res, requestTimeout);
+    logResponse(res.statusCode);
+    return result;
+  }
+
+  if (url.pathname === '/api/spikes') {
+    const result = await handleSpikesListRoute(req, res, requestTimeout);
+    logResponse(res.statusCode);
+    return result;
+  }
+
+  if (url.pathname === '/api/spikes/investigate') {
+    const result = await handleSpikeDetectiveRoute(req, res, requestTimeout);
+    logResponse(res.statusCode);
+    return result;
+  }
+
   // SSE Endpoint
   if (url.pathname === '/api/tokens/stream') {
     console.log(`[${new Date().toISOString()}] SSE connection opened`);
@@ -140,13 +158,18 @@ server.on('listening', () => {
 
 server.listen(currentPort);
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('\nShutting down...');
-  server.close(() => process.exit(0));
-});
+// Graceful shutdown - prevent duplicate handlers
+let isShuttingDown = false;
 
-process.on('SIGINT', () => {
+function gracefulShutdown() {
+  if (isShuttingDown) {
+    console.log('\nForce exiting...');
+    process.exit(1);
+  }
+  isShuttingDown = true;
   console.log('\nShutting down...');
   server.close(() => process.exit(0));
-});
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));

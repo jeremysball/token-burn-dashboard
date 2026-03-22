@@ -28,6 +28,21 @@ export const renderAnalytics = () => {
         case 'insights':
             renderDeepInsightsTab();
             break;
+        case 'scale':
+            renderScaleTab();
+            break;
+        case 'code':
+            renderCodeStatsTab();
+            break;
+        case 'heatmaps':
+            renderHeatmapsTab();
+            break;
+        case 'git':
+            renderGitBlameTab();
+            break;
+        case 'spikes':
+            renderSpikeDetectiveTab();
+            break;
     }
 };
 
@@ -92,7 +107,13 @@ const renderCompareTab = () => {
         .sort((a, b) => b[1].total - a[1].total)
         .slice(0, 8);
 
-    if (models.length === 0) return;
+    // Clear any skeleton/loading content
+    container.innerHTML = '';
+
+    if (models.length === 0) {
+        container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--mono-text-muted);">No data available</div>';
+        return;
+    }
 
     const data = [{
         type: 'bar',
@@ -109,10 +130,22 @@ const renderCompareTab = () => {
 
     Plotly.newPlot('compare-chart-container', data, {
         ...getPlotlyLayout(),
-        margin: { t: 20, r: 80, b: 40, l: 100 },
-        xaxis: { title: 'Tokens' },
-        yaxis: { autorange: 'reversed' }
-    }, { displayModeBar: false });
+        margin: { t: 20, r: 120, b: 40, l: 240 },
+        xaxis: { 
+            title: 'Tokens', 
+            range: [0, Math.max(...models.map(m => m[1].total)) * 1.15],
+            fixedrange: true
+        },
+        yaxis: { 
+            autorange: 'reversed',
+            fixedrange: true,
+            tickfont: { size: 11 }
+        },
+        dragmode: false
+    }, { 
+        displayModeBar: false,
+        staticPlot: true
+    });
 };
 
 // ===== TIMELINE TAB =====
@@ -178,7 +211,10 @@ const renderCalendarTab = () => {
         return;
     }
 
-    const labels = days.map(([day]) => day.slice(5)); // MM-DD
+    const labels = days.map(([day]) => {
+        const d = new Date(day);
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    });
     const values = days.map(([, tokens]) => tokens);
     const maxVal = Math.max(...values);
 
@@ -213,16 +249,43 @@ const renderCalendarTab = () => {
         xaxis: {
             title: 'Tokens',
             showgrid: true,
-            gridcolor: 'rgba(115,115,115,0.2)'
+            gridcolor: 'rgba(115,115,115,0.2)',
+            fixedrange: true  // Disable zoom
         },
         yaxis: {
             automargin: true,
-            tickfont: { size: 11 }
+            tickfont: { size: 11 },
+            fixedrange: true  // Disable zoom
         },
-        bargap: 0.15
+        bargap: 0.15,
+        dragmode: false
     };
 
-    Plotly.newPlot('calendar-container', data, layout, { displayModeBar: false, responsive: true });
+    Plotly.newPlot('calendar-container', data, layout, { 
+        displayModeBar: false, 
+        responsive: true,
+        staticPlot: false  // Keep clicks enabled for the click handler
+    });
+
+    // Add click handler for bars
+    const chartEl = document.getElementById('calendar-container');
+    if (chartEl) {
+        chartEl.on('plotly_click', (data) => {
+            const dayIndex = data.points[0].pointNumber;
+            const [fullDate, tokens] = days[dayIndex];
+            const date = new Date(fullDate);
+            const formattedDate = date.toLocaleDateString('en-US', { 
+                weekday: 'short', 
+                month: 'short', 
+                day: 'numeric' 
+            });
+            
+            // Show notification with day details
+            import('../utils.js').then(({ notify }) => {
+                notify(`${formattedDate}: ${fmtNum(tokens)} tokens`, 'info');
+            });
+        });
+    }
 };
 
 // ===== DEEP INSIGHTS TAB =====
@@ -261,7 +324,7 @@ const generateDeepInsights = () => {
 };
 
 const calculateDeepInsights = () => {
-    const { tokens_by_model, costs_by_model, total_tokens, total_cost } = currentData;
+    const { tokens_by_model, costs_by_model, total_tokens, total_cost, files_processed, total_lines } = currentData;
     const sourceData = fileHistoricalData.length > 0 ? fileHistoricalData : historyData;
     const models = Object.entries(tokens_by_model);
 
@@ -276,118 +339,155 @@ const calculateDeepInsights = () => {
 
     if (efficiency.length > 0) {
         const best = efficiency[0];
+        const worst = efficiency[efficiency.length - 1];
+        const savings = (worst.costPer1M - best.costPer1M) * (best.efficiency * (best.costPer1M / 1e6)) / 1e6;
+        
         insights.push({
             icon: '⚡',
             title: 'Most Efficient Model',
             value: best.name.split('/').pop(),
             description: `Best tokens-per-dollar ratio at $${best.costPer1M.toFixed(2)} per 1M tokens`,
-            detail: `${efficiency.length > 1 ? `2x better than ${efficiency[efficiency.length - 1].name.split('/').pop()}` : 'Most cost-effective choice'}`,
+            detail: `Switching from ${worst.name.split('/').pop()} would save ~$${savings.toFixed(2)} per 1M tokens`,
             type: 'positive'
         });
     }
 
-    // 2. Cache Champion
-    const cacheLeaders = models
-        .map(([name, stats]) => ({ name, rate: stats.cache_read / (stats.input + stats.cache_read || 1) }))
-        .sort((a, b) => b.rate - a.rate);
+    // 2. Cache Efficiency - Calculate actual savings
+    const totalCacheRead = currentData.total_cache_read || 0;
+    const cacheRate = totalCacheRead / (currentData.total_input + totalCacheRead || 1);
+    const cacheSavings = totalCacheRead * 0.000015; // Estimated $0.015 per 1k cached tokens
+    
+    insights.push({
+        icon: cacheRate > 0.5 ? '💾' : '📦',
+        title: 'Cache Efficiency',
+        value: `${(cacheRate * 100).toFixed(1)}%`,
+        description: cacheRate > 0.5 
+            ? `Excellent! You've saved $${cacheSavings.toFixed(2)} through caching`
+            : `Low cache hit rate - missing $${(total_tokens * 0.3 * 0.000015).toFixed(2)} potential savings`,
+        detail: `${fmtNum(totalCacheRead)} cached tokens at 90% discount`,
+        type: cacheRate > 0.5 ? 'positive' : 'warning'
+    });
 
-    if (cacheLeaders.length > 0 && cacheLeaders[0].rate > 0.1) {
-        const leader = cacheLeaders[0];
-        insights.push({
-            icon: '💾',
-            title: 'Cache Champion',
-            value: `${(leader.rate * 100).toFixed(1)}%`,
-            description: `${leader.name.split('/').pop()} has the highest cache hit rate`,
-            detail: `Saving ~$${((currentData.total_cache_read || 0) * 0.00015).toFixed(2)} in cache hits`,
-            type: 'positive'
-        });
-    }
-
-    // 3. Usage Velocity
+    // 3. Usage Velocity with Trend
     if (sourceData.length >= 2) {
         const recent = sourceData.slice(-6);
         const avgRecent = recent.reduce((s, d) => s + (d.total || 0), 0) / recent.length;
-        const older = sourceData.slice(-12, -6);
+        const older = sourceData.slice(-18, -6);
         const avgOlder = older.length > 0 ? older.reduce((s, d) => s + (d.total || 0), 0) / older.length : avgRecent;
         const change = avgOlder > 0 ? ((avgRecent - avgOlder) / avgOlder) * 100 : 0;
+        
+        // Project monthly cost
+        const hourlyTokens = avgRecent;
+        const monthlyTokens = hourlyTokens * 24 * 30;
+        const monthlyCost = (monthlyTokens / 1e6) * ((total_cost?.total || 0) / (total_tokens / 1e6 || 1));
 
         insights.push({
-            icon: change >= 0 ? '📈' : '📉',
-            title: 'Usage Velocity',
+            icon: change >= 20 ? '🚀' : change >= 0 ? '📈' : change >= -20 ? '➡️' : '📉',
+            title: 'Usage Trend',
             value: `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`,
-            description: change >= 20 ? 'Token usage is accelerating significantly' :
-                         change >= 0 ? 'Token usage is steady or growing' :
-                         'Token usage has decreased recently',
-            detail: `Avg ${fmtNum(avgRecent)}/hr recently vs ${fmtNum(avgOlder)}/hr before`,
-            type: change >= 0 ? 'neutral' : 'info'
+            description: change >= 20 
+                ? `Rapid growth detected - usage up ${change.toFixed(0)}% over last 12hrs`
+                : change >= 0 
+                    ? `Steady growth at ${change.toFixed(0)}%`
+                    : `Declining usage - ${change.toFixed(0)}% decrease`,
+            detail: `On track for ${fmtNum(monthlyTokens)} tokens ($${monthlyCost.toFixed(0)}/mo)`,
+            type: change >= 50 ? 'warning' : change >= 0 ? 'positive' : 'info'
         });
     }
 
-    // 4. Model Diversity
-    const diversity = models.length;
-    const topModelShare = models.length > 0 ?
-        Math.max(...models.map(m => m[1].total)) / (total_tokens || 1) : 0;
-
-    insights.push({
-        icon: diversity > 5 ? '🌈' : diversity > 2 ? '🎨' : '🎯',
-        title: 'Model Diversity',
-        value: `${diversity} models`,
-        description: diversity > 8 ? 'You are exploring many different models' :
-                     diversity > 4 ? 'Good variety of models in use' :
-                     'Focused on a few key models',
-        detail: topModelShare > 0.7 ? `Heavily weighted toward ${models[0][0].split('/').pop()}` :
-               topModelShare > 0.4 ? `Balanced usage across models` :
-               'Evenly distributed usage',
-        type: 'neutral'
-    });
-
-    // 5. Cost Accumulation Pattern
-    if (total_cost?.total) {
-        const hourlyRate = total_cost.total / (sourceData.length || 1);
-        const projectedDaily = hourlyRate * 24;
-
+    // 4. Cost Concentration Risk
+    if (total_cost?.total && models.length > 0) {
+        const sortedByCost = models
+            .map(([name, stats]) => ({
+                name,
+                cost: costs_by_model?.[name]?.total || 0,
+                tokens: stats.total
+            }))
+            .sort((a, b) => b.cost - a.cost);
+        
+        const topModelCost = sortedByCost[0].cost;
+        const concentration = topModelCost / total_cost.total;
+        
         insights.push({
-            icon: '💰',
-            title: 'Cost Trajectory',
-            value: `$${total_cost.total.toFixed(2)}`,
-            description: `Spending at ~$${hourlyRate.toFixed(2)}/hour`,
-            detail: projectedDaily > 100 ? `On track for $${projectedDaily.toFixed(0)}/day` :
-                   `Projected $${projectedDaily.toFixed(2)}/day at current rate`,
-            type: projectedDaily > 500 ? 'warning' : 'neutral'
+            icon: concentration > 0.8 ? '⚠️' : concentration > 0.5 ? '🎯' : '🌈',
+            title: 'Cost Concentration',
+            value: `${(concentration * 100).toFixed(0)}%`,
+            description: concentration > 0.8 
+                ? `High risk: ${sortedByCost[0].name.split('/').pop()} dominates spending`
+                : concentration > 0.5 
+                    ? 'Moderate concentration - some diversification'
+                    : 'Well diversified across models',
+            detail: `${sortedByCost[0].name.split('/').pop()} cost $${topModelCost.toFixed(2)} of $${total_cost.total.toFixed(2)}`,
+            type: concentration > 0.8 ? 'warning' : 'neutral'
         });
     }
 
-    // 6. Peak Usage Pattern
-    if (sourceData.length > 0) {
-        const peak = sourceData.reduce((max, d) => d.total > max.total ? d : max, sourceData[0]);
-        const peakHour = new Date(peak.time).getHours();
-        const timeLabel = peakHour >= 5 && peakHour < 12 ? 'morning' :
-                         peakHour >= 12 && peakHour < 17 ? 'afternoon' :
-                         peakHour >= 17 && peakHour < 21 ? 'evening' : 'night';
-
+    // 5. Token Productivity
+    if (files_processed && total_lines) {
+        const tokensPerFile = total_tokens / files_processed;
+        const tokensPerLine = total_tokens / total_lines;
+        
         insights.push({
-            icon: '🔥',
-            title: 'Peak Activity',
-            value: fmtNum(peak.total),
-            description: `Highest usage was ${timeLabel}`,
-            detail: `At ${new Date(peak.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+            icon: tokensPerLine > 500 ? '🔧' : tokensPerLine > 100 ? '⚙️' : '📝',
+            title: 'Token Productivity',
+            value: `${fmtNum(tokensPerLine)}/line`,
+            description: tokensPerLine > 500 
+                ? 'Heavy refactoring work detected - high tokens per line'
+                : tokensPerLine > 100 
+                    ? 'Balanced code generation and analysis'
+                    : 'Light touches - mostly small edits',
+            detail: `${fmtNum(tokensPerFile)} tokens across ${files_processed} files`,
             type: 'info'
         });
     }
 
-    // 7. Input/Output Balance
+    // 6. Peak Usage Pattern with Heatmap suggestion
+    if (sourceData.length > 0) {
+        const hourBuckets = new Array(24).fill(0);
+        sourceData.forEach(d => {
+            const hour = new Date(d.time).getHours();
+            hourBuckets[hour] += d.total || 0;
+        });
+        
+        const peakHour = hourBuckets.indexOf(Math.max(...hourBuckets));
+        const peakTokens = hourBuckets[peakHour];
+        const totalBucketed = hourBuckets.reduce((a, b) => a + b, 0);
+        const peakShare = peakTokens / totalBucketed;
+        
+        const timeLabel = peakHour >= 5 && peakHour < 12 ? 'morning ☀️' :
+                         peakHour >= 12 && peakHour < 17 ? 'afternoon 🌤️' :
+                         peakHour >= 17 && peakHour < 21 ? 'evening 🌅' : 'night 🌙';
+
+        insights.push({
+            icon: '🕐',
+            title: 'Peak Hour',
+            value: `${peakHour}:00`,
+            description: `${(peakShare * 100).toFixed(0)}% of daily tokens used in the ${timeLabel}`,
+            detail: `${fmtNum(peakTokens)} tokens at peak vs ${fmtNum(totalBucketed / 24)}/hr average`,
+            type: peakShare > 0.25 ? 'warning' : 'info'
+        });
+    }
+
+    // 7. Input/Output with actionable insight
     const inputRatio = currentData.total_input / (total_tokens || 1);
     const outputRatio = currentData.total_output / (total_tokens || 1);
+    const ratio = inputRatio / outputRatio;
 
     insights.push({
-        icon: inputRatio > 0.7 ? '📥' : outputRatio > 0.3 ? '📤' : '⚖️',
-        title: 'Token Flow Balance',
-        value: `${(inputRatio * 100).toFixed(0)}% in`,
-        description: inputRatio > 0.8 ? 'Heavy prompt/analysis workload' :
-                     outputRatio > 0.4 ? 'Generative output heavy' :
-                     'Balanced input/output ratio',
-        detail: `${fmtNum(currentData.total_input)} in / ${fmtNum(currentData.total_output)} out`,
-        type: 'neutral'
+        icon: inputRatio > 0.8 ? '📥' : outputRatio > 0.5 ? '📤' : '⚖️',
+        title: 'I/O Pattern',
+        value: `${ratio.toFixed(1)}:1`,
+        description: inputRatio > 0.8
+            ? `Input-heavy (${(inputRatio * 100).toFixed(0)}%) - analysis/classification work`
+            : outputRatio > 0.5
+                ? `Output-heavy (${(outputRatio * 100).toFixed(0)}%) - generation work`
+                : 'Balanced conversational pattern',
+        detail: inputRatio > 0.8
+            ? 'Consider smaller models for classification tasks'
+            : outputRatio > 0.5
+                ? 'Monitor output length - consider setting max_tokens'
+                : 'Good balance for conversational workloads',
+        type: outputRatio > 0.6 ? 'warning' : 'neutral'
     });
 
     return insights;
@@ -412,14 +512,19 @@ const renderInsightsCards = (container, insights) => {
 const generateLLMInsights = async () => {
     const container = document.getElementById('llm-insights-content');
     const btn = document.querySelector('.llm-analyze-btn');
+    const statusEl = document.getElementById('analysis-status');
 
     if (!container || !btn) return;
 
     btn.disabled = true;
+    if (statusEl) {
+        statusEl.textContent = 'Connecting...';
+        statusEl.className = 'analysis-status';
+    }
     container.innerHTML = `
         <div class="llm-loading">
             <div class="loading-spinner" style="width: 24px; height: 24px;"></div>
-            <span>AI is analyzing your usage patterns...</span>
+            <span>Connecting to AI analysis service...</span>
         </div>
     `;
 
@@ -443,7 +548,7 @@ const generateLLMInsights = async () => {
         inputOutputRatio: currentData.total_input / (currentData.total_output || 1)
     };
 
-    // Try to get LLM insights from API, fallback to local generation
+    // Try to get insights from API - DO NOT silently fallback
     try {
         const response = await fetch('/api/insights/analyze', {
             method: 'POST',
@@ -451,63 +556,55 @@ const generateLLMInsights = async () => {
             body: JSON.stringify(summary)
         });
 
-        if (response.ok) {
-            const data = await response.json();
-            renderLLMInsights(data.insights);
-        } else {
-            throw new Error('API failed');
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `Server error: ${response.status}`);
         }
-    } catch {
-        // Fallback to local insight generation
-        const localInsights = generateLocalLLMInsights(summary);
-        renderLLMInsights(localInsights);
+
+        const data = await response.json();
+        
+        if (data.source === 'kimi') {
+            if (statusEl) {
+                statusEl.textContent = '✓ Kimi K2.5';
+                statusEl.className = 'analysis-status kimi';
+            }
+            renderLLMInsights(data.insights);
+        } else if (data.source === 'local') {
+            // Server fell back to local - show warning that AI wasn't available
+            if (statusEl) {
+                statusEl.textContent = '⚠ AI Unavailable';
+                statusEl.className = 'analysis-status warning';
+            }
+            renderLLMInsights(data.insights, 'AI analysis service unavailable. Showing local analysis instead.');
+        } else {
+            renderLLMInsights(data.insights);
+        }
+    } catch (err) {
+        // Show error - do NOT silently fallback
+        if (statusEl) {
+            statusEl.textContent = '✗ Failed';
+            statusEl.className = 'analysis-status error';
+        }
+        container.innerHTML = `
+            <div class="llm-error">
+                <p><strong>AI Analysis Failed</strong></p>
+                <p>${err.message || 'Unable to connect to analysis service'}</p>
+                <p class="error-help">Check your KIMI_API_KEY configuration or try again later.</p>
+                <button onclick="generateLLMInsights()" class="retry-btn">↻ Retry</button>
+            </div>
+        `;
     }
 
     btn.disabled = false;
 };
 
-const generateLocalLLMInsights = (summary) => {
-    const insights = [];
-
-    // Cost efficiency insight
-    const avgCostPer1M = (summary.totalCost / summary.totalTokens) * 1e6;
-    if (avgCostPer1M < 0.50) {
-        insights.push(`Your average cost of $${avgCostPer1M.toFixed(2)} per 1M tokens is excellent. You're effectively leveraging caching and cost-effective models.`);
-    } else if (avgCostPer1M > 2.0) {
-        insights.push(`Your cost of $${avgCostPer1M.toFixed(2)} per 1M tokens suggests heavy use of premium models. Consider if all tasks require high-end models or if some could use more cost-effective alternatives.`);
-    }
-
-    // Model concentration insight
-    const topModelShare = summary.topModels[0]?.tokens / summary.totalTokens;
-    if (topModelShare > 0.8) {
-        insights.push(`You're heavily reliant on ${summary.topModels[0].name}. While specialization is good, consider A/B testing alternatives to ensure optimal cost-performance.`);
-    } else if (summary.modelCount > 8) {
-        insights.push(`You're using ${summary.modelCount} different models, showing good experimentation. Consider consolidating to your top 3-4 performers for simpler cost management.`);
-    }
-
-    // Cache utilization insight
-    if (summary.cacheRate > 0.6) {
-        insights.push(`Excellent cache utilization at ${(summary.cacheRate * 100).toFixed(1)}%! This is saving you significant costs. Keep reusing similar prompts to maintain this efficiency.`);
-    } else if (summary.cacheRate < 0.2) {
-        insights.push(`Your cache hit rate is only ${(summary.cacheRate * 100).toFixed(1)}%. Look for opportunities to reuse similar prompts or structure your requests more consistently.`);
-    }
-
-    // Input/output pattern
-    if (summary.inputOutputRatio > 5) {
-        insights.push(`Your workload is heavily input-biased (${summary.inputOutputRatio.toFixed(1)}:1 ratio). This suggests analysis/classification tasks. Consider batching inputs to maximize efficiency.`);
-    } else if (summary.inputOutputRatio < 1) {
-        insights.push(`You're generating more output than input, indicating creative/generative workloads. Monitor output costs carefully as they can escalate quickly.`);
-    }
-
-    return insights.join('\n\n') || 'No specific patterns detected yet. Continue using the system to generate more insights.';
-};
-
-const renderLLMInsights = (text) => {
+const renderLLMInsights = (text, warningMessage = null) => {
     const container = document.getElementById('llm-insights-content');
     if (!container) return;
 
     const paragraphs = text.split('\n\n').filter(p => p.trim());
     container.innerHTML = `
+        ${warningMessage ? `<div class="llm-warning">${warningMessage}</div>` : ''}
         <div class="llm-analysis-text">
             ${paragraphs.map(p => `<p>${p.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')}</p>`).join('')}
         </div>
@@ -538,8 +635,11 @@ const renderDistributionTab = () => {
 
     Plotly.newPlot('distribution-chart-container', data, {
         ...getPlotlyLayout({ showlegend: false }),
-        margin: { t: 20, r: 20, b: 20, l: 20 }
-    }, { displayModeBar: false });
+        margin: { t: 40, r: 40, b: 80, l: 40 }
+    }, { 
+        displayModeBar: false,
+        responsive: true
+    });
 };
 
 // ===== HELPERS =====
@@ -559,13 +659,17 @@ const getCutoffTime = () => {
 export const setAnalyticsTabHandler = (tab) => {
     setAnalyticsTab(tab);
 
+    // Close any open overlays when switching tabs so they don't block navigation
+    closeCommitDetails();
+    closeInvestigation();
+
     // Update buttons
     document.querySelectorAll('.subnav-btn').forEach(el => {
         el.classList.toggle('active', el.dataset.tab === tab);
     });
 
     // Show/hide content
-    ['models', 'compare', 'timeline', 'calendar', 'distribution', 'insights'].forEach(t => {
+    ['models', 'compare', 'timeline', 'calendar', 'distribution', 'insights', 'scale', 'code', 'heatmaps', 'git', 'spikes'].forEach(t => {
         const el = document.getElementById(`analytics-tab-${t}`);
         if (el) el.style.display = t === tab ? 'block' : 'none';
     });
@@ -616,5 +720,798 @@ const createSparkline = (data, width, height) => {
     `;
 };
 
-// Export insight functions for window access
-export { generateDeepInsights, generateLLMInsights };
+// ===== GIT BLAME TAB =====
+let gitBlameCache = null;
+let gitBlameCwd = '';
+
+const renderGitBlameTab = () => {
+    if (gitBlameCache) {
+        renderGitBlameData(gitBlameCache);
+        return;
+    }
+    loadGitBlame();
+};
+
+const loadGitBlame = async () => {
+    const days = document.getElementById('git-days-selector')?.value || 30;
+    const cwd = document.getElementById('git-directory-selector')?.value || '';
+    gitBlameCwd = cwd;
+    
+    // Show loading state with skeleton
+    document.getElementById('git-commits-list').innerHTML = `
+        <div class="git-blame-loading">
+            <div class="loading-spinner"></div>
+            <p>Analyzing git history...</p>
+        </div>
+    `;
+    document.getElementById('git-files-list').innerHTML = `
+        <div class="git-blame-loading">
+            <div class="loading-spinner"></div>
+            <p>Loading file costs...</p>
+        </div>
+    `;
+    
+    try {
+        const params = new URLSearchParams({ days });
+        if (cwd) params.append('cwd', cwd);
+        
+        const response = await fetch(`/api/git/blame?${params}`);
+        if (!response.ok) throw new Error('Failed to load');
+        
+        const data = await response.json();
+        gitBlameCache = data;
+        renderGitBlameData(data);
+        
+        // Update directory selector if directories are returned
+        if (data.directories) {
+            updateDirectorySelector(data.directories, cwd);
+        }
+    } catch (err) {
+        document.getElementById('git-commits-list').innerHTML = `
+            <div class="git-blame-empty">
+                <div class="git-blame-empty-icon">⚠️</div>
+                <h4>Unable to load git data</h4>
+                <p>${err.message}</p>
+            </div>
+        `;
+        document.getElementById('git-files-list').innerHTML = `
+            <div class="git-blame-empty">
+                <div class="git-blame-empty-icon">📁</div>
+                <h4>No file data</h4>
+                <p>Could not load file cost analysis</p>
+            </div>
+        `;
+    }
+};
+
+const updateDirectorySelector = (directories, selectedCwd) => {
+    const selector = document.getElementById('git-directory-selector');
+    if (!selector || !directories) return;
+    
+    const currentValue = selector.value || selectedCwd || '';
+    
+    selector.innerHTML = directories.map(dir => {
+        const icon = dir.isGitRepo ? '📁' : '📂';
+        const selected = dir.path === currentValue ? 'selected' : '';
+        return `<option value="${dir.path}" ${selected}>${icon} ${dir.name}</option>`;
+    }).join('');
+    
+    // Restore selection if possible
+    if (currentValue) {
+        selector.value = currentValue;
+    }
+};
+
+const renderGitBlameData = (data) => {
+    // Summary stats
+    const totalCommits = data.commits.length;
+    const totalCost = data.commits.reduce((sum, c) => sum + c.cost, 0);
+    const totalSessions = data.commits.reduce((sum, c) => sum + c.sessions, 0);
+    
+    document.getElementById('git-total-commits').textContent = totalCommits;
+    document.getElementById('git-total-cost').textContent = `$${totalCost.toFixed(2)}`;
+    document.getElementById('git-total-sessions').textContent = totalSessions;
+    
+    // Commits list - now with files
+    const commitsList = document.getElementById('git-commits-list');
+    commitsList.innerHTML = data.commits.slice(0, 10).map(commit => {
+        const files = commit.files || [];
+        const fileList = files.slice(0, 3).map(f => `<span class="commit-file">${escapeHtml(f.split('/').pop())}</span>`).join('');
+        const moreFiles = files.length > 3 ? `<span class="commit-file-more">+${files.length - 3} more</span>` : '';
+        
+        return `
+        <div class="git-commit-item" onclick="showCommitDetails('${commit.hash}')" style="cursor: pointer;">
+            <div class="commit-main">
+                <div class="commit-hash">${commit.hash}</div>
+                <div class="commit-message">${escapeHtml(commit.message)}</div>
+                <div class="commit-files">
+                    ${fileList}${moreFiles}
+                </div>
+            </div>
+            <div class="commit-stats">
+                <span class="commit-stat cost">$${commit.cost.toFixed(2)}</span>
+                <span class="commit-stat">${fmtNum(commit.tokens)} tokens</span>
+                <span class="commit-stat">${commit.sessions} session${commit.sessions !== 1 ? 's' : ''}</span>
+            </div>
+        </div>
+    `}).join('');
+    
+    // Files list
+    const filesList = document.getElementById('git-files-list');
+    filesList.innerHTML = data.files.slice(0, 10).map(file => `
+        <div class="git-file-item">
+            <div class="file-name">${escapeHtml(file.file)}</div>
+            <div class="file-cost">$${file.cost.toFixed(2)} across ${file.commits} commits</div>
+        </div>
+    `).join('');
+};
+
+const showCommitDetails = async (commitHash) => {
+    const modal = document.getElementById('commit-details-modal');
+    const content = document.getElementById('commit-details-content');
+    
+    if (!modal || !content) return;
+    
+    modal.style.display = 'flex';
+    content.innerHTML = `
+        <div class="commit-details-loading">
+            <div class="loading-spinner"></div>
+            <p>Loading session details...</p>
+        </div>
+    `;
+    
+    try {
+        const days = document.getElementById('git-days-selector')?.value || 30;
+        const params = new URLSearchParams({ days, commit: commitHash });
+        if (gitBlameCwd) params.append('cwd', gitBlameCwd);
+        
+        const response = await fetch(`/api/git/blame?${params}`);
+        if (!response.ok) throw new Error('Failed to load commit details');
+        
+        const data = await response.json();
+        renderCommitDetails(content, data);
+    } catch (err) {
+        content.innerHTML = `<div class="commit-details-error">Error: ${err.message}</div>`;
+    }
+};
+
+const renderCommitDetails = (container, data) => {
+    const { commit, sessions, summary } = data;
+    
+    container.innerHTML = `
+        <div class="commit-details-header">
+            <div class="commit-details-hash">${commit.hash}</div>
+            <div class="commit-details-message">${escapeHtml(commit.message)}</div>
+            <div class="commit-details-date">${new Date(commit.date).toLocaleString()}</div>
+        </div>
+        
+        <div class="commit-details-summary">
+            <div class="summary-item">
+                <span class="summary-label">Sessions</span>
+                <span class="summary-value">${summary.totalSessions}</span>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">Total Tokens</span>
+                <span class="summary-value">${fmtNum(summary.totalTokens)}</span>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">Total Cost</span>
+                <span class="summary-value">$${summary.totalCost.toFixed(2)}</span>
+            </div>
+        </div>
+        
+        <div class="commit-sessions-list">
+            <h4>Sessions (${sessions.length})</h4>
+            ${sessions.map((session, idx) => `
+                <div class="session-card">
+                    <div class="session-header" onclick="toggleSessionMessages(${idx})">
+                        <span class="session-id">${session.id}</span>
+                        <span class="session-cost">$${session.cost.toFixed(2)}</span>
+                        <span class="session-tokens">${fmtNum(session.tokens)} tokens</span>
+                        <span class="session-toggle">▼</span>
+                    </div>
+                    <div class="session-models">
+                        ${Object.entries(session.models).map(([model, stats]) => `
+                            <span class="session-model-tag" title="${model}: ${fmtNum(stats.tokens)} tokens, ${stats.calls} calls">
+                                ${model.split('/').pop()}: $${stats.cost.toFixed(2)}
+                            </span>
+                        `).join('')}
+                    </div>
+                    <div class="session-messages" id="session-messages-${idx}" style="display: none;">
+                        ${session.messages.slice(0, 5).map(msg => `
+                            <div class="message-item">
+                                <div class="message-meta">
+                                    <span class="message-model">${msg.model.split('/').pop()}</span>
+                                    <span class="message-cost">$${msg.cost.toFixed(3)}</span>
+                                    <span class="message-tokens">${fmtNum(msg.tokens)} tokens</span>
+                                </div>
+                                <div class="message-preview">${escapeHtml(msg.preview)}</div>
+                            </div>
+                        `).join('')}
+                        ${session.messages.length > 5 ? `<div class="message-more">+${session.messages.length - 5} more messages</div>` : ''}
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+};
+
+const toggleSessionMessages = (idx) => {
+    const messagesEl = document.getElementById(`session-messages-${idx}`);
+    const toggleEl = messagesEl?.previousElementSibling?.previousElementSibling?.querySelector('.session-toggle');
+    
+    if (messagesEl) {
+        const isVisible = messagesEl.style.display !== 'none';
+        messagesEl.style.display = isVisible ? 'none' : 'block';
+        if (toggleEl) {
+            toggleEl.textContent = isVisible ? '▼' : '▲';
+        }
+    }
+};
+
+const closeCommitDetails = () => {
+    const modal = document.getElementById('commit-details-modal');
+    if (modal) modal.style.display = 'none';
+};
+
+// ===== SPIKE DETECTIVE TAB =====
+let spikesCache = null;
+
+const renderSpikeDetectiveTab = () => {
+    if (spikesCache) {
+        renderSpikesList(spikesCache);
+        return;
+    }
+    loadSpikes();
+};
+
+const loadSpikes = async () => {
+    const listEl = document.getElementById('spikes-list');
+    listEl.innerHTML = '<div class="loading-placeholder">Analyzing for spikes...</div>';
+    
+    try {
+        const response = await fetch('/api/spikes');
+        if (!response.ok) throw new Error('Failed to load');
+        
+        const data = await response.json();
+        spikesCache = data.spikes;
+        renderSpikesList(spikesCache);
+    } catch (err) {
+        listEl.innerHTML = `<div class="loading-placeholder">Error: ${err.message}</div>`;
+    }
+};
+
+const renderSpikesList = (spikes) => {
+    const listEl = document.getElementById('spikes-list');
+    
+    if (spikes.length === 0) {
+        listEl.innerHTML = '<div class="loading-placeholder">No significant spikes detected</div>';
+        return;
+    }
+    
+    listEl.innerHTML = spikes.map(spike => {
+        const date = new Date(spike.time);
+        const timeStr = date.toLocaleString('en-US', { 
+            month: 'short', 
+            day: 'numeric', 
+            hour: '2-digit', 
+            minute: '2-digit' 
+        });
+        
+        return `
+            <div class="spike-item" onclick="investigateSpike(${spike.time})">
+                <div class="spike-indicator"></div>
+                <div class="spike-info">
+                    <div class="spike-time">${timeStr}</div>
+                    <div class="spike-details-small">${fmtNum(spike.previousAvg)} → ${fmtNum(spike.tokens)} tokens</div>
+                </div>
+                <div class="spike-tokens">${fmtNum(spike.tokens)}</div>
+                <div class="spike-ratio">${spike.ratio}x</div>
+            </div>
+        `;
+    }).join('');
+};
+
+const investigateSpike = async (timestamp) => {
+    const investigationEl = document.getElementById('spike-investigation');
+    const detailsEl = document.getElementById('spike-details');
+    const sessionsEl = document.getElementById('spike-sessions');
+    
+    investigationEl.style.display = 'block';
+    detailsEl.innerHTML = '<div class="loading-placeholder">Investigating...</div>';
+    sessionsEl.innerHTML = '';
+    
+    // Scroll to investigation
+    investigationEl.scrollIntoView({ behavior: 'smooth' });
+    
+    try {
+        const response = await fetch(`/api/spikes/investigate?timestamp=${timestamp}&window=30`);
+        if (!response.ok) throw new Error('Failed to investigate');
+        
+        const data = await response.json();
+        renderInvestigation(data);
+    } catch (err) {
+        detailsEl.innerHTML = `<div class="loading-placeholder">Error: ${err.message}</div>`;
+    }
+};
+
+const renderInvestigation = (data) => {
+    const detailsEl = document.getElementById('spike-details');
+    const sessionsEl = document.getElementById('spike-sessions');
+    
+    detailsEl.innerHTML = `
+        <div class="detail-item">
+            <div class="detail-label">Total Sessions</div>
+            <div class="detail-value">${data.summary.totalSessions}</div>
+        </div>
+        <div class="detail-item">
+            <div class="detail-label">Total Tokens</div>
+            <div class="detail-value">${fmtNum(data.summary.totalTokens)}</div>
+        </div>
+        <div class="detail-item">
+            <div class="detail-label">Total Cost</div>
+            <div class="detail-value">$${data.summary.totalCost.toFixed(2)}</div>
+        </div>
+        <div class="detail-item">
+            <div class="detail-label">Top Model</div>
+            <div class="detail-value">${data.summary.topModel.split('/').pop()}</div>
+        </div>
+    `;
+    
+    sessionsEl.innerHTML = `
+        <h5>Top Contributing Sessions</h5>
+        ${data.sessions.map(session => `
+            <div class="session-item">
+                <div class="session-header">
+                    <span class="session-id">${session.id}</span>
+                    <span class="session-cost">$${session.cost.toFixed(2)}</span>
+                </div>
+                <div class="session-previews">
+                    ${session.previews.map((preview, i) => `
+                        <div class="session-preview-item">
+                            <div class="preview-label">Message ${i + 1}</div>
+                            <div>${escapeHtml(preview)}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `).join('')}
+    `;
+};
+
+const closeInvestigation = () => {
+    document.getElementById('spike-investigation').style.display = 'none';
+};
+
+// Utility
+const escapeHtml = (text) => {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+};
+
+// ===== SCALE TAB =====
+const SCALE_COMPARISONS = [
+    { name: 'Tweet', tokens: 280, icon: '🐦', desc: 'A single tweet' },
+    { name: 'Paragraph', tokens: 200, icon: '📄', desc: 'Average paragraph' },
+    { name: 'Page', tokens: 500, icon: '📃', desc: 'Single typed page' },
+    { name: 'Short Story', tokens: 7500, icon: '📖', desc: 'Short story (15 pages)' },
+    { name: 'Novel Chapter', tokens: 25000, icon: '📚', desc: 'One book chapter' },
+    { name: 'Novel', tokens: 100000, icon: '📕', desc: 'Full novel (200 pages)' },
+    { name: 'Shakespeare Play', tokens: 300000, icon: '🎭', desc: 'Complete Shakespeare play' },
+    { name: 'Bible', tokens: 4000000, icon: '✝️', desc: 'The entire Bible' },
+    { name: 'Encyclopedia', tokens: 40000000, icon: '📚', desc: 'Full encyclopedia set' },
+    { name: 'Codebase', tokens: 100000000, icon: '💻', desc: 'Large software codebase' }
+];
+
+const renderScaleTab = () => {
+    const container = document.getElementById('scale-comparisons');
+    if (!container || !currentData) return;
+
+    const totalTokens = currentData.total_tokens || 0;
+
+    // Find the largest comparison we exceed
+    const exceeded = SCALE_COMPARISONS.filter(c => totalTokens >= c.tokens);
+    const nextMilestone = SCALE_COMPARISONS.find(c => totalTokens < c.tokens);
+    
+    container.innerHTML = `
+        <div class="scale-hero">
+            <div class="scale-total">
+                <span class="scale-number">${fmtNum(totalTokens)}</span>
+                <span class="scale-label">total tokens</span>
+            </div>
+            <div class="scale-equivalent">
+                ${exceeded.length > 0 ? `
+                    <span class="scale-eq-label">Equivalent to</span>
+                    <span class="scale-eq-value">${(totalTokens / exceeded[exceeded.length - 1].tokens).toFixed(1)} ${exceeded[exceeded.length - 1].name}s</span>
+                ` : ''}
+            </div>
+        </div>
+        <div class="scale-progress-section">
+            ${nextMilestone ? `
+                <div class="scale-next">
+                    <span class="scale-next-label">Next milestone: ${nextMilestone.name}</span>
+                    <div class="scale-progress-bar">
+                        <div class="scale-progress-fill" style="width: ${Math.min((totalTokens / nextMilestone.tokens) * 100, 100)}%"></div>
+                    </div>
+                    <span class="scale-next-remaining">${fmtNum(nextMilestone.tokens - totalTokens)} tokens to go</span>
+                </div>
+            ` : '<div class="scale-achieved">🎉 All milestones achieved!</div>'}
+        </div>
+        <div class="scale-grid">
+            ${SCALE_COMPARISONS.map(comp => {
+                const achieved = totalTokens >= comp.tokens;
+                const multiple = achieved ? (totalTokens / comp.tokens).toFixed(1) : null;
+                return `
+                    <div class="scale-card ${achieved ? 'achieved' : ''}">
+                        <div class="scale-icon">${comp.icon}</div>
+                        <div class="scale-name">${comp.name}</div>
+                        <div class="scale-desc">${comp.desc}</div>
+                        <div class="scale-tokens">${fmtNum(comp.tokens)} tokens</div>
+                        ${achieved ? `<div class="scale-multiple">${multiple}×</div>` : ''}
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+};
+
+// ===== CODE STATS TAB =====
+const CODE_STATS = {
+    languages: [
+        { ext: '.js', name: 'JavaScript', tokensPerLine: 8, color: '#f7df1e' },
+        { ext: '.ts', name: 'TypeScript', tokensPerLine: 9, color: '#3178c6' },
+        { ext: '.py', name: 'Python', tokensPerLine: 6, color: '#3776ab' },
+        { ext: '.java', name: 'Java', tokensPerLine: 10, color: '#b07219' },
+        { ext: '.cpp', name: 'C++', tokensPerLine: 11, color: '#f34b7d' },
+        { ext: '.go', name: 'Go', tokensPerLine: 7, color: '#00add8' },
+        { ext: '.rs', name: 'Rust', tokensPerLine: 8, color: '#dea584' },
+        { ext: '.rb', name: 'Ruby', tokensPerLine: 6, color: '#701516' },
+        { ext: '.php', name: 'PHP', tokensPerLine: 8, color: '#4f5d95' },
+        { ext: '.swift', name: 'Swift', tokensPerLine: 9, color: '#ffac45' }
+    ]
+};
+
+const renderCodeStatsTab = () => {
+    const summaryContainer = document.getElementById('code-summary');
+    const breakdownContainer = document.getElementById('code-breakdown');
+    if (!summaryContainer || !breakdownContainer || !currentData) return;
+
+    const totalTokens = currentData.total_tokens || 0;
+    const totalLines = currentData.total_lines || 0;
+    const filesProcessed = currentData.files_processed || 0;
+
+    // Calculate equivalent lines in different languages
+    const langStats = CODE_STATS.languages.map(lang => ({
+        ...lang,
+        equivalentLines: Math.round(totalTokens / lang.tokensPerLine)
+    }));
+
+    summaryContainer.innerHTML = `
+        <div class="code-summary-grid">
+            <div class="code-stat-card primary">
+                <div class="code-stat-icon">📄</div>
+                <div class="code-stat-value">${fmtNum(totalLines)}</div>
+                <div class="code-stat-label">Lines of Code Processed</div>
+            </div>
+            <div class="code-stat-card">
+                <div class="code-stat-icon">📁</div>
+                <div class="code-stat-value">${fmtNum(filesProcessed)}</div>
+                <div class="code-stat-label">Files Analyzed</div>
+            </div>
+            <div class="code-stat-card">
+                <div class="code-stat-icon">📊</div>
+                <div class="code-stat-value">${fmtNum(totalTokens / (filesProcessed || 1))}</div>
+                <div class="code-stat-label">Avg Tokens per File</div>
+            </div>
+            <div class="code-stat-card">
+                <div class="code-stat-icon">⚡</div>
+                <div class="code-stat-value">${fmtNum(totalTokens / (totalLines || 1))}</div>
+                <div class="code-stat-label">Avg Tokens per Line</div>
+            </div>
+        </div>
+    `;
+
+    breakdownContainer.innerHTML = `
+        <h4>📊 Equivalent Code Volume by Language</h4>
+        <p class="code-explanation">Your ${fmtNum(totalTokens)} tokens could represent this many lines of code:</p>
+        <div class="code-lang-grid">
+            ${langStats.map(lang => `
+                <div class="code-lang-card">
+                    <div class="code-lang-color" style="background: ${lang.color}"></div>
+                    <div class="code-lang-info">
+                        <div class="code-lang-name">${lang.name}</div>
+                        <div class="code-lang-tokens">~${lang.tokensPerLine} tokens/line</div>
+                    </div>
+                    <div class="code-lang-lines">${fmtNum(lang.equivalentLines)}</div>
+                </div>
+            `).join('')}
+        </div>
+        <div class="code-project-comparison">
+            <h4>🏢 Project Scale Comparison</h4>
+            <div class="project-comparisons">
+                <div class="project-comp">
+                    <span class="project-name">Linux Kernel</span>
+                    <span class="project-bar">
+                        <span class="project-fill" style="width: ${Math.min((totalLines / 30000000) * 100, 100)}%"></span>
+                    </span>
+                    <span class="project-pct">${(totalLines / 30000000 * 100).toFixed(3)}%</span>
+                </div>
+                <div class="project-comp">
+                    <span class="project-name">VS Code</span>
+                    <span class="project-bar">
+                        <span class="project-fill" style="width: ${Math.min((totalLines / 15000000) * 100, 100)}%"></span>
+                    </span>
+                    <span class="project-pct">${(totalLines / 15000000 * 100).toFixed(3)}%</span>
+                </div>
+                <div class="project-comp">
+                    <span class="project-name">React</span>
+                    <span class="project-bar">
+                        <span class="project-fill" style="width: ${Math.min((totalLines / 150000) * 100, 100)}%"></span>
+                    </span>
+                    <span class="project-pct">${(totalLines / 150000 * 100).toFixed(1)}%</span>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+// ===== HEATMAPS TAB =====
+const renderHeatmapsTab = () => {
+    const container = document.getElementById('heatmaps-container');
+    if (!container) return;
+
+    const heatmapType = document.getElementById('heatmap-type')?.value || 'hourly';
+    const sourceData = fileHistoricalData.length > 0 ? fileHistoricalData : historyData;
+
+    if (sourceData.length === 0) {
+        container.innerHTML = '<div class="loading-placeholder">No data available for heatmap</div>';
+        return;
+    }
+
+    switch (heatmapType) {
+        case 'hourly':
+            renderHourlyHeatmap(container, sourceData);
+            break;
+        case 'daily':
+            renderDailyHeatmap(container, sourceData);
+            break;
+        case 'model':
+            renderModelHeatmap(container, sourceData);
+            break;
+        case 'cost':
+            renderCostHeatmap(container, sourceData);
+            break;
+    }
+};
+
+const renderHourlyHeatmap = (container, data) => {
+    // Create 7 days x 24 hours matrix
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const matrix = Array(7).fill(null).map(() => Array(24).fill(0));
+    
+    data.forEach(d => {
+        const date = new Date(d.time);
+        const day = date.getDay();
+        const hour = date.getHours();
+        matrix[day][hour] += d.total || 0;
+    });
+
+    const maxVal = Math.max(...matrix.flat(), 1);
+
+    container.innerHTML = `
+        <div class="heatmap-title">Hourly Usage Patterns (Last 7 Days)</div>
+        <div class="heatmap-wrapper">
+            <div class="heatmap-y-labels">
+                ${days.map(d => `<div class="heatmap-y-label">${d}</div>`).join('')}
+            </div>
+            <div class="heatmap-grid hourly">
+                <div class="heatmap-x-labels">
+                    ${Array(24).fill(0).map((_, i) => `<div class="heatmap-x-label">${i}</div>`).join('')}
+                </div>
+                <div class="heatmap-cells">
+                    ${matrix.map((day, dayIdx) => `
+                        <div class="heatmap-row">
+                            ${day.map((val, hour) => {
+                                const intensity = val / maxVal;
+                                const opacity = 0.1 + (intensity * 0.9);
+                                return `
+                                    <div class="heatmap-cell-full" 
+                                         style="background: rgba(251, 191, 36, ${opacity})"
+                                         title="${days[dayIdx]} ${hour}:00 - ${fmtNum(val)} tokens">
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        </div>
+        <div class="heatmap-legend">
+            <span>Low</span>
+            <div class="heatmap-gradient"></div>
+            <span>High (${fmtNum(maxVal)} tokens)</span>
+        </div>
+    `;
+};
+
+const renderDailyHeatmap = (container, data) => {
+    // Group by date
+    const byDate = {};
+    data.forEach(d => {
+        const date = new Date(d.time).toISOString().split('T')[0];
+        if (!byDate[date]) byDate[date] = 0;
+        byDate[date] += d.total || 0;
+    });
+
+    const dates = Object.keys(byDate).sort();
+    const maxVal = Math.max(...Object.values(byDate), 1);
+
+    // Group into weeks for display
+    const weeks = [];
+    for (let i = 0; i < dates.length; i += 7) {
+        weeks.push(dates.slice(i, i + 7));
+    }
+
+    container.innerHTML = `
+        <div class="heatmap-title">Daily Usage Over Time</div>
+        <div class="daily-heatmap">
+            ${weeks.map(week => `
+                <div class="heatmap-week">
+                    ${week.map(date => {
+                        const val = byDate[date];
+                        const intensity = val / maxVal;
+                        const dayName = new Date(date).toLocaleDateString('en', { weekday: 'short' });
+                        return `
+                            <div class="daily-heatmap-cell" 
+                                 style="background: rgba(251, 191, 36, ${0.1 + intensity * 0.9})"
+                                 title="${date} - ${fmtNum(val)} tokens">
+                                <span class="daily-heatmap-day">${dayName}</span>
+                                <span class="daily-heatmap-val">${fmtNum(val)}</span>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `).join('')}
+        </div>
+        <div class="heatmap-legend">
+            <span>Low</span>
+            <div class="heatmap-gradient"></div>
+            <span>High (${fmtNum(maxVal)} tokens)</span>
+        </div>
+    `;
+};
+
+const renderModelHeatmap = (container, data) => {
+    // Get model usage over time
+    const modelUsage = {};
+    const timeSlots = [];
+    
+    data.forEach(d => {
+        const timeKey = new Date(d.time).toISOString().slice(0, 13); // Hourly buckets
+        if (!timeSlots.includes(timeKey)) timeSlots.push(timeKey);
+        
+        const models = d.tokens_by_model || d.models || {};
+        Object.entries(models).forEach(([model, tokens]) => {
+            if (!modelUsage[model]) modelUsage[model] = {};
+            if (!modelUsage[model][timeKey]) modelUsage[model][timeKey] = 0;
+            modelUsage[model][timeKey] += tokens || 0;
+        });
+    });
+
+    const sortedModels = Object.entries(modelUsage)
+        .sort((a, b) => Object.values(b[1]).reduce((s, v) => s + v, 0) - Object.values(a[1]).reduce((s, v) => s + v, 0))
+        .slice(0, 8);
+
+    const maxVal = Math.max(...sortedModels.flatMap(m => Object.values(m[1])), 1);
+    const timeLabels = timeSlots.slice(-24);
+
+    container.innerHTML = `
+        <div class="heatmap-title">Model Usage Intensity</div>
+        <div class="heatmap-wrapper">
+            <div class="heatmap-y-labels">
+                ${sortedModels.map(([model]) => {
+                    const shortName = model.split('/').pop();
+                    return `<div class="heatmap-y-label" title="${model}">${shortName}</div>`;
+                }).join('')}
+            </div>
+            <div class="heatmap-grid hourly">
+                <div class="heatmap-x-labels">
+                    ${timeLabels.map((_, i) => `<div class="heatmap-x-label">${i}</div>`).join('')}
+                </div>
+                <div class="heatmap-cells">
+                    ${sortedModels.map(([model, usage]) => `
+                        <div class="heatmap-row">
+                            ${timeLabels.map(time => {
+                                const val = usage[time] || 0;
+                                const intensity = val / maxVal;
+                                const opacity = 0.1 + (intensity * 0.9);
+                                return `
+                                    <div class="heatmap-cell-full model" 
+                                         style="background: rgba(251, 191, 36, ${opacity})"
+                                         title="${model} @ ${time} - ${fmtNum(val)} tokens">
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        </div>
+        <div class="heatmap-legend">
+            <span>Low</span>
+            <div class="heatmap-gradient"></div>
+            <span>High (${fmtNum(maxVal)} tokens)</span>
+        </div>
+    `;
+};
+
+const renderCostHeatmap = (container, data) => {
+    // Cost by hour and day
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const costMatrix = Array(7).fill(null).map(() => Array(24).fill(0));
+    
+    data.forEach(d => {
+        const date = new Date(d.time);
+        const day = date.getDay();
+        const hour = date.getHours();
+        // Estimate cost at $2 per 1M tokens
+        const cost = (d.total || 0) * 0.000002;
+        costMatrix[day][hour] += cost;
+    });
+
+    const maxCost = Math.max(...costMatrix.flat(), 0.01);
+
+    container.innerHTML = `
+        <div class="heatmap-title">Cost Intensity by Hour ($${(data.reduce((s, d) => s + (d.total || 0), 0) * 0.000002).toFixed(2)} total)</div>
+        <div class="heatmap-wrapper">
+            <div class="heatmap-y-labels">
+                ${days.map(d => `<div class="heatmap-y-label">${d}</div>`).join('')}
+            </div>
+            <div class="heatmap-grid hourly">
+                <div class="heatmap-x-labels">
+                    ${Array(24).fill(0).map((_, i) => `<div class="heatmap-x-label">${i}</div>`).join('')}
+                </div>
+                <div class="heatmap-cells">
+                    ${costMatrix.map((day, dayIdx) => `
+                        <div class="heatmap-row">
+                            ${day.map((cost, hour) => {
+                                const intensity = cost / maxCost;
+                                const opacity = 0.1 + (intensity * 0.9);
+                                return `
+                                    <div class="heatmap-cell-full cost" 
+                                         style="background: rgba(239, 68, 68, ${opacity})"
+                                         title="${days[dayIdx]} ${hour}:00 - $${cost.toFixed(3)}">
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        </div>
+        <div class="heatmap-legend">
+            <span>Low</span>
+            <div class="heatmap-gradient cost"></div>
+            <span>High ($${maxCost.toFixed(2)}/hr)</span>
+        </div>
+    `;
+};
+
+const updateHeatmap = () => {
+    renderHeatmapsTab();
+};
+
+// Export functions for window access
+export { 
+    generateDeepInsights, 
+    generateLLMInsights, 
+    loadGitBlame, 
+    investigateSpike, 
+    closeInvestigation, 
+    updateHeatmap,
+    showCommitDetails,
+    toggleSessionMessages,
+    closeCommitDetails
+};

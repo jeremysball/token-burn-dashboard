@@ -38,7 +38,10 @@ export default [
     }
   },
   {
-    files: ['tests/**/*.js', '**/*.test.js'],
+    files: ['tests/**/*.js', '**/*.spec.js', 'test-*.js'],
+    rules: {
+      'no-unused-vars': 'off'
+    },
     languageOptions: {
       globals: {
         ...globals.jest,
@@ -55,6 +58,6 @@ export default [
     }
   },
   {
-    ignores: ['node_modules/**', 'dist/**']
+    ignores: ['node_modules/**', 'dist/**', 'coverage/**', 'test-results/**']
   }
 ];

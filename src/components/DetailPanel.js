@@ -1,4 +1,4 @@
-import { formatNumber, formatPercent } from '../utils/formatters.js';
+
 
 export class DetailPanel {
   constructor({ title, rows }) {

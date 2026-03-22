@@ -20,10 +20,19 @@ export const fetchHistorical = async () => {
 };
 
 export const refreshData = async () => {
+    let tokens;
+
     try {
-        const tokens = await fetchTokens();
+        tokens = await fetchTokens();
+        updateData(tokens);
+    } catch (err) {
+        notify('Refresh failed: ' + err.message, 'error');
+        return;
+    }
+
+    try {
         const historical = await fetchHistorical();
-        
+
         // Use historical data for chart if available
         if (historical && historical.length > 0) {
             setFileHistoricalData(historical);
@@ -37,32 +46,50 @@ export const refreshData = async () => {
                 models: h.tokens_by_model || {}
             }));
             setHistoryData(chartData);
+            saveCache(tokens);
+
+            if (typeof window !== 'undefined' && window.renderAll) {
+                window.renderAll();
+            }
         }
-        
-        updateData(tokens);
-        notify('Data refreshed', 'success');
     } catch (err) {
-        notify('Refresh failed: ' + err.message, 'error');
+        console.warn('Historical refresh failed:', err.message);
     }
+
+    notify('Data refreshed', 'success');
 };
 
 export const updateData = (data) => {
+    const safeData = {
+        ...data,
+        total_tokens: data?.total_tokens || 0,
+        total_input: data?.total_input || 0,
+        total_output: data?.total_output || 0,
+        total_cache_read: data?.total_cache_read || 0,
+        total_cache_write: data?.total_cache_write || 0,
+        tokens_by_model: data?.tokens_by_model || {},
+        costs_by_model: data?.costs_by_model || {},
+        total_cost: data?.total_cost || { total: 0 },
+        files_processed: data?.files_processed || 0,
+        total_lines: data?.total_lines || 0
+    };
+
     const now = Date.now();
     
-    const newSignature = getDataSignature(data);
+    const newSignature = getDataSignature(safeData);
     const hasChanged = newSignature !== lastDataSignature;
     setLastDataSignature(newSignature);
     
     // Generate delta if we have previous data
     if (currentData) {
-        const dTotal = Math.max(0, data.total_tokens - currentData.total_tokens);
-        const dInput = Math.max(0, data.total_input - currentData.total_input);
-        const dOutput = Math.max(0, data.total_output - currentData.total_output);
-        const dCache = Math.max(0, data.total_cache_read - currentData.total_cache_read);
+        const dTotal = Math.max(0, safeData.total_tokens - currentData.total_tokens);
+        const dInput = Math.max(0, safeData.total_input - currentData.total_input);
+        const dOutput = Math.max(0, safeData.total_output - currentData.total_output);
+        const dCache = Math.max(0, safeData.total_cache_read - currentData.total_cache_read);
         
         const dModels = {};
-        Object.entries(data.tokens_by_model).forEach(([k, v]) => {
-            const prev = currentData.tokens_by_model[k] ? currentData.tokens_by_model[k].total : 0;
+        Object.entries(safeData.tokens_by_model).forEach(([k, v]) => {
+            const prev = currentData.tokens_by_model?.[k] ? currentData.tokens_by_model[k].total : 0;
             const diff = Math.max(0, v.total - prev);
             if (diff > 0) dModels[k] = diff;
         });
@@ -100,23 +127,23 @@ export const updateData = (data) => {
     const existingDay = weeklyData.find(d => d.day === dayKey);
     
     if (existingDay) {
-        if (data.total_tokens > existingDay.tokens) {
-            existingDay.tokens = data.total_tokens;
-            existingDay.models = data.tokens_by_model;
+        if (safeData.total_tokens > existingDay.tokens) {
+            existingDay.tokens = safeData.total_tokens;
+            existingDay.models = safeData.tokens_by_model;
         }
     } else {
         weeklyData.push({
             day: dayKey,
-            tokens: data.total_tokens,
-            models: data.tokens_by_model
+            tokens: safeData.total_tokens,
+            models: safeData.tokens_by_model
         });
         if (weeklyData.length > 7) {
             setWeeklyData(weeklyData.slice(-7));
         }
     }
     
-    setCurrentData(data);
-    saveCache(data);
+    setCurrentData(safeData);
+    saveCache(safeData);
     
     // Trigger render
     if (typeof window !== 'undefined' && window.renderAll) {
