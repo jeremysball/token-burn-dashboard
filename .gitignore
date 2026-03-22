@@ -8,6 +8,7 @@ node_modules/
 dist/*.png
 dist/*.jpg
 coverage/
+test-results/
 nohup.out
 test-*.js
 fix_ports.js
