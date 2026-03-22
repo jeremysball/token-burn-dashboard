@@ -320,11 +320,37 @@
             align-items: center;
             gap: 8px;
             margin-bottom: 8px;
+            flex-wrap: wrap;
         }
         .top-model-emoji { font-size: 1.2rem; }
         .top-model-name {
             font-size: 0.85rem;
             color: var(--mono-text-muted);
+            min-width: 0;
+        }
+        .pricing-source-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 6px;
+            border-radius: 999px;
+            border: 1px solid var(--mono-border);
+            font-size: 0.6rem;
+            line-height: 1;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            white-space: nowrap;
+            flex: 0 0 auto;
+        }
+        .pricing-source-badge.openrouter {
+            color: var(--mono-accent);
+            background: rgba(251, 191, 36, 0.12);
+            border-color: rgba(251, 191, 36, 0.28);
+        }
+        .pricing-source-badge.local {
+            color: var(--mono-text-muted);
+            background: var(--mono-surface-hover);
+            border-color: var(--mono-border);
         }
         .top-model-value {
             font-size: 1.5rem;

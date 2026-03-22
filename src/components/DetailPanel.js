@@ -1,9 +1,27 @@
 
 
+const normalizePricingSource = (source) => {
+  const value = String(source || 'local').toLowerCase();
+  if (value === 'openrouter') {
+    return {
+      source: 'openrouter',
+      label: 'OpenRouter',
+      title: 'Pricing sourced from OpenRouter'
+    };
+  }
+
+  return {
+    source: 'local',
+    label: 'Local',
+    title: 'Using local fallback pricing'
+  };
+};
+
 export class DetailPanel {
-  constructor({ title, rows }) {
+  constructor({ title, rows, pricingSource }) {
     this.title = title || '—';
     this.rows = rows || [];
+    this.pricingSource = normalizePricingSource(pricingSource);
   }
 
   render() {
@@ -17,13 +35,24 @@ export class DetailPanel {
     label.className = 'mono-detail__label';
     label.textContent = 'selected model';
 
+    const titleRow = document.createElement('div');
+    titleRow.className = 'mono-detail__title-row';
+
     const title = document.createElement('div');
     title.className = 'mono-detail__title';
     title.id = 'detail-title';
     title.textContent = this.title;
 
+    this.sourceBadge = document.createElement('span');
+    this.sourceBadge.className = `pricing-source-badge ${this.pricingSource.source}`;
+    this.sourceBadge.textContent = this.pricingSource.label;
+    this.sourceBadge.title = this.pricingSource.title;
+
+    titleRow.appendChild(title);
+    titleRow.appendChild(this.sourceBadge);
+
     header.appendChild(label);
-    header.appendChild(title);
+    header.appendChild(titleRow);
     el.appendChild(header);
 
     this.rowsContainer = document.createElement('div');
@@ -33,14 +62,25 @@ export class DetailPanel {
     return el;
   }
 
-  update(title, rows) {
+  update(title, rows, { pricingSource } = {}) {
     this.title = title;
     this.rows = rows;
+
+    if (pricingSource !== undefined) {
+      this.pricingSource = normalizePricingSource(pricingSource);
+    }
 
     const titleEl = document.querySelector('#detail-title');
     if (titleEl) {
       titleEl.textContent = title;
     }
+
+    if (this.sourceBadge) {
+      this.sourceBadge.className = `pricing-source-badge ${this.pricingSource.source}`;
+      this.sourceBadge.textContent = this.pricingSource.label;
+      this.sourceBadge.title = this.pricingSource.title;
+    }
+
     this.updateRows(rows);
   }
 

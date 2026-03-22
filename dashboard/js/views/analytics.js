@@ -1,5 +1,5 @@
-import { CHART_COLORS } from '../config.js';
-import { fmtNum, fmtInt, getPlotlyLayout, notify } from '../utils.js';
+import { CHART_COLORS, getPricing } from '../config.js';
+import { fmtNum, fmtInt, fmtCur, getPlotlyLayout, notify } from '../utils.js';
 import { currentData, historyData, fileHistoricalData, analyticsRange, setAnalyticsRange, setAnalyticsTab, sortCol, sortAsc, setSortCol, setSortAsc, searchTerm, setSearchTerm } from '../state.js';
 
 const isCompactViewport = () => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
@@ -40,6 +40,39 @@ const bindHeatmapInteractions = (container) => {
             cell.click();
         }
     });
+};
+
+const getPricingForModel = (name) => {
+    return currentData?.pricing_by_model?.[name] || getPricing(name);
+};
+
+const formatModelPrice = (pricing) => {
+    if (!pricing) return 'Price unavailable';
+
+    const input = fmtCur(pricing.input || 0);
+    const output = fmtCur(pricing.output || 0);
+
+    return `${input} in / ${output} out`;
+};
+
+const formatModelPriceDetails = (pricing) => {
+    if (!pricing) return 'Price unavailable';
+
+    const input = fmtCur(pricing.input || 0);
+    const output = fmtCur(pricing.output || 0);
+    const cacheRead = fmtCur(pricing.cacheRead || 0);
+    const cacheWrite = fmtCur(pricing.cacheWrite || 0);
+
+    return `${input} in / ${output} out · cache ${cacheRead} read / ${cacheWrite} write`;
+};
+
+const getPricingSourceMeta = (pricing) => {
+    const source = pricing?.source === 'openrouter' ? 'openrouter' : 'local';
+    return {
+        source,
+        label: source === 'openrouter' ? 'OpenRouter' : 'Local',
+        title: source === 'openrouter' ? 'Pricing sourced from OpenRouter' : 'Using local fallback pricing'
+    };
 };
 
 // ===== ANALYTICS VIEW WITH TABS =====
@@ -121,12 +154,26 @@ const renderModelsTab = () => {
         const cost = costs_by_model?.[name]?.total || 0;
         const color = CHART_COLORS[index % CHART_COLORS.length];
         const sparkData = historyData.slice(-20).map(h => (h.models?.[name]) || 0);
+        const pricing = getPricingForModel(name);
+        const priceSummary = formatModelPrice(pricing);
+        const priceTitle = `${formatModelPriceDetails(pricing)} · ${pricing.source === 'openrouter' ? 'OpenRouter' : 'local fallback'}`;
+        const sourceMeta = getPricingSourceMeta(pricing);
 
         return `
             <tr style="animation-delay: ${index * 0.05}s">
                 <td>
-                    <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${color}; margin-right: 8px;"></span>
-                    ${name.split('/').pop()}
+                    <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+                        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${color}; flex: 0 0 auto;"></span>
+                        <div style="display: flex; flex-direction: column; min-width: 0;">
+                            <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${name.split('/').pop()}</span>
+                            <div style="display: flex; align-items: center; gap: 6px; min-width: 0; margin-top: 2px;">
+                                <span class="pricing-source-badge ${sourceMeta.source}" title="${sourceMeta.title}">${sourceMeta.label}</span>
+                                <span class="model-price" title="${priceTitle}" style="font-size: 0.72rem; color: var(--mono-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                    ${priceSummary}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
                 </td>
                 <td>${createSparkline(sparkData, 80, 25)}</td>
                 <td class="num">${fmtNum(stats.total)}</td>

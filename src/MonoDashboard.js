@@ -104,7 +104,8 @@ export class MonoDashboard {
     // Detail panel
     this.detailPanel = new DetailPanel({
       title: this.selected?.name || '—',
-      rows: this.getDetailRows(this.selected)
+      rows: this.getDetailRows(this.selected),
+      pricingSource: this.getPricingSource(this.selected)
     });
 
     grid.appendChild(this.detailPanel.render());
@@ -123,7 +124,14 @@ export class MonoDashboard {
 
   handleSelect(row) {
     this.selected = row;
-    this.detailPanel.update(row.name, this.getDetailRows(row));
+    this.detailPanel.update(row.name, this.getDetailRows(row), {
+      pricingSource: this.getPricingSource(row)
+    });
+  }
+
+  getPricingSource(row) {
+    const source = row?.pricingSource || row?.pricing_source || row?.priceSource || row?.price_source || row?.pricing?.source;
+    return source || 'local';
   }
 
   getDetailRows(row) {

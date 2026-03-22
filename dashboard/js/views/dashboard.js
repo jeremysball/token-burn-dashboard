@@ -1,5 +1,5 @@
-import { CHART_COLORS, getEmoji } from '../config.js';
-import { fmtNum, createSparkline } from '../utils.js';
+import { CHART_COLORS, getEmoji, getPricing } from '../config.js';
+import { fmtNum, fmtCur, createSparkline } from '../utils.js';
 import { currentData, historyData, fileHistoricalData } from '../state.js';
 
 // ===== FLASHY DASHBOARD =====
@@ -214,12 +214,33 @@ const renderTopModels = (tokens_by_model, fullRender = true) => {
         if (!card) return;
         
         const valueEl = card.querySelector('.top-model-value');
+        const priceEl = card.querySelector('.top-model-price');
+        const sourceEl = card.querySelector('.pricing-source-badge');
         const sparkEl = card.querySelector('.top-model-spark');
+        const pricing = currentData?.pricing_by_model?.[name] || getPricing(name);
+        const priceSummary = `${fmtCur(pricing.input || 0)} in / ${fmtCur(pricing.output || 0)} out`;
+        const priceDetails = `${priceSummary} · cache ${fmtCur(pricing.cacheRead || 0)} read / ${fmtCur(pricing.cacheWrite || 0)} write · ${pricing.source === 'openrouter' ? 'OpenRouter' : 'local fallback'}`;
+        const sourceLabel = pricing.source === 'openrouter' ? 'OpenRouter' : 'Local';
+        const sourceTitle = pricing.source === 'openrouter'
+            ? 'Pricing sourced from OpenRouter'
+            : 'Using local fallback pricing';
+        const sourceClass = pricing.source === 'openrouter' ? 'openrouter' : 'local';
         
         if (valueEl && valueEl.textContent !== fmtNum(stats.total)) {
             valueEl.textContent = fmtNum(stats.total);
             valueEl.classList.add('value-updated');
             setTimeout(() => valueEl.classList.remove('value-updated'), 300);
+        }
+        
+        if (priceEl && priceEl.textContent.trim() !== priceSummary) {
+            priceEl.textContent = priceSummary;
+            priceEl.title = priceDetails;
+        }
+        
+        if (sourceEl && (sourceEl.textContent !== sourceLabel || !sourceEl.classList.contains(sourceClass))) {
+            sourceEl.textContent = sourceLabel;
+            sourceEl.className = `pricing-source-badge ${sourceClass}`;
+            sourceEl.title = sourceTitle;
         }
         
         if (sparkEl) {
@@ -232,12 +253,24 @@ const renderTopModels = (tokens_by_model, fullRender = true) => {
 const createTopModelCard = (name, stats, i) => {
     const sparkData = historyData.slice(-15).map(h => (h.models && h.models[name]) || 0);
     const color = CHART_COLORS[i % CHART_COLORS.length];
+    const pricing = currentData?.pricing_by_model?.[name] || getPricing(name);
+    const priceSummary = `${fmtCur(pricing.input || 0)} in / ${fmtCur(pricing.output || 0)} out`;
+    const priceDetails = `${priceSummary} · cache ${fmtCur(pricing.cacheRead || 0)} read / ${fmtCur(pricing.cacheWrite || 0)} write · ${pricing.source === 'openrouter' ? 'OpenRouter' : 'local fallback'}`;
+    const sourceLabel = pricing.source === 'openrouter' ? 'OpenRouter' : 'Local';
+    const sourceClass = pricing.source === 'openrouter' ? 'openrouter' : 'local';
+    const sourceTitle = pricing.source === 'openrouter'
+        ? 'Pricing sourced from OpenRouter'
+        : 'Using local fallback pricing';
 
     return `
         <div class="top-model-card" style="--card-color: ${color}">
             <div class="top-model-header">
                 <span class="top-model-emoji">${getEmoji(name)}</span>
                 <span class="top-model-name">${name.split('/').pop()}</span>
+                <span class="pricing-source-badge ${sourceClass}" title="${sourceTitle}">${sourceLabel}</span>
+            </div>
+            <div class="top-model-price" title="${priceDetails}" style="font-size: 0.72rem; color: var(--mono-text-muted); margin-top: 2px;">
+                ${priceSummary}
             </div>
             <div class="top-model-value" style="color: ${color}">
                 ${fmtNum(stats.total)}
