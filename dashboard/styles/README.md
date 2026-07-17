@@ -16,7 +16,7 @@ places.
 
 | Selector group | Owner | Notes |
 | --- | --- | --- |
-| `:root` base variables and `[data-theme="light"]` | `main.css` | Source of truth for theme tokens. |
+| `:root` base variables and `[data-theme="light"]` | `main.css` (base) + `design-v2.css` (override) | Both files define `:root` and `[data-theme="light"]`. `main.css` provides the base/fallback token set; `design-v2.css` is loaded afterward and intentionally overrides the theme tokens with a darker palette plus its own radius/shadow/source-color variables. This override is deliberate, not a stray duplicate — do not "consolidate" it or the live theme regresses. |
 | `pricing-source-badge`, `.openrouter`, `.local` | `design-v2.css` | Base definitions removed from `main.css`. |
 | `top-model-name` | `design-v2.css` | Base definition removed from `main.css`. |
 | `hero-section`, `hero-stat`, `hero-stat.primary`, `hero-label`, `hero-value` | `design-v2.css` | Base definitions removed from `main.css`. `main.css` retains `hero-spark` / `hero-spark svg`, which are unique to it. |

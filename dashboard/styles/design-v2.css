@@ -204,7 +204,14 @@ body {
 
 /* ===== Hero section redesign ===== */
 .hero-section {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
   gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 768px) {
+  .hero-section { grid-template-columns: 1fr; }
 }
 
 .hero-stat {
@@ -259,6 +266,17 @@ body {
   letter-spacing: -0.03em;
   line-height: 1;
   font-variant-numeric: tabular-nums;
+  transition: color 0.2s ease;
+}
+
+.hero-value.pulse {
+  animation: pulse-value 0.5s ease;
+}
+
+@keyframes pulse-value {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); color: var(--mono-accent); }
+  100% { transform: scale(1); }
 }
 
 /* Burn rate redesign */
@@ -514,8 +532,22 @@ body {
 }
 
 /* ===== Insights redesign ===== */
+.insights-section {
+  margin-bottom: 24px;
+}
+
 .insights-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
   gap: 14px;
+}
+
+@media (max-width: 1200px) {
+  .insights-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 640px) {
+  .insights-grid { grid-template-columns: 1fr; }
 }
 
 .insight-card {
