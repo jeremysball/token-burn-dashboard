@@ -17,6 +17,8 @@ Fix: `normalizePrice` now short-circuits `null`, `undefined`, and empty-string v
 
 Added regression test `preserves local pricing when OpenRouter supplies explicit null aliases` that sets `input_cache_read`/`input_cache_write`/`cache_read`/`cache_write` to explicit `null` and verifies `getPricing` still returns local `cacheRead: 1.25` and `cacheWrite: 0`.
 
+Added two focused regression tests asserting a legitimate numeric zero is preserved and does not fall through to local/default pricing. `keeps legitimate numeric zero and does not fall through to local pricing` sets `prompt`/`completion`/`input_cache_read`/`input_cache_write` to the string `'0'` and verifies `getPricing` returns `source: 'openrouter'` with `input`/`output`/`cacheRead`/`cacheWrite` all exactly `0` (and not the local `2.5`/`10`). `keeps numeric zero supplied as a number and does not fall through to local pricing` passes numeric `0` through `buildOpenRouterPricingRecord` and verifies the same fields stay `0` and not `undefined`. These guard the `priceToPerMillion(0) === 0` path in `normalizePrice`, complementing the null-to-`undefined` short-circuit.
+
 ## RED
 
 Command:
