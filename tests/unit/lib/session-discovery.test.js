@@ -7,6 +7,8 @@ const os = require('os');
 const path = require('path');
 const config = require('../../../lib/config');
 
+const DISCOVERY_PATH = '../../../lib/session-discovery';
+
 describe('Session Discovery', () => {
   const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'disc-test-'));
 
@@ -20,11 +22,19 @@ describe('Session Discovery', () => {
     return p;
   }
 
+  function makeFileIn(p, size = 64) {
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, 'x'.repeat(size));
+  }
+
+  afterEach(() => {
+    delete process.env.EXTRA_SESSION_DIRS;
+  });
+
   it('excludes .deleted. jsonl files', () => {
     makeFile('session-1.jsonl');
     makeFile('session-1.deleted.jsonl');
-    const discovery = require('../../../lib/session-discovery');
-    // Override bases with our temp dir
+    const discovery = require(DISCOVERY_PATH);
     discovery.PI_SESSION_BASES.length = 0;
     discovery.PI_SESSION_BASES.push(tmpBase);
     const files = discovery.findPiJsonlFiles();
@@ -36,7 +46,7 @@ describe('Session Discovery', () => {
   it('enforces the configured maximum file size from MAX_FILE_BYTES', () => {
     makeFile('small.jsonl', 64);
     makeFile('big.jsonl', config.MAX_FILE_BYTES + 1);
-    const discovery = require('../../../lib/session-discovery');
+    const discovery = require(DISCOVERY_PATH);
     discovery.PI_SESSION_BASES.length = 0;
     discovery.PI_SESSION_BASES.push(tmpBase);
     const files = discovery.findPiJsonlFiles();
@@ -45,68 +55,83 @@ describe('Session Discovery', () => {
     expect(names).not.toContain('big.jsonl');
   });
 
-  it('deduplicates discovered files by realpath', () => {
-    makeFile('dup.jsonl');
+  it('deduplicates symlinked aliases by realpath and supports symlink jsonl', () => {
+    const realDir = path.join(tmpBase, 'realdir');
+    fs.mkdirSync(realDir, { recursive: true });
+    const realPath = path.join(realDir, 'dup.jsonl');
+    fs.writeFileSync(realPath, 'x'.repeat(64));
+
     const linkDir = path.join(tmpBase, 'linkdir');
     fs.mkdirSync(linkDir, { recursive: true });
     const linkPath = path.join(linkDir, 'dup-linked.jsonl');
-    try {
-      fs.linkSync(path.join(tmpBase, 'dup.jsonl'), linkPath);
-    } catch {
-      // hardlinks may be unsupported; skip gracefully
-      return;
-    }
-    const discovery = require('../../../lib/session-discovery');
+    fs.symlinkSync(realPath, linkPath);
+
+    const discovery = require(DISCOVERY_PATH);
     discovery.PI_SESSION_BASES.length = 0;
-    discovery.PI_SESSION_BASES.push(tmpBase, linkDir);
+    discovery.PI_SESSION_BASES.push(realDir, linkDir);
     const files = discovery.findPiJsonlFiles();
+    // Both aliases are scanned (symlink jsonl supported), but collapse to one.
+    expect(files.length).toBe(1);
     const reals = new Set(files.map(f => fs.realpathSync(f.path)));
     expect(reals.size).toBe(1);
   });
 
-  it('includes home-directory session bases', () => {
+  it('reads home-directory session bases from the environment at init', () => {
     const homeDir = path.join(os.tmpdir(), `home-${Date.now()}`);
-    fs.mkdirSync(path.join(homeDir, '.pi', 'sessions'), { recursive: true });
     makeFileIn(path.join(homeDir, '.pi', 'sessions', 'home-session.jsonl'));
-    const discovery = require('../../../lib/session-discovery');
-    const orig = process.env.HOME;
-    process.env.HOME = homeDir;
-    jest.resetModules();
-    const reset = require('../../../lib/session-discovery');
+
+    const origExtra = process.env.EXTRA_SESSION_DIRS;
+    const homedirSpy = jest.spyOn(os, 'homedir').mockReturnValue(homeDir);
     try {
-      // Force re-evaluation of bases via a fresh require after env set
-      const mod = require('../../../lib/session-discovery');
-      mod.PI_SESSION_BASES.length = 0;
-      mod.PI_SESSION_BASES.push(path.join(homeDir, '.pi', 'sessions'));
-      const files = mod.findPiJsonlFiles();
+      delete process.env.EXTRA_SESSION_DIRS;
+      jest.resetModules();
+      const discovery = require(DISCOVERY_PATH);
+      const homeBase = path.join(homeDir, '.pi', 'sessions');
+      expect(discovery.PI_SESSION_BASES).toContain(homeBase);
+      const files = discovery.findPiJsonlFiles();
       const names = files.map(f => path.basename(f.path));
       expect(names).toContain('home-session.jsonl');
     } finally {
-      if (orig === undefined) delete process.env.HOME;
-      else process.env.HOME = orig;
+      homedirSpy.mockRestore();
+      if (origExtra === undefined) delete process.env.EXTRA_SESSION_DIRS;
+      else process.env.EXTRA_SESSION_DIRS = origExtra;
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
   });
 
-  it('supports EXTRA_SESSION_DIRS', () => {
-    const extraDir = path.join(tmpBase, 'extra');
-    fs.mkdirSync(extraDir, { recursive: true });
+  it('reads EXTRA_SESSION_DIRS from the environment at init', () => {
+    const extraDir = path.join(tmpBase, `extra-${Date.now()}`);
     makeFileIn(path.join(extraDir, 'extra-session.jsonl'));
-    const orig = process.env.EXTRA_SESSION_DIRS;
+
+    const origExtra = process.env.EXTRA_SESSION_DIRS;
     process.env.EXTRA_SESSION_DIRS = extraDir;
-    const discovery = require('../../../lib/session-discovery');
-    // Simulating env-driven expansion: rebuild bases
-    discovery.PI_SESSION_BASES.length = 0;
-    (process.env.EXTRA_SESSION_DIRS || '').split(/[:,]/).map(s => s.trim()).filter(Boolean)
-      .forEach(d => discovery.PI_SESSION_BASES.push(d));
-    const files = discovery.findPiJsonlFiles();
-    const names = files.map(f => path.basename(f.path));
-    expect(names).toContain('extra-session.jsonl');
-    if (orig === undefined) delete process.env.EXTRA_SESSION_DIRS;
-    else process.env.EXTRA_SESSION_DIRS = orig;
+    try {
+      jest.resetModules();
+      const discovery = require(DISCOVERY_PATH);
+      expect(discovery.PI_SESSION_BASES).toContain(extraDir);
+      const files = discovery.findPiJsonlFiles();
+      const names = files.map(f => path.basename(f.path));
+      expect(names).toContain('extra-session.jsonl');
+    } finally {
+      if (origExtra === undefined) delete process.env.EXTRA_SESSION_DIRS;
+      else process.env.EXTRA_SESSION_DIRS = origExtra;
+      fs.rmSync(extraDir, { recursive: true, force: true });
+    }
   });
 
-  function makeFileIn(p) {
-    fs.writeFileSync(p, 'x'.repeat(64));
-  }
+  it('uses os.homedir() for Claude projects root when CLAUDE_PROJECTS_DIR is unset', () => {
+    const fakeHome = path.join(os.tmpdir(), `claude-home-${Date.now()}`);
+    const orig = process.env.CLAUDE_PROJECTS_DIR;
+    const homedirSpy = jest.spyOn(os, 'homedir').mockReturnValue(fakeHome);
+    try {
+      delete process.env.CLAUDE_PROJECTS_DIR;
+      jest.resetModules();
+      const discovery = require(DISCOVERY_PATH);
+      expect(discovery.CLAUDE_PROJECTS_ROOT).toBe(path.join(fakeHome, '.claude/projects'));
+    } finally {
+      homedirSpy.mockRestore();
+      if (orig === undefined) delete process.env.CLAUDE_PROJECTS_DIR;
+      else process.env.CLAUDE_PROJECTS_DIR = orig;
+    }
+  });
 });
