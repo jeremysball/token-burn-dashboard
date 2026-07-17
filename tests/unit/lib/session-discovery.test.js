@@ -30,9 +30,14 @@ describe('Session Discovery', () => {
       homedirSpy.mockRestore();
       homedirSpy = null;
     }
-    process.env.HOME = origEnv.HOME;
-    process.env.EXTRA_SESSION_DIRS = origEnv.EXTRA_SESSION_DIRS;
-    process.env.CLAUDE_PROJECTS_DIR = origEnv.CLAUDE_PROJECTS_DIR;
+    // Restore original env: delete vars that were originally absent (assigning
+    // undefined would coerce to the literal string "undefined" and leak).
+    if (origEnv.HOME === undefined) delete process.env.HOME;
+    else process.env.HOME = origEnv.HOME;
+    if (origEnv.EXTRA_SESSION_DIRS === undefined) delete process.env.EXTRA_SESSION_DIRS;
+    else process.env.EXTRA_SESSION_DIRS = origEnv.EXTRA_SESSION_DIRS;
+    if (origEnv.CLAUDE_PROJECTS_DIR === undefined) delete process.env.CLAUDE_PROJECTS_DIR;
+    else process.env.CLAUDE_PROJECTS_DIR = origEnv.CLAUDE_PROJECTS_DIR;
     jest.resetModules();
   });
 
@@ -165,5 +170,13 @@ describe('Session Discovery', () => {
     delete process.env.CLAUDE_PROJECTS_DIR;
     const discovery = loadWithHome(fakeHome);
     expect(discovery.CLAUDE_PROJECTS_ROOT).toBe(path.join(fakeHome, '.claude/projects'));
+  });
+
+  it('cleanup restores absent env vars via delete, not literal "undefined"', () => {
+    // afterEach runs after the previous test; an originally-absent var must
+    // remain absent (or its original value), never the string "undefined".
+    expect(process.env.EXTRA_SESSION_DIRS).not.toBe('undefined');
+    expect(process.env.CLAUDE_PROJECTS_DIR).not.toBe('undefined');
+    expect(process.env.HOME).not.toBe('undefined');
   });
 });
