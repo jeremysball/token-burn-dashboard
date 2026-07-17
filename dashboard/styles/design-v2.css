@@ -1,6 +1,12 @@
 /* ============================================
    Design v2 - Modern Token Burn Dashboard
    Supports Pi, Claude, Opencode
+   ============================================
+   Owner: design-v2.css for badges/cards (pricing-source-badge, top-model-name),
+   hero section, scale (scale-hero/scale-grid), and insights. These selectors are
+   duplicated in main.css, which is the currently-loaded runtime stylesheet.
+   See dashboard/styles/README.md for the selector-ownership policy and the
+   migration note about when main.css duplicates may be removed.
    ============================================ */
 
 :root {

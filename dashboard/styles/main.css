@@ -1,3 +1,11 @@
+        /* Owner: main.css is the only stylesheet currently loaded by dashboard/index.html.
+           It is the runtime source of truth for component base styles (hero, top-model,
+           badges, insights, scale). design-v2.css holds the v2 *redesign* definitions and
+           is the documented owner for those selectors, but it is NOT linked in the app yet.
+           See dashboard/styles/README.md for selector-ownership policy.
+           NOTE: do not delete component base definitions from main.css until design-v2.css
+           is actually loaded by index.html, or the live dashboard loses those styles. */
+
         :root {
             --mono-bg: #0a0a0a;
             --mono-surface: #141414;
