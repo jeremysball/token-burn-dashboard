@@ -5,8 +5,14 @@
 const { parsePiUsage, parseClaudeUsage } = require('../../../lib/session-parser');
 
 describe('parsePiUsage', () => {
-  it('includes reasoning in the computed total', () => {
+  it('preserves explicit totalTokens of 0 (not truthy fallback)', () => {
     const u = parsePiUsage({ input: 1, output: 1, reasoning: 5, totalTokens: 0 });
+    expect(u.total).toBe(0);
+    expect(u.reasoning).toBe(5);
+  });
+
+  it('computes total from components when totalTokens absent', () => {
+    const u = parsePiUsage({ input: 1, output: 1, reasoning: 5 });
     expect(u.total).toBe(7);
     expect(u.reasoning).toBe(5);
   });
@@ -56,6 +62,12 @@ describe('parseClaudeUsage', () => {
   it('preserves explicit totalTokens when provided', () => {
     const u = parseClaudeUsage({ input_tokens: 1, output_tokens: 1, reasoning_tokens: 5, totalTokens: 50 });
     expect(u.total).toBe(50);
+  });
+
+  it('preserves explicit totalTokens of 0 (not truthy fallback)', () => {
+    const u = parseClaudeUsage({ input_tokens: 1, output_tokens: 1, reasoning_tokens: 5, totalTokens: 0 });
+    expect(u.total).toBe(0);
+    expect(u.reasoning).toBe(5);
   });
 
   it('handles zero values without NaN', () => {

@@ -46,6 +46,18 @@ const getPricingForModel = (name) => {
     return currentData?.pricing_by_model?.[name] || getPricing(name);
 };
 
+/**
+ * Derive the cache discount ratio (cacheRead / input) from model pricing.
+ * A valid numeric cacheRead of 0 yields a 0 ratio. The 0.1 fallback is used
+ * only when pricing is missing or not a valid number.
+ */
+export const cacheDiscountRatioFromPricing = (pricing) => {
+    const hasPricing = typeof pricing?.cacheRead === 'number' && !isNaN(pricing.cacheRead)
+        && typeof pricing?.input === 'number' && !isNaN(pricing.input);
+    if (!hasPricing) return 0.1;
+    return pricing.input > 0 ? pricing.cacheRead / pricing.input : 0;
+};
+
 const formatModelPrice = (pricing) => {
     if (!pricing) return 'Price unavailable';
 
@@ -461,9 +473,7 @@ const calculateDeepInsights = () => {
     const pricing = getPricingForModel(topModel) || { input: 3, output: 15, cacheRead: 0.3 };
 
     // Real cache discount ratio derived from model pricing (cacheRead/input)
-    const cacheDiscountRatio = pricing.cacheRead && pricing.input
-        ? pricing.cacheRead / pricing.input
-        : 0.1;
+    const cacheDiscountRatio = cacheDiscountRatioFromPricing(pricing);
 
     // Average input cost per token, falling back to a sensible default
     const avgInputCostPerToken = totalInput > 0 && total_cost?.input
@@ -1661,7 +1671,7 @@ const updateHeatmap = () => {
 
 // Export functions for window access
 export { 
-    generateDeepInsights, 
+    generateDeepInsights,
     generateLLMInsights, 
     loadGitBlame, 
     investigateSpike, 
