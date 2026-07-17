@@ -11,4 +11,4 @@ coverage/
 test-results/
 nohup.out
 test-*.js
-fix_ports.js
+fix_ports.js.worktrees/
