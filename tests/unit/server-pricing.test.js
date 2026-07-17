@@ -141,6 +141,72 @@ describe('server pricing', () => {
     expect(pricing.output).not.toBe(10);
   });
 
+  it('merge keeps local values when OpenRouter record carries explicit null aliases (production merge path)', () => {
+    const localPricing = findLocalPricing('openai/gpt-4o');
+    expect(localPricing.input).toBe(2.5);
+    expect(localPricing.cacheRead).toBe(1.25);
+    expect(localPricing.cacheWrite).toBe(0);
+
+    setOpenRouterPricingSnapshot({
+      fetchedAt: Date.now(),
+      source: 'openrouter',
+      models: [{
+        id: 'openai/gpt-4o',
+        canonical_slug: 'openai/gpt-4o',
+        name: 'OpenAI: GPT-4o',
+        pricing: {
+          prompt: '0.0000025',
+          completion: '0.00001',
+          input_cache_read: null,
+          input_cache_write: null,
+          cache_read: null,
+          cache_write: null
+        }
+      }],
+      error: null
+    });
+
+    const merged = getPricing('openai/gpt-4o');
+    expect(merged.source).toBe('openrouter');
+    expect(merged.input).toBe(2.5);
+    expect(merged.output).toBe(10);
+    expect(merged.cacheRead).toBe(1.25);
+    expect(merged.cacheWrite).toBe(0);
+    expect(merged.cacheRead).not.toBeNull();
+    expect(merged.cacheWrite).not.toBeNull();
+  });
+
+  it('keeps legitimate numeric zero through the production merge path (no fallthrough)', () => {
+    setOpenRouterPricingSnapshot({
+      fetchedAt: Date.now(),
+      source: 'openrouter',
+      models: [{
+        id: 'openai/gpt-4o',
+        canonical_slug: 'openai/gpt-4o',
+        name: 'OpenAI: GPT-4o',
+        pricing: {
+          prompt: '0',
+          completion: '0',
+          input_cache_read: '0',
+          input_cache_write: '0',
+          cache_read: '0',
+          cache_write: '0'
+        }
+      }],
+      error: null
+    });
+
+    const merged = getPricing('openai/gpt-4o');
+    expect(merged.source).toBe('openrouter');
+    expect(merged.input).toBe(0);
+    expect(merged.output).toBe(0);
+    expect(merged.cacheRead).toBe(0);
+    expect(merged.cacheWrite).toBe(0);
+    expect(merged.input).not.toBe(2.5);
+    expect(merged.output).not.toBe(10);
+    expect(merged.input).not.toBeUndefined();
+  });
+
   it('keeps numeric zero supplied as a number and does not fall through to local pricing', () => {
     const record = buildOpenRouterPricingRecord({
       id: 'free/model',
