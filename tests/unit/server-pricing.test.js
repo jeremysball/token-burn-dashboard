@@ -3,7 +3,7 @@ const {
   getOpenRouterPricingRecord,
   setOpenRouterPricingSnapshot
 } = require('../../lib/openrouter');
-const { getPricing, calculateCost } = require('../../lib/pricing');
+const { findLocalPricing, getPricing, calculateCost } = require('../../lib/pricing');
 
 describe('server pricing', () => {
   beforeEach(() => {
@@ -36,7 +36,51 @@ describe('server pricing', () => {
       input: 2.5,
       output: 10,
       cacheRead: 1.25,
-      cacheWrite: null,
+      cacheWrite: undefined,
+      source: 'openrouter'
+    });
+  });
+
+  it('does not match embed-m3 as Minimax M3', () => {
+    expect(findLocalPricing('task-embed-m3-model')).toMatchObject({
+      input: 2.5,
+      output: 10
+    });
+  });
+
+  it('matches Minimax M3 through a provider prefix', () => {
+    expect(findLocalPricing('opencode-go/minimax-m3')).toMatchObject({
+      input: 0.5,
+      output: 2
+    });
+  });
+
+  it('does not match an unrelated model containing k2', () => {
+    expect(findLocalPricing('task2')).toMatchObject({
+      input: 2.5,
+      output: 10
+    });
+  });
+
+  it('preserves local pricing when OpenRouter omits cache prices', () => {
+    setOpenRouterPricingSnapshot({
+      fetchedAt: Date.now(),
+      source: 'openrouter',
+      models: [{
+        id: 'openai/gpt-4o',
+        pricing: {
+          prompt: '0.000001',
+          completion: '0.000002'
+        }
+      }],
+      error: null
+    });
+
+    expect(getPricing('openai/gpt-4o')).toMatchObject({
+      input: 1,
+      output: 2,
+      cacheRead: 1.25,
+      cacheWrite: 0,
       source: 'openrouter'
     });
   });
