@@ -1,5 +1,5 @@
-import { CHART_COLORS, getEmoji, getPricing } from '../config.js';
-import { fmtNum, fmtCur, createSparkline } from '../utils.js';
+import { CHART_COLORS, getEmoji, getPricing, getPricingForModel } from '../config.js';
+import { fmtNum, fmtCur, createSparkline, splitModelKey, displayModel, escapeHtml, parseModelKey } from '../utils.js';
 import { currentData, historyData, fileHistoricalData } from '../state.js';
 
 // ===== FLASHY DASHBOARD =====
@@ -216,8 +216,10 @@ const renderTopModels = (tokens_by_model, fullRender = true) => {
         const valueEl = card.querySelector('.top-model-value');
         const priceEl = card.querySelector('.top-model-price');
         const sourceEl = card.querySelector('.pricing-source-badge');
+        const providerEl = card.querySelector('.provider-badge');
         const sparkEl = card.querySelector('.top-model-spark');
-        const pricing = currentData?.pricing_by_model?.[name] || getPricing(name);
+        const modelNameEl = card.querySelector('.top-model-name');
+        const pricing = getPricingForModel(name, currentData?.pricing_by_model) || getPricing(name);
         const priceSummary = `${fmtCur(pricing.input || 0)} in / ${fmtCur(pricing.output || 0)} out`;
         const priceDetails = `${priceSummary} · cache ${fmtCur(pricing.cacheRead || 0)} read / ${fmtCur(pricing.cacheWrite || 0)} write · ${pricing.source === 'openrouter' ? 'OpenRouter' : 'local fallback'}`;
         const sourceLabel = pricing.source === 'openrouter' ? 'OpenRouter' : 'Local';
@@ -225,6 +227,7 @@ const renderTopModels = (tokens_by_model, fullRender = true) => {
             ? 'Pricing sourced from OpenRouter'
             : 'Using local fallback pricing';
         const sourceClass = pricing.source === 'openrouter' ? 'openrouter' : 'local';
+        const { provider, model } = splitModelKey(name);
         
         if (valueEl && valueEl.textContent !== fmtNum(stats.total)) {
             valueEl.textContent = fmtNum(stats.total);
@@ -242,10 +245,22 @@ const renderTopModels = (tokens_by_model, fullRender = true) => {
             sourceEl.className = `pricing-source-badge ${sourceClass}`;
             sourceEl.title = sourceTitle;
         }
+
+        if (providerEl && providerEl.textContent !== provider) {
+            providerEl.textContent = provider;
+        }
+
+        if (modelNameEl) {
+            const display = escapeHtml(model);
+            if (modelNameEl.textContent !== model) {
+                modelNameEl.textContent = display;
+                modelNameEl.title = escapeHtml(displayModel(name));
+            }
+        }
         
         if (sparkEl) {
             const sparkData = historyData.slice(-15).map(h => (h.models && h.models[name]) || 0);
-            sparkEl.innerHTML = createSparkline(sparkData, 120, 30);
+            sparkEl.innerHTML = createSparkline(sparkData, 120, 30, { gradient: true });
         }
     });
 };
@@ -253,7 +268,7 @@ const renderTopModels = (tokens_by_model, fullRender = true) => {
 const createTopModelCard = (name, stats, i) => {
     const sparkData = historyData.slice(-15).map(h => (h.models && h.models[name]) || 0);
     const color = CHART_COLORS[i % CHART_COLORS.length];
-    const pricing = currentData?.pricing_by_model?.[name] || getPricing(name);
+    const pricing = getPricingForModel(name, currentData?.pricing_by_model) || getPricing(name);
     const priceSummary = `${fmtCur(pricing.input || 0)} in / ${fmtCur(pricing.output || 0)} out`;
     const priceDetails = `${priceSummary} · cache ${fmtCur(pricing.cacheRead || 0)} read / ${fmtCur(pricing.cacheWrite || 0)} write · ${pricing.source === 'openrouter' ? 'OpenRouter' : 'local fallback'}`;
     const sourceLabel = pricing.source === 'openrouter' ? 'OpenRouter' : 'Local';
@@ -261,12 +276,20 @@ const createTopModelCard = (name, stats, i) => {
     const sourceTitle = pricing.source === 'openrouter'
         ? 'Pricing sourced from OpenRouter'
         : 'Using local fallback pricing';
+    const { provider, model } = splitModelKey(name);
+    const parsed = parseModelKey(name);
+    const providerBadge = provider
+        ? `<span class="provider-badge" title="Provider: ${escapeHtml(provider)}${parsed.vendor ? ` · Vendor: ${escapeHtml(parsed.vendor)}` : ''}">${escapeHtml(provider)}</span>`
+        : '';
+    const modelDisplay = escapeHtml(model);
+    const fullTitle = escapeHtml(displayModel(name));
 
     return `
         <div class="top-model-card" style="--card-color: ${color}">
             <div class="top-model-header">
                 <span class="top-model-emoji">${getEmoji(name)}</span>
-                <span class="top-model-name">${name.split('/').pop()}</span>
+                <span class="top-model-name" title="${fullTitle}">${modelDisplay}</span>
+                ${providerBadge}
                 <span class="pricing-source-badge ${sourceClass}" title="${sourceTitle}">${sourceLabel}</span>
             </div>
             <div class="top-model-price" title="${priceDetails}" style="font-size: 0.72rem; color: var(--mono-text-muted); margin-top: 2px;">
@@ -276,7 +299,7 @@ const createTopModelCard = (name, stats, i) => {
                 ${fmtNum(stats.total)}
             </div>
             <div class="top-model-spark">
-                ${createSparkline(sparkData, 120, 30)}
+                ${createSparkline(sparkData, 120, 30, { gradient: true })}
             </div>
         </div>
     `;
