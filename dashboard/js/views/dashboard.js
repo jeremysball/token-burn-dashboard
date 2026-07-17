@@ -1,4 +1,4 @@
-import { CHART_COLORS, getEmoji, getPricing, getPricingForModel } from '../config.js';
+import { CHART_COLORS, getEmoji, getPricingForModel } from '../config.js';
 import { fmtNum, fmtCur, createSparkline, splitModelKey, displayModel, escapeHtml, parseModelKey } from '../utils.js';
 import { currentData, historyData, fileHistoricalData } from '../state.js';
 
@@ -203,7 +203,8 @@ const renderTopModels = (tokens_by_model, fullRender = true) => {
 
     // On full render or if count changed, rebuild everything
     const existingCards = container.querySelectorAll('.top-model-card');
-    if (fullRender || existingCards.length !== models.length) {
+    const cardKeysMatch = models.every(([name], i) => existingCards[i]?.dataset.modelKey === name);
+    if (fullRender || existingCards.length !== models.length || !cardKeysMatch) {
         container.innerHTML = models.map(([name, stats], i) => createTopModelCard(name, stats, i)).join('');
         return;
     }
@@ -219,7 +220,7 @@ const renderTopModels = (tokens_by_model, fullRender = true) => {
         const providerEl = card.querySelector('.provider-badge');
         const sparkEl = card.querySelector('.top-model-spark');
         const modelNameEl = card.querySelector('.top-model-name');
-        const pricing = getPricingForModel(name, currentData?.pricing_by_model) || getPricing(name);
+        const pricing = getPricingForModel(name, currentData?.pricing_by_model);
         const priceSummary = `${fmtCur(pricing.input || 0)} in / ${fmtCur(pricing.output || 0)} out`;
         const priceDetails = `${priceSummary} · cache ${fmtCur(pricing.cacheRead || 0)} read / ${fmtCur(pricing.cacheWrite || 0)} write · ${pricing.source === 'openrouter' ? 'OpenRouter' : 'local fallback'}`;
         const sourceLabel = pricing.source === 'openrouter' ? 'OpenRouter' : 'Local';
@@ -251,10 +252,10 @@ const renderTopModels = (tokens_by_model, fullRender = true) => {
         }
 
         if (modelNameEl) {
-            const display = escapeHtml(model);
+            const display = model;
             if (modelNameEl.textContent !== model) {
                 modelNameEl.textContent = display;
-                modelNameEl.title = escapeHtml(displayModel(name));
+                modelNameEl.title = displayModel(name);
             }
         }
         
@@ -268,7 +269,7 @@ const renderTopModels = (tokens_by_model, fullRender = true) => {
 const createTopModelCard = (name, stats, i) => {
     const sparkData = historyData.slice(-15).map(h => (h.models && h.models[name]) || 0);
     const color = CHART_COLORS[i % CHART_COLORS.length];
-    const pricing = getPricingForModel(name, currentData?.pricing_by_model) || getPricing(name);
+    const pricing = getPricingForModel(name, currentData?.pricing_by_model);
     const priceSummary = `${fmtCur(pricing.input || 0)} in / ${fmtCur(pricing.output || 0)} out`;
     const priceDetails = `${priceSummary} · cache ${fmtCur(pricing.cacheRead || 0)} read / ${fmtCur(pricing.cacheWrite || 0)} write · ${pricing.source === 'openrouter' ? 'OpenRouter' : 'local fallback'}`;
     const sourceLabel = pricing.source === 'openrouter' ? 'OpenRouter' : 'Local';
@@ -285,7 +286,7 @@ const createTopModelCard = (name, stats, i) => {
     const fullTitle = escapeHtml(displayModel(name));
 
     return `
-        <div class="top-model-card" style="--card-color: ${color}">
+        <div class="top-model-card" data-model-key="${escapeHtml(name)}" style="--card-color: ${color}">
             <div class="top-model-header">
                 <span class="top-model-emoji">${getEmoji(name)}</span>
                 <span class="top-model-name" title="${fullTitle}">${modelDisplay}</span>

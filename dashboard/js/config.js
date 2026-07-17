@@ -1,4 +1,4 @@
-import { splitModelKey } from './utils.js';
+import { splitModelKey, formatModelPrice as formatModelPriceFromUtils } from './utils.js';
 
 // ===== CACHE CONFIG =====
 export const CACHE_KEY = 'tokenBurnCache';
@@ -78,16 +78,8 @@ export const getPricingForModel = (name, pricing_by_model) => {
     return getPricing(name);
 };
 
-export const getPricingForModelWrapper = (name, pricing_by_model) => {
-    return pricing_by_model?.[name] || getPricing(name);
-};
-
-export const formatModelPrice = (pricing) => {
-    if (!pricing) return 'Price unavailable';
-    const input = pricing.input || 0;
-    const output = pricing.output || 0;
-    return `${input.toFixed(2)} in / ${output.toFixed(2)} out`;
-};
+export const getPricingForModelWrapper = getPricingForModel;
+export const formatModelPrice = formatModelPriceFromUtils;
 
 export const calculateCost = (tokens, modelName) => {
     const p = getPricing(modelName);
