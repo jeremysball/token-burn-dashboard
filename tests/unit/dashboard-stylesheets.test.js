@@ -62,6 +62,10 @@ describe('owned selectors removed from main.css', () => {
       false
     );
   });
+
+  it('no longer defines any .insights-grid rule blocks', () => {
+    expect(/\.insights-grid\s*\{/.test(mainCss)).toBe(false);
+  });
 });
 
 describe('design-v2.css owns the live layout', () => {
@@ -90,5 +94,10 @@ describe('design-v2.css owns the live layout', () => {
   it('preserves the .hero-value.pulse animation', () => {
     expect(/\.hero-value\.pulse\s*\{/.test(designV2Css)).toBe(true);
     expect(/@keyframes\s+pulse-value\s*\{/.test(designV2Css)).toBe(true);
+  });
+
+  it('declares the responsive insights-grid layouts (2-col and 1-col)', () => {
+    expect(/@media[^{]*1200px[^{]*\{[^}]*\.insights-grid\s*\{[^}]*repeat\(2/.test(designV2Css)).toBe(true);
+    expect(/@media[^{]*640px[^{]*\{[^}]*\.insights-grid\s*\{[^}]*grid-template-columns\s*:\s*1fr/.test(designV2Css)).toBe(true);
   });
 });

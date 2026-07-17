@@ -298,15 +298,8 @@
         .top-model-spark { opacity: 0.5; }
 
         /* ===== INSIGHTS ===== */
-        /* .insights-section, .insights-section h2, .insights-grid base styles are
-           owned by design-v2.css. Responsive overrides below are kept.
-           See dashboard/styles/README.md. */
-        @media (max-width: 1200px) {
-            .insights-grid { grid-template-columns: repeat(2, 1fr); }
-        }
-        @media (max-width: 640px) {
-            .insights-grid { grid-template-columns: 1fr; }
-        }
+        /* .insights-section, .insights-section h2, .insights-grid base AND responsive
+           styles are owned by design-v2.css. See dashboard/styles/README.md. */
 
         .insight-card {
             background: var(--mono-surface);

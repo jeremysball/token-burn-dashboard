@@ -8,8 +8,8 @@ places.
 
 `dashboard/index.html` links, in order:
 
-1. `main.css` (`?v=11`) — base variables and the styles not owned by design-v2.
-2. `design-v2.css` (`?v=11`) — the v2 redesign, loaded after main.css so it wins
+1. `main.css` (`?v=12`) — base variables and the styles not owned by design-v2.
+2. `design-v2.css` (`?v=12`) — the v2 redesign, loaded after main.css so it wins
    the cascade for the selectors it owns.
 
 ## Ownership policy
