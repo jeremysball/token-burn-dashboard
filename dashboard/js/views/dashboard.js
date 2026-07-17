@@ -236,14 +236,18 @@ const renderTopModels = (tokens_by_model, fullRender = true) => {
             setTimeout(() => valueEl.classList.remove('value-updated'), 300);
         }
         
-        if (priceEl && priceEl.textContent.trim() !== priceSummary) {
-            priceEl.textContent = priceSummary;
+        if (priceEl) {
+            if (priceEl.textContent.trim() !== priceSummary) {
+                priceEl.textContent = priceSummary;
+            }
             priceEl.title = priceDetails;
         }
-        
-        if (sourceEl && (sourceEl.textContent !== sourceLabel || !sourceEl.classList.contains(sourceClass))) {
-            sourceEl.textContent = sourceLabel;
-            sourceEl.className = `pricing-source-badge ${sourceClass}`;
+
+        if (sourceEl) {
+            if (sourceEl.textContent !== sourceLabel || !sourceEl.classList.contains(sourceClass)) {
+                sourceEl.textContent = sourceLabel;
+                sourceEl.className = `pricing-source-badge ${sourceClass}`;
+            }
             sourceEl.title = sourceTitle;
         }
 
@@ -387,11 +391,11 @@ const generateInsights = (fullRender = true) => {
 
 const createInsightCard = (insight) => `
     <div class="insight-card">
-        <div class="insight-icon">${insight.icon}</div>
+        <div class="insight-icon">${escapeHtml(insight.icon)}</div>
         <div class="insight-content">
-            <div class="insight-title">${insight.title}</div>
-            <div class="insight-value">${insight.value}</div>
-            <div class="insight-detail">${insight.detail}</div>
+            <div class="insight-title">${escapeHtml(insight.title)}</div>
+            <div class="insight-value">${escapeHtml(insight.value)}</div>
+            <div class="insight-detail">${escapeHtml(insight.detail)}</div>
         </div>
     </div>
 `;

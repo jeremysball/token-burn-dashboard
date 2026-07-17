@@ -10,6 +10,8 @@ export const animateNumber = (element, startValue, endValue, duration = 800, pre
     const startTime = performance.now();
     const startNum = typeof startValue === 'string' ? parseFloat(startValue.replace(/[^0-9.-]/g, '')) : startValue;
     const endNum = typeof endValue === 'string' ? parseFloat(endValue.replace(/[^0-9.-]/g, '')) : endValue;
+    const decimalMatch = typeof endValue === 'string' ? endValue.match(/\.(\d+)/) : null;
+    const decimalPlaces = decimalMatch ? decimalMatch[1].length : null;
     
     if (isNaN(startNum) || isNaN(endNum)) {
         element.textContent = prefix + endValue + suffix;
@@ -24,12 +26,14 @@ export const animateNumber = (element, startValue, endValue, duration = 800, pre
         const progress = Math.min(elapsed / duration, 1);
         const easeOut = 1 - Math.pow(1 - progress, 3);
         const current = startNum + (endNum - startNum) * easeOut;
-        element.textContent = prefix + fmtNum(current) + suffix;
+        const formatted = decimalPlaces === null ? fmtNum(current) : current.toFixed(decimalPlaces);
+        element.textContent = prefix + formatted + suffix;
         if (progress < 1) {
             requestAnimationFrame(animate);
         } else {
             element.classList.remove('ticking');
-            element.textContent = prefix + fmtNum(endNum) + suffix;
+            const finalValue = typeof endValue === 'string' ? endValue : fmtNum(endNum);
+            element.textContent = prefix + finalValue + suffix;
         }
     };
     
