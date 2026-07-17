@@ -109,8 +109,11 @@ describe('design-v2.css owns the live layout', () => {
     expect(/@media[^{]*640px[^{]*\{[^}]*\.insights-grid\s*\{[^}]*grid-template-columns\s*:\s*1fr/.test(designV2Css)).toBe(true);
   });
 
-  it('owns the complete .hero-stat.burn-rate rule', () => {
-    expect(/\.hero-stat\.burn-rate\s*\{/.test(designV2Css)).toBe(true);
+  it('owns the complete .hero-stat.burn-rate rule with flex layout', () => {
+    const rule = designV2Css.match(/\.hero-stat\.burn-rate\s*\{([^}]*)\}/);
+    expect(rule).not.toBeNull();
+    expect(rule[1]).toMatch(/display\s*:\s*flex/);
+    expect(rule[1]).toMatch(/flex-direction\s*:\s*column/);
   });
 });
 
