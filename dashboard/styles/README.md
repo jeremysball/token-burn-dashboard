@@ -20,7 +20,7 @@ places.
 | `pricing-source-badge`, `.openrouter`, `.local` | `design-v2.css` | Base definitions removed from `main.css`. |
 | `top-model-name` | `design-v2.css` | Base definition removed from `main.css`. |
 | `hero-section`, `hero-stat`, `hero-stat.primary`, `hero-label`, `hero-value` | `design-v2.css` | Base definitions removed from `main.css`. `main.css` retains `hero-spark` / `hero-spark svg`, which are unique to it. |
-| `insights-section`, `insights-section h2`, `insights-grid` | `design-v2.css` | Base definitions removed from `main.css`. `main.css` keeps its responsive `@media` overrides for `.insights-grid`. |
+| `insights-section`, `insights-section h2`, `insights-grid` | `design-v2.css` | Base and responsive definitions removed from `main.css`; design-v2.css owns the complete base and responsive insights grid. Also note `.hero-stat.burn-rate` is owned by design-v2.css (including its `display:flex`/`flex-direction:column` behavior). |
 | `scale-hero`, `scale-grid` | `main.css` (layout) + `design-v2.css` (border-radius polish) | `design-v2.css` only polishes border-radius; the full layout is defined only in `main.css`, so it is NOT a duplicate and stays in `main.css`. |
 | Deep-insights tab (`.insights-header`, `.refresh-insights-btn`, `.deep-insights-grid`, `.insight-card--deep`, etc.) | `main.css` | Not defined in design-v2; retained. |
 

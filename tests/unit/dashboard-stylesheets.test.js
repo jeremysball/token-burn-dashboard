@@ -25,6 +25,10 @@ const designV2Css = fs.readFileSync(
   path.resolve(root, 'dashboard/styles/design-v2.css'),
   'utf8'
 );
+const readme = fs.readFileSync(
+  path.resolve(root, 'dashboard/styles/README.md'),
+  'utf8'
+);
 
 function stylesheetLinks(html) {
   const links = [];
@@ -66,6 +70,10 @@ describe('owned selectors removed from main.css', () => {
   it('no longer defines any .insights-grid rule blocks', () => {
     expect(/\.insights-grid\s*\{/.test(mainCss)).toBe(false);
   });
+
+  it('no longer defines the .hero-stat.burn-rate rule', () => {
+    expect(/\.hero-stat\.burn-rate\s*\{/.test(mainCss)).toBe(false);
+  });
 });
 
 describe('design-v2.css owns the live layout', () => {
@@ -99,5 +107,20 @@ describe('design-v2.css owns the live layout', () => {
   it('declares the responsive insights-grid layouts (2-col and 1-col)', () => {
     expect(/@media[^{]*1200px[^{]*\{[^}]*\.insights-grid\s*\{[^}]*repeat\(2/.test(designV2Css)).toBe(true);
     expect(/@media[^{]*640px[^{]*\{[^}]*\.insights-grid\s*\{[^}]*grid-template-columns\s*:\s*1fr/.test(designV2Css)).toBe(true);
+  });
+
+  it('owns the complete .hero-stat.burn-rate rule', () => {
+    expect(/\.hero-stat\.burn-rate\s*\{/.test(designV2Css)).toBe(true);
+  });
+});
+
+describe('ownership documentation', () => {
+  it('states design-v2 owns the complete base and responsive insights grid', () => {
+    expect(
+      /design-v2\.css owns the complete base and responsive insights grid/.test(
+        readme
+      )
+    ).toBe(true);
+    expect(/main\.css keeps its responsive/.test(readme)).toBe(false);
   });
 });

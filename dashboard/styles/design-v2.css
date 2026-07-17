@@ -281,6 +281,8 @@ body {
 
 /* Burn rate redesign */
 .hero-stat.burn-rate {
+  display: flex;
+  flex-direction: column;
   background: var(--mono-surface);
   border: 1px solid var(--mono-border);
 }

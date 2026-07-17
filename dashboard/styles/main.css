@@ -158,10 +158,8 @@
         }
 
         /* ===== BURN RATE GAUGE ===== */
-        .hero-stat.burn-rate {
-            display: flex;
-            flex-direction: column;
-        }
+        /* .hero-stat.burn-rate layout is owned by design-v2.css (including the
+           display:flex / flex-direction:column behavior). See README. */
         .burn-rate-badge {
             font-size: 0.6rem;
             margin-left: 4px;
