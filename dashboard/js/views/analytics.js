@@ -448,19 +448,39 @@ const calculateDeepInsights = () => {
         });
     }
 
-    // 2. Cache Efficiency - Calculate actual savings
+    // 2. Cache Efficiency - Calculate real savings from model pricing
     const totalCacheRead = currentData.total_cache_read || 0;
-    const cacheRate = totalCacheRead / (currentData.total_input + totalCacheRead || 1);
-    const cacheSavings = totalCacheRead * 0.000015; // Estimated $0.015 per 1k cached tokens
-    
+    const totalInput = currentData.total_input || 0;
+    const cacheRate = totalCacheRead / (totalInput + totalCacheRead || 1);
+
+    // Top model by cost drives the cache discount ratio
+    const topModel = models.length > 0
+        ? models.slice().sort((a, b) =>
+            (costs_by_model?.[b[0]]?.total || 0) - (costs_by_model?.[a[0]]?.total || 0))[0][0]
+        : null;
+    const pricing = getPricingForModel(topModel) || { input: 3, output: 15, cacheRead: 0.3 };
+
+    // Real cache discount ratio derived from model pricing (cacheRead/input)
+    const cacheDiscountRatio = pricing.cacheRead && pricing.input
+        ? pricing.cacheRead / pricing.input
+        : 0.1;
+
+    // Average input cost per token, falling back to a sensible default
+    const avgInputCostPerToken = totalInput > 0 && total_cost?.input
+        ? total_cost.input / totalInput
+        : 0.000003;
+    const avgCacheReadCostPerToken = cacheDiscountRatio * avgInputCostPerToken;
+
+    const cacheSavings = totalCacheRead * avgCacheReadCostPerToken;
+
     insights.push({
         icon: cacheRate > 0.5 ? '💾' : '📦',
         title: 'Cache Efficiency',
         value: `${(cacheRate * 100).toFixed(1)}%`,
-        description: cacheRate > 0.5 
+        description: cacheRate > 0.5
             ? `Excellent! You've saved $${cacheSavings.toFixed(2)} through caching`
-            : `Low cache hit rate - missing $${(total_tokens * 0.3 * 0.000015).toFixed(2)} potential savings`,
-        detail: `${fmtNum(totalCacheRead)} cached tokens at 90% discount`,
+            : `Low cache hit rate - missing $${(totalInput * (1 - cacheDiscountRatio) * avgInputCostPerToken).toFixed(2)} potential savings`,
+        detail: `${fmtNum(totalCacheRead)} cached tokens at ${((1 - cacheDiscountRatio) * 100).toFixed(0)}% discount`,
         type: cacheRate > 0.5 ? 'positive' : 'warning'
     });
 
