@@ -85,6 +85,34 @@ describe('server pricing', () => {
     });
   });
 
+  it('preserves local pricing when OpenRouter supplies explicit null aliases', () => {
+    setOpenRouterPricingSnapshot({
+      fetchedAt: Date.now(),
+      source: 'openrouter',
+      models: [{
+        id: 'openai/gpt-4o',
+        canonical_slug: 'openai/gpt-4o',
+        name: 'OpenAI: GPT-4o',
+        pricing: {
+          prompt: '0.0000025',
+          completion: '0.00001',
+          input_cache_read: null,
+          input_cache_write: null,
+          cache_read: null,
+          cache_write: null
+        }
+      }],
+      error: null
+    });
+
+    const pricing = getPricing('openai/gpt-4o');
+    expect(pricing.source).toBe('openrouter');
+    expect(pricing.input).toBe(2.5);
+    expect(pricing.output).toBe(10);
+    expect(pricing.cacheRead).toBe(1.25);
+    expect(pricing.cacheWrite).toBe(0);
+  });
+
   it('matches OpenRouter pricing by full id and alias', () => {
     setOpenRouterPricingSnapshot({
       fetchedAt: Date.now(),
