@@ -2,7 +2,7 @@
  * Tests for session-parser usage parsing including reasoning tokens
  */
 
-const { parsePiUsage, parseClaudeUsage } = require('../../../lib/session-parser');
+const { parsePiUsage, parseClaudeUsage, normalizeModelInfo } = require('../../../lib/session-parser');
 
 describe('parsePiUsage', () => {
   it('preserves explicit totalTokens of 0 (not truthy fallback)', () => {
@@ -34,6 +34,36 @@ describe('parsePiUsage', () => {
     expect(u.total).toBe(0);
     expect(u.reasoning).toBe(0);
     expect(u.input).toBe(0);
+  });
+});
+
+describe('normalizeModelInfo first-slash semantics', () => {
+  it('splits provider/model at the FIRST slash only', () => {
+    const { provider, model } = normalizeModelInfo(
+      { model: 'anthropic/claude-3-5-sonnet/20240620' },
+      'claude'
+    );
+    expect(provider).toBe('anthropic');
+    expect(model).toBe('claude-3-5-sonnet/20240620');
+  });
+
+  it('treats a slashless claude model as anthropic and keeps model as-is', () => {
+    const { provider, model } = normalizeModelInfo(
+      { model: 'claude-3-opus' },
+      'claude'
+    );
+    expect(provider).toBe('anthropic');
+    expect(model).toBe('claude-3-opus');
+  });
+
+  it('pi source keeps provider/model and applies first-slash only to key', () => {
+    const { provider, model, modelKey } = normalizeModelInfo(
+      { provider: 'openai', model: 'openai/gpt-4o/mini' },
+      'pi'
+    );
+    expect(provider).toBe('openai');
+    expect(model).toBe('openai/gpt-4o/mini');
+    expect(modelKey).toBe('openai/openai/gpt-4o/mini');
   });
 });
 
