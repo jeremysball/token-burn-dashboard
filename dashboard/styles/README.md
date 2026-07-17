@@ -4,34 +4,34 @@ This directory contains two stylesheets. This document records which file owns
 which selectors so duplicated definitions are not silently maintained in two
 places.
 
-## Loaded stylesheet
+## Loaded stylesheets
 
-`dashboard/index.html` links **only `main.css`** (see the `<link>` with
-`/dashboard/styles/main.css?v=11`). `design-v2.css` is **not** linked by the
-running app as of this writing.
+`dashboard/index.html` links, in order:
+
+1. `main.css` (`?v=11`) — base variables and the styles not owned by design-v2.
+2. `design-v2.css` (`?v=11`) — the v2 redesign, loaded after main.css so it wins
+   the cascade for the selectors it owns.
 
 ## Ownership policy
 
-| Selector group      | Documented owner     | Notes |
-| ------------------- | -------------------- | ----- |
-| `pricing-source-badge`, `.openrouter`, `.local` | `design-v2.css` | Full component def duplicated in `main.css`. |
-| `top-model-name`    | `design-v2.css`      | Full component def duplicated in `main.css`. |
-| `hero-section`, `hero-stat`, `hero-stat.primary`, `hero-label`, `hero-value` | `design-v2.css` | Redesign defs duplicated in `main.css`. `main.css` also defines `hero-spark` / `hero-spark svg`, which are unique to it. |
-| `scale-hero`, `scale-grid` | `design-v2.css` (polish only) | `design-v2.css` adds border-radius polish; the base layout is defined only in `main.css`. No full duplicate exists for layout. |
-| `insights-section`, `insights-section h2`, `insights-grid` | `design-v2.css` | Redesign defs duplicated in `main.css`. |
+| Selector group | Owner | Notes |
+| --- | --- | --- |
+| `:root` base variables and `[data-theme="light"]` | `main.css` | Source of truth for theme tokens. |
+| `pricing-source-badge`, `.openrouter`, `.local` | `design-v2.css` | Base definitions removed from `main.css`. |
+| `top-model-name` | `design-v2.css` | Base definition removed from `main.css`. |
+| `hero-section`, `hero-stat`, `hero-stat.primary`, `hero-label`, `hero-value` | `design-v2.css` | Base definitions removed from `main.css`. `main.css` retains `hero-spark` / `hero-spark svg`, which are unique to it. |
+| `insights-section`, `insights-section h2`, `insights-grid` | `design-v2.css` | Base definitions removed from `main.css`. `main.css` keeps its responsive `@media` overrides for `.insights-grid`. |
+| `scale-hero`, `scale-grid` | `main.css` (layout) + `design-v2.css` (border-radius polish) | `design-v2.css` only polishes border-radius; the full layout is defined only in `main.css`, so it is NOT a duplicate and stays in `main.css`. |
+| Deep-insights tab (`.insights-header`, `.refresh-insights-btn`, `.deep-insights-grid`, `.insight-card--deep`, etc.) | `main.css` | Not defined in design-v2; retained. |
 
-## Migration note (important)
+## History
 
-`design-v2.css` is the *intended* owner for the selectors above, but it is not
-yet loaded. Until `index.html` is switched to load `design-v2.css` (or both, in
-the correct order), **do not delete the base component definitions from
-`main.css`** — doing so would remove styling from the live dashboard because
-nothing would load the `design-v2.css` replacement.
-
-When the stylesheet link is migrated to `design-v2.css`, the duplicate base
-definitions for `pricing-source-badge`, `top-model-name`, `hero-*`,
-`insights-*`, and `scale-*` may be removed from `main.css`, keeping only the
-`hero-spark` rules and any genuinely `main.css`-only styles.
+Originally both files defined the badge / top-model / hero / insights component
+styles. Task 6 consolidated ownership: `design-v2.css` became the loaded owner for
+those selectors and the duplicate base definitions were removed from `main.css`.
+The migration guard that previously warned against deleting them (because
+design-v2 was not yet linked) is now resolved — `design-v2.css` is linked in
+`index.html`.
 
 ## Header comments
 
