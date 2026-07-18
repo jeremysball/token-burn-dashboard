@@ -10,8 +10,11 @@ Element.prototype.scrollIntoView = jest.fn();
 import {
     renderInsightsCards,
     renderGitBlameData,
-    renderCommitDetails
+    renderCommitDetails,
+    renderModelHeatmap,
+    renderModelsTab
 } from '../../dashboard/js/views/analytics';
+import * as state from '../../dashboard/js/state';
 
 const XSS = '<img src=x onerror=alert(1)>';
 
@@ -166,29 +169,59 @@ describe('renderCommitDetails XSS safety', () => {
     });
 });
 
-describe('renderModelIntensityHeatmap XSS safety', () => {
-    const analytics = require('../../dashboard/js/views/analytics');
-
+describe('renderModelHeatmap XSS safety', () => {
     it('escapes model keys in y-label title and cell attributes', () => {
         document.body.innerHTML = `
             <div id="model-intensity-heatmap">
                 <div class="heatmap-wrapper"></div>
             </div>`;
-        // Force the analytics view to (re)render the model intensity heatmap.
         const el = document.getElementById('model-intensity-heatmap');
-        const renderFn = analytics.renderModelHeatmap;
-        if (typeof renderFn === 'function') {
-            renderFn(el, {
-                models: { [`${XSS}/claude`]: { '2026-01-01T00': 5 } },
-                maxVal: 5,
-                timeLabels: ['2026-01-01T00']
-            });
-            const html = el.innerHTML;
-            expect(html).not.toContain('<img src=x');
-            expect(html).toContain('&lt;img');
-            expect(el.querySelector('img')).toBeNull();
-        } else {
-            expect(true).toBe(true);
-        }
+        // renderModelHeatmap is exported, so this assertion actually executes
+        // (it previously fell into a no-op skip branch).
+        expect(typeof renderModelHeatmap).toBe('function');
+        renderModelHeatmap(el, [{
+            time: '2026-01-01T00:00:00Z',
+            models: { [`${XSS}/claude`]: 5 }
+        }], 'tokens');
+        // The malicious model key must not become a live <img> element.
+        expect(el.querySelector('img')).toBeNull();
+        expect(el.querySelector('script')).toBeNull();
+        // The y-label's title attribute carries the escaped model key, which
+        // must not be parsed into a live element (verified above). The raw
+        // payload's tag is never created as DOM.
+        const yLabel = el.querySelector('.heatmap-y-label');
+        expect(yLabel.querySelector('img')).toBeNull();
+        expect(yLabel.querySelector('script')).toBeNull();
     });
 });
+
+describe('renderModelsTab XSS safety', () => {
+    it('escapes model-derived name, pricing title, badge and price summary', () => {
+        document.body.innerHTML = '<table><tbody id="models-tbody"></tbody></table>';
+        // currentData / historyData are injected via the real state setters
+        // (ES module bindings are read-only from outside the module).
+        state.setCurrentData({
+            tokens_by_model: { [`${XSS}/claude`]: { total: 10, cache_read: 1 } },
+            costs_by_model: { [`${XSS}/claude`]: { total: 0.5 } },
+            total_tokens: 10
+        });
+        state.setHistoryData([]);
+
+        renderModelsTab();
+
+        const tbody = document.getElementById('models-tbody');
+        // No live injected markup from the model key.
+        expect(tbody.querySelector('img')).toBeNull();
+        expect(tbody.querySelector('script')).toBeNull();
+        // The malicious model key's payload segment never renders as a tag; the
+        // displayed name (segment after the last '/') appears as inert text.
+        expect(tbody.innerHTML).toContain('claude');
+        expect(tbody.innerHTML).not.toContain('<img src=x');
+        // Pricing title/badge/price values are escaped attributes, not raw markup.
+        const badge = tbody.querySelector('.pricing-source-badge');
+        expect(badge.getAttribute('title')).not.toContain('<');
+        const price = tbody.querySelector('.model-price');
+        expect(price.getAttribute('title')).not.toContain('<');
+    });
+});
+

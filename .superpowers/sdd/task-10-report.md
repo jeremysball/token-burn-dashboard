@@ -205,3 +205,61 @@ The previous allowlist still leaked two classes of unsafe references:
 #### Commit
 - `fix(eng): reject URL-suffix and traversal-escaping file refs in extractFileRefs`
 
+---
+
+# Task 10 Final Review-Fix Addendum (2)
+
+## Status: DONE
+
+### Finding addressed — Models-tab unescaped model-derived values
+
+`renderModelsTab` (`dashboard/js/views/analytics.js:173-203`) interpolated
+model-derived text directly into `innerHTML` without escaping:
+
+- `${name.split('/').pop()}` (displayed model name)
+- `title="${sourceMeta.title}"` (pricing source badge tooltip)
+- `${sourceMeta.label}` (pricing source badge text)
+- `title="${priceTitle}"` (model price tooltip)
+- `${priceSummary}` (model price text)
+
+Any of these can carry attacker-influenced content (model keys are
+user/free-text-derived). All five are now passed through the existing local
+`escapeHtml` helper, matching the escaping already applied to the git-blame and
+insight-card surfaces. Table structure, numeric columns (`fmtNum`, cost,
+cache_read), sparkline, and sort behavior are unchanged.
+
+### Minor finding — heatmap XSS test was a no-op
+
+`tests/unit/task-10-xss.test.js` wrapped the model-heatmap assertion in
+`if (typeof renderModelHeatmap === 'function') { … } else { expect(true) }`, so
+when `renderModelHeatmap` was not exported the test silently passed without
+asserting anything. Fix:
+
+- Exported `renderModelHeatmap` (and `renderModelsTab`) from the analytics view
+  module so they are unit-testable (no behavior change).
+- Rewrote the model-heatmap test to execute the real function and assert that a
+  malicious model key (`<img src=x onerror=…>/claude`) produces **no live `<img>`/
+  `<script>` element**; verification uses `querySelector('img')`/`'script'`
+  (jsdom decodes entities on `innerHTML` serialization, so entity-string checks
+  are unreliable and were replaced with element-existence checks).
+- Added a `renderModelsTab` XSS test: injects a malicious model via the real
+  `state.setCurrentData`/`setHistoryData` setters and asserts no live `img`/
+  `script` element is created, the displayed name renders as inert text, and the
+  escaped pricing `title` attributes contain no raw `<`.
+
+### Regression coverage added (`tests/unit/task-10-xss.test.js`)
+- `renderModelHeatmap XSS safety` — model keys escaped; no live injected markup.
+- `renderModelsTab XSS safety` — name/pricing title/badge/price summary escaped;
+  no live injected markup.
+
+### Verification
+- Focused: `npx jest tests/unit/task-10-xss.test.js` → 9/9 pass.
+- Full suite: `npm test` → **25 suites, 271 tests, all pass**.
+- `npm run lint` → clean (exit 0).
+- Prior Task 7–9 and earlier Task 10 behavior preserved (spike cards, heatmaps,
+  insight cards, commit-detail escaping, `extractFileRefs` allowlist all green).
+
+### Commits
+- `fix(eng): escape model-derived values in renderModelsTab`
+- `test(eng): assert model-heatmap/models-tab XSS; export render fns`
+

@@ -178,6 +178,7 @@ const renderModelsTab = () => {
         const priceSummary = formatModelPrice(pricing);
         const priceTitle = `${formatModelPriceDetails(pricing)} · ${pricing.source === 'openrouter' ? 'OpenRouter' : 'local fallback'}`;
         const sourceMeta = getPricingSourceMeta(pricing);
+        const displayName = name.split('/').pop();
 
         return `
             <tr style="animation-delay: ${index * 0.05}s">
@@ -185,11 +186,11 @@ const renderModelsTab = () => {
                     <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
                         <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${color}; flex: 0 0 auto;"></span>
                         <div style="display: flex; flex-direction: column; min-width: 0;">
-                            <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${name.split('/').pop()}</span>
+                            <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(displayName)}</span>
                             <div style="display: flex; align-items: center; gap: 6px; min-width: 0; margin-top: 2px;">
-                                <span class="pricing-source-badge ${sourceMeta.source}" title="${sourceMeta.title}">${sourceMeta.label}</span>
-                                <span class="model-price" title="${priceTitle}" style="font-size: 0.72rem; color: var(--mono-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                                    ${priceSummary}
+                                <span class="pricing-source-badge ${sourceMeta.source}" title="${escapeHtml(sourceMeta.title)}">${escapeHtml(sourceMeta.label)}</span>
+                                <span class="model-price" title="${escapeHtml(priceTitle)}" style="font-size: 0.72rem; color: var(--mono-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                    ${escapeHtml(priceSummary)}
                                 </span>
                             </div>
                         </div>
@@ -1946,5 +1947,7 @@ export {
     renderInvestigation,
     renderInsightsCards,
     renderGitBlameData,
-    renderCommitDetails
+    renderCommitDetails,
+    renderModelHeatmap,
+    renderModelsTab
 };
