@@ -1,13 +1,17 @@
 /**
  * @jest-environment jsdom
  */
+Element.prototype.scrollIntoView = jest.fn();
+
 import {
     spikeRatioLevel,
     computeSeriesStats,
     computeZScore,
     renderSpikesList,
     renderInvestigation,
-    toggleSpikeSession
+    toggleSpikeSession,
+    investigateSpike,
+    closeInvestigation
 } from '../../dashboard/js/views/analytics';
 import { historyData, setHistoryData } from '../../dashboard/js/state';
 
@@ -68,7 +72,8 @@ describe('renderSpikesList DOM', () => {
         expect(cards[0].classList.contains('high')).toBe(true);
         expect(cards[0].querySelector('.spike-ratio-badge').textContent).toContain('5x');
         expect(cards[0].querySelectorAll('.spike-stat').length).toBe(3);
-        expect(cards[0].getAttribute('onclick')).toContain('investigateSpike(1700000000000)');
+        expect(cards[0].getAttribute('onclick')).toBeNull();
+        expect(cards[0].dataset.spikeIndex).toBe('0');
     });
 
     it('shows empty state when no spikes', () => {
@@ -110,5 +115,110 @@ describe('toggleSpikeSession', () => {
         expect(document.querySelector('.session-accordion-header').getAttribute('aria-expanded')).toBe('true');
         toggleSpikeSession(0);
         expect(body.style.display).toBe('none');
+    });
+});
+
+describe('renderInvestigation XSS safety', () => {
+    it('escapes model-derived text so markup is not injected', () => {
+        document.body.innerHTML = '<div id="spike-details"></div><div id="spike-sessions"></div>';
+        const data = {
+            summary: { totalSessions: 1, totalTokens: 100, totalCost: 0.5, topModel: '<img src=x onerror=alert(1)>' },
+            sessions: []
+        };
+        renderInvestigation(data);
+        const topModelCell = document.querySelectorAll('.investigation-grid .detail-item')[3].querySelector('.detail-value');
+        const topModel = topModelCell.innerHTML;
+        expect(topModel).toContain('&lt;img');
+        expect(topModelCell.querySelector('img')).toBeNull();
+    });
+});
+
+describe('renderSpikesList safety', () => {
+    beforeEach(() => setHistoryData([{ total: 100000 }]));
+    afterEach(() => setHistoryData([]));
+
+    it('skips spikes with non-finite time and never emits inline JS', () => {
+        document.body.innerHTML = '<div id="spikes-list"></div>';
+        const spikes = [
+            { time: 1700000000000, tokens: 500000, ratio: '5.0', previousAvg: 100000 },
+            { time: 'not-a-number', tokens: 200000, ratio: '2.0', previousAvg: 100000 },
+            { time: NaN, tokens: 100000, ratio: '1.0', previousAvg: 100000 }
+        ];
+        renderSpikesList(spikes);
+        const cards = document.querySelectorAll('.spike-card');
+        expect(cards.length).toBe(1);
+        expect(cards[0].getAttribute('onclick')).toBeNull();
+        expect(cards[0].dataset.spikeIndex).toBe('0');
+    });
+
+    it('activates investigation via click and keyboard (Enter/Space) without inline handlers', () => {
+        global.fetch = jest.fn(() => Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ summary: { totalSessions: 0, totalTokens: 0, totalCost: 0, topModel: 'unknown' }, sessions: [] })
+        }));
+        document.body.innerHTML = '<div id="spikes-list"></div><div id="spike-investigation" style="display:none;"></div><div id="spike-details"></div><div id="spike-sessions"></div>';
+        const spikes = [{ time: 1700000000000, tokens: 500000, ratio: '5.0', previousAvg: 100000 }];
+        renderSpikesList(spikes);
+        const card = document.querySelector('.spike-card');
+        expect(card.getAttribute('onclick')).toBeNull();
+        card.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        const enterEvt = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+        card.dispatchEvent(enterEvt);
+        expect(enterEvt.defaultPrevented).toBe(true);
+        const spaceEvt = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+        card.dispatchEvent(spaceEvt);
+        expect(spaceEvt.defaultPrevented).toBe(true);
+    });
+});
+
+describe('investigateSpike fetch + close', () => {
+    beforeEach(() => {
+        Element.prototype.scrollIntoView = jest.fn();
+        document.body.innerHTML = `
+            <div id="spike-investigation" style="display:none;"></div>
+            <div id="spike-details"></div>
+            <div id="spike-sessions"></div>`;
+        global.fetch = jest.fn(() => Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({
+                summary: { totalSessions: 1, totalTokens: 100, totalCost: 0.5, topModel: 'anthropic/claude-opus-4' },
+                sessions: [{ id: 'abc', tokens: 100, cost: 0.5, models: [], previews: ['hi'] }]
+            })
+        }));
+    });
+
+    it('fetches investigation and renders into details/sessions', async () => {
+        await investigateSpike(1700000000000);
+        expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/api/spikes/investigate?timestamp=1700000000000'));
+        expect(document.getElementById('spike-investigation').style.display).toBe('block');
+        expect(document.querySelectorAll('.session-accordion').length).toBe(1);
+    });
+
+    it('shows error when fetch fails', async () => {
+        global.fetch = jest.fn(() => Promise.resolve({ ok: false, status: 500 }));
+        await investigateSpike(1700000000000);
+        expect(document.getElementById('spike-details').textContent).toContain('Error');
+    });
+
+    it('closeInvestigation hides the panel', () => {
+        document.getElementById('spike-investigation').style.display = 'block';
+        closeInvestigation();
+        expect(document.getElementById('spike-investigation').style.display).toBe('none');
+    });
+});
+
+describe('accordion keyboard activation', () => {
+    it('toggles on Enter and Space', () => {
+        document.body.innerHTML = '<div id="spike-details"></div><div id="spike-sessions"></div>';
+        renderInvestigation({
+            summary: { totalSessions: 1, totalTokens: 100, totalCost: 0.5, topModel: 'unknown' },
+            sessions: [{ id: 'abc', tokens: 100, cost: 0.5, models: [], previews: ['hi'] }]
+        });
+        const header = document.querySelector('.session-accordion-header');
+        const fire = (key) => header.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+        fire('Enter');
+        expect(document.getElementById('spike-session-body-0').style.display).toBe('block');
+        fire(' ');
+        expect(document.getElementById('spike-session-body-0').style.display).toBe('none');
     });
 });

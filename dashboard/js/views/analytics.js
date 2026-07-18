@@ -1145,6 +1145,8 @@ const computeZScore = (value, stats) => {
     return (value - stats.mean) / stats.std;
 };
 
+const isValidSpikeTime = (time) => typeof time === 'number' && isFinite(time) && time > 0;
+
 const renderSpikesList = (spikes) => {
     const listEl = document.getElementById('spikes-list');
 
@@ -1154,8 +1156,9 @@ const renderSpikesList = (spikes) => {
     }
 
     const stats = computeSeriesStats(historyData);
+    const validSpikes = spikes.filter(spike => isValidSpikeTime(spike.time));
 
-    listEl.innerHTML = spikes.map(spike => {
+    listEl.innerHTML = validSpikes.map((spike, idx) => {
         const date = new Date(spike.time);
         const timeStr = date.toLocaleString('en-US', {
             month: 'short',
@@ -1168,7 +1171,7 @@ const renderSpikesList = (spikes) => {
         const zScore = computeZScore(spike.tokens, stats);
 
         return `
-            <div class="spike-card spike-ratio-badge ${level}" onclick="investigateSpike(${spike.time})" role="button" tabindex="0" aria-label="Investigate spike at ${timeStr}">
+            <div class="spike-card spike-ratio-badge ${level}" data-spike-index="${idx}" role="button" tabindex="0" aria-label="Investigate spike at ${timeStr}">
                 <div class="spike-card-head">
                     <div class="spike-time">${timeStr}</div>
                     <span class="spike-ratio-badge ${level}">${ratio}x</span>
@@ -1193,6 +1196,18 @@ const renderSpikesList = (spikes) => {
             </div>
         `;
     }).join('');
+
+    const trigger = (spike) => { if (isValidSpikeTime(spike.time)) investigateSpike(spike.time); };
+    listEl.querySelectorAll('.spike-card').forEach(card => {
+        const spike = validSpikes[Number(card.dataset.spikeIndex)];
+        card.addEventListener('click', () => trigger(spike));
+        card.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                trigger(spike);
+            }
+        });
+    });
 };
 
 const investigateSpike = async (timestamp) => {
@@ -1242,7 +1257,7 @@ const renderInvestigation = (data) => {
             </div>
             <div class="detail-item">
                 <div class="detail-label">Top Model</div>
-                <div class="detail-value">${displayModel(data.summary.topModel)}</div>
+                <div class="detail-value">${escapeHtml(displayModel(data.summary.topModel))}</div>
             </div>
         </div>
         ${sources.length ? `
@@ -1257,7 +1272,7 @@ const renderInvestigation = (data) => {
         <h5>Top Contributing Sessions</h5>
         ${data.sessions.map((session, idx) => `
             <div class="session-accordion">
-                <div class="session-accordion-header" onclick="toggleSpikeSession(${idx})" role="button" tabindex="0" aria-expanded="false">
+                <div class="session-accordion-header" data-session-index="${idx}" role="button" tabindex="0" aria-expanded="false">
                     <div class="session-accordion-title">
                         <span class="session-id">${escapeHtml(session.id)}</span>
                         ${session.models && session.models.length ? `<span class="session-models-inline">${session.models.map(m => `<span class="session-model-tag">${escapeHtml(displayModel(m))}</span>`).join('')}</span>` : ''}
@@ -1283,6 +1298,16 @@ const renderInvestigation = (data) => {
             </div>
         `).join('')}
     `;
+
+    sessionsEl.querySelectorAll('.session-accordion-header').forEach(header => {
+        header.addEventListener('click', () => toggleSpikeSession(Number(header.dataset.sessionIndex)));
+        header.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggleSpikeSession(Number(header.dataset.sessionIndex));
+            }
+        });
+    });
 };
 
 const toggleSpikeSession = (idx) => {
