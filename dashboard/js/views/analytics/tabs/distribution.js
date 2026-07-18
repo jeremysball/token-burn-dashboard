@@ -1,6 +1,7 @@
 import { CHART_COLORS, currentData, isCompactViewport, getPlotlyLayout } from './shared.js';
 
 export function renderDistributionTab(container) {
+    if (!container) container = document.getElementById('distribution-chart-container');
     if (!container || typeof Plotly === 'undefined') return;
 
     const { tokens_by_model } = currentData;

@@ -14,6 +14,7 @@ const SCALE_COMPARISONS = [
 ];
 
 export function renderScaleTab(container) {
+    if (!container) container = document.getElementById('scale-comparisons');
     if (!container || !currentData) return;
 
     const totalTokens = currentData.total_tokens || 0;

@@ -1,6 +1,7 @@
 import { fmtNum, CHART_COLORS, currentData, isCompactViewport, getPlotlyLayout } from './shared.js';
 
 export function renderCompareTab(container) {
+    if (!container) container = document.getElementById('compare-chart-container');
     if (!container || typeof Plotly === 'undefined') return;
 
     const { tokens_by_model } = currentData;

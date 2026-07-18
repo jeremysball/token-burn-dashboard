@@ -1,37 +1,26 @@
-import { CHART_COLORS, getPricing } from './config.js';
-import {
-    lookupModelsDevPrice,
-    calculateCostWithPricing,
-    fetchModelsDevCatalog,
-    getCatalog,
-    isCatalogFailed,
-    clearCatalogCache
-} from './modelsdev-pricing.js';
-import { fmtNum, fmtInt, fmtCur, fmtMultiple, getPlotlyLayout, notify, splitModelKey, displayModel } from './utils.js';
-import { currentData, historyData, fileHistoricalData, analyticsRange, setAnalyticsRange, setAnalyticsTab, sortCol, sortAsc, setSortCol, setSortAsc, searchTerm, setSearchTerm } from './state.js';
-import {
-    cacheDiscountRatioFromPricing
-} from './views/analytics/tabs/shared.js';
+import { currentData, setAnalyticsRange, setAnalyticsTab, sortCol, sortAsc, setSortCol, setSortAsc, setSearchTerm } from '../state.js';
+import { cacheDiscountRatioFromPricing } from './analytics/tabs/shared.js';
 
-import { renderModelsTab } from './views/analytics/tabs/models.js';
-import { renderCompareTab } from './views/analytics/tabs/compare.js';
-import { renderTimelineTab } from './views/analytics/tabs/timeline.js';
-import { renderCalendarTab } from './views/analytics/tabs/calendar.js';
-import { renderDistributionTab } from './views/analytics/tabs/distribution.js';
+import { renderModelsTab } from './analytics/tabs/models.js';
+import { renderCompareTab } from './analytics/tabs/compare.js';
+import { renderTimelineTab } from './analytics/tabs/timeline.js';
+import { renderCalendarTab } from './analytics/tabs/calendar.js';
+import { renderDistributionTab } from './analytics/tabs/distribution.js';
 import {
     renderDeepInsightsTab,
     generateDeepInsights,
     calculateDeepInsights,
     generateLLMInsights,
     renderInsightsCards
-} from './views/analytics/tabs/insights.js';
-import { renderScaleTab } from './views/analytics/tabs/scale.js';
-import { renderCodeStatsTab } from './views/analytics/tabs/code.js';
+} from './analytics/tabs/insights.js';
+import { renderScaleTab } from './analytics/tabs/scale.js';
+import { renderCodeStatsTab } from './analytics/tabs/code.js';
 import {
     renderHeatmapsTab,
+    renderModelHeatmap,
     setHeatmapMetric,
     retryModelsDevPricing
-} from './views/analytics/tabs/heatmaps.js';
+} from './analytics/tabs/heatmaps.js';
 import {
     renderGitBlameTab,
     loadGitBlame,
@@ -40,7 +29,7 @@ import {
     renderCommitDetails,
     toggleSessionMessages,
     closeCommitDetails
-} from './views/analytics/tabs/git.js';
+} from './analytics/tabs/git.js';
 import {
     renderSpikeDetectiveTab,
     investigateSpike,
@@ -51,7 +40,7 @@ import {
     computeZScore,
     renderSpikesList,
     renderInvestigation
-} from './views/analytics/tabs/spikes.js';
+} from './analytics/tabs/spikes.js';
 
 export const renderAnalytics = () => {
     if (!currentData) return;
@@ -169,6 +158,3 @@ export {
     setHeatmapMetric,
     retryModelsDevPricing
 };
-
-// Back-compat: re-export heatmap helpers from the heatmaps module for tests
-export { renderHeatmapsTab } from './views/analytics/tabs/heatmaps.js';

@@ -1,6 +1,7 @@
 import { fmtNum, historyData, fileHistoricalData, isCompactViewport, getPlotlyLayout, bindPlotlyClick, notify } from './shared.js';
 
 export function renderCalendarTab(container) {
+    if (!container) container = document.getElementById('calendar-container');
     if (!container || typeof Plotly === 'undefined') return;
 
     // Use ALL available data

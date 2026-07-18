@@ -1,6 +1,7 @@
 import { CHART_COLORS, historyData, fileHistoricalData, isCompactViewport, getPlotlyLayout, getCutoffTime, analyticsRange } from './shared.js';
 
 export function renderTimelineTab(container) {
+    if (!container) container = document.getElementById('timeline-chart-container');
     if (!container || typeof Plotly === 'undefined') return;
 
     const cutoff = getCutoffTime();

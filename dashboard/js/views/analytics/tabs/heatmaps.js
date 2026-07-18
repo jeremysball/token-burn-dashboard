@@ -101,6 +101,7 @@ export const setHeatmapMetric = (m) => {
 };
 
 export function renderHeatmapsTab(container) {
+    if (!container) container = document.getElementById('heatmaps-container');
     if (!container) return;
 
     const heatmapType = document.getElementById('heatmap-type')?.value || 'hourly';
