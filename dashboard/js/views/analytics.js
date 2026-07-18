@@ -587,7 +587,7 @@ const calculateDeepInsights = () => {
         const peakHour = hourBuckets.indexOf(Math.max(...hourBuckets));
         const peakTokens = hourBuckets[peakHour];
         const totalBucketed = hourBuckets.reduce((a, b) => a + b, 0);
-        const peakShare = peakTokens / totalBucketed;
+        const peakShare = totalBucketed > 0 ? peakTokens / totalBucketed : 0;
         
         const timeLabel = peakHour >= 5 && peakHour < 12 ? 'morning ☀️' :
                          peakHour >= 12 && peakHour < 17 ? 'afternoon 🌤️' :
@@ -606,7 +606,7 @@ const calculateDeepInsights = () => {
     // 7. Input/Output with actionable insight
     const inputRatio = currentData.total_input / (total_tokens || 1);
     const outputRatio = currentData.total_output / (total_tokens || 1);
-    const ratio = inputRatio / outputRatio;
+    const ratio = outputRatio > 0 ? inputRatio / outputRatio : 0;
 
     insights.push({
         icon: inputRatio > 0.8 ? '📥' : outputRatio > 0.5 ? '📤' : '⚖️',
@@ -1931,7 +1931,8 @@ const updateHeatmap = () => {
 // Export functions for window access
 export { 
     generateDeepInsights,
-    generateLLMInsights, 
+    calculateDeepInsights,
+    generateLLMInsights,
     loadGitBlame, 
     investigateSpike, 
     closeInvestigation,

@@ -263,3 +263,50 @@ asserting anything. Fix:
 - `fix(eng): escape model-derived values in renderModelsTab`
 - `test(eng): assert model-heatmap/models-tab XSS; export render fns`
 
+---
+
+# Task 10 Final Review-Fix Addendum (3)
+
+## Status: DONE
+
+### Findings addressed — finite-value guards in `calculateDeepInsights`
+
+Two insight computations could render non-finite strings when data was empty
+or lopsided:
+
+1. **`Infinity:1` I/O ratio** (`analytics.js:607-609`). When output tokens are
+   zero, `outputRatio` is 0 and `inputRatio / outputRatio` produces `Infinity`,
+   rendered as `${ratio.toFixed(1)}:1` → `Infinity:1`.
+   - Fix: `const ratio = outputRatio > 0 ? inputRatio / outputRatio : 0;`
+2. **`NaN%` peak share** (`analytics.js:589-590`). When history is all-zero,
+   `totalBucketed` is 0 and `peakTokens / totalBucketed` produces `NaN`, rendered
+   as `${(peakShare * 100).toFixed(0)}%` → `NaN%`.
+   - Fix: `const peakShare = totalBucketed > 0 ? peakTokens / totalBucketed : 0;`
+
+Both fall back to `0`, a meaningful, finite value. No other insight math changed;
+Task 7–9 and prior Task 10 (escaping, `extractFileRefs`) behavior preserved.
+
+### Minor finding — trailing blank lines in generated files
+
+`git diff --check` reported trailing blank lines at EOF of the Task 10 report
+and the XSS test file. Trimmed both to a single trailing newline; `engineering.test.js`
+was already clean. `git diff --check` now passes (exit 0) for all staged files.
+
+### Regression coverage added (`tests/unit/task-10-xss.test.js`)
+- `calculateDeepInsights finite-value guards › renders finite I/O ratio when
+  output tokens are zero` — output = 0 yields value `0.0:1`, no `Infinity`/`NaN`
+  in value or description.
+- `calculateDeepInsights finite-value guards › renders finite peak share when
+  history is all-zero` — all-zero history yields no `NaN%` in the Peak Hour
+  description. `calculateDeepInsights` exported for testability (no behavior
+  change).
+
+### Verification
+- Focused: `npx jest tests/unit/task-10-xss.test.js` → 11/11 pass.
+- Full suite: `npm test` → **25 suites, 273 tests, all pass**.
+- `npm run lint` → clean (exit 0).
+- `git diff --check` → clean (exit 0) on all staged files.
+
+### Commits
+- `fix(eng): guard I/O ratio and peak-share against Infinity/NaN`
+- `test(eng): assert finite-value guards; trim trailing blank lines`

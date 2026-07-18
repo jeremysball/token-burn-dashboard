@@ -12,7 +12,8 @@ import {
     renderGitBlameData,
     renderCommitDetails,
     renderModelHeatmap,
-    renderModelsTab
+    renderModelsTab,
+    calculateDeepInsights
 } from '../../dashboard/js/views/analytics';
 import * as state from '../../dashboard/js/state';
 
@@ -225,3 +226,44 @@ describe('renderModelsTab XSS safety', () => {
     });
 });
 
+describe('calculateDeepInsights finite-value guards', () => {
+    const containsBadNumber = (str) =>
+        typeof str === 'string' && (str.includes('Infinity') || str.includes('NaN'));
+
+    it('renders finite I/O ratio when output tokens are zero', () => {
+        state.setCurrentData({
+            tokens_by_model: { 'anthropic/claude': { total: 100, cache_read: 0 } },
+            costs_by_model: { 'anthropic/claude': { total: 1 } },
+            total_tokens: 100,
+            total_input: 100,
+            total_output: 0
+        });
+        state.setHistoryData([]);
+
+        const insights = calculateDeepInsights();
+        const io = insights.find(i => i.title === 'I/O Pattern');
+        expect(io).toBeDefined();
+        expect(io.value).toBe('0.0:1');
+        expect(containsBadNumber(io.value)).toBe(false);
+        expect(containsBadNumber(io.description)).toBe(false);
+    });
+
+    it('renders finite peak share when history is all-zero', () => {
+        state.setCurrentData({
+            tokens_by_model: { 'anthropic/claude': { total: 0, cache_read: 0 } },
+            costs_by_model: { 'anthropic/claude': { total: 0 } },
+            total_tokens: 0,
+            total_input: 0,
+            total_output: 0
+        });
+        // All-zero history: every hour bucket is 0, totalBucketed = 0.
+        state.setHistoryData([{ time: '2026-01-01T00:00:00Z', total: 0 }]);
+
+        const insights = calculateDeepInsights();
+        const peak = insights.find(i => i.title === 'Peak Hour');
+        if (peak) {
+            expect(peak.description).not.toMatch(/NaN%?/);
+            expect(containsBadNumber(peak.description)).toBe(false);
+        }
+    });
+});
