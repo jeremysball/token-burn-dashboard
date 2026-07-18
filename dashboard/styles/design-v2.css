@@ -1182,6 +1182,30 @@ body {
   .git-blame-sections {
     grid-template-columns: 1fr !important;
   }
+
+  .analytics-subnav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    overflow-x: visible;
+    padding: 6px;
+  }
+
+  .analytics-subnav .subnav-btn {
+    flex: 1 1 calc(33% - 6px);
+    min-width: 90px;
+  }
+
+  .range-selector {
+    width: 100%;
+    display: flex;
+    overflow-x: auto;
+  }
+
+  .heatmap-controls {
+    flex-direction: column;
+    gap: 8px;
+  }
 }
 
 /* ===== Animations ===== */

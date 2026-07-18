@@ -2532,7 +2532,11 @@
 
         .scale-number {
             display: block;
-            font-size: 3rem;
+            font-size: clamp(1.8rem, 5vw, 3rem);
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
             font-weight: 700;
             color: var(--mono-accent);
             line-height: 1;
@@ -2840,6 +2844,9 @@
         .heatmap-wrapper {
             display: flex;
             gap: 8px;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            min-width: 0;
         }
 
         .heatmap-y-labels {
@@ -2853,6 +2860,11 @@
             font-size: 0.75rem;
             color: var(--mono-text-muted);
             text-align: right;
+            width: 110px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex-shrink: 0;
         }
 
         .heatmap-grid {
@@ -2948,6 +2960,7 @@
             font: inherit;
             color: inherit;
             background: transparent;
+            overflow: hidden;
         }
 
         .daily-heatmap-cell:hover {
@@ -2960,9 +2973,12 @@
         }
 
         .daily-heatmap-val {
-            font-size: 0.8rem;
+            font-size: 0.7rem;
             font-weight: 600;
             color: var(--mono-text);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
         }
 
         .model-heatmap {

@@ -1,5 +1,5 @@
 import { CHART_COLORS, getPricing } from '../config.js';
-import { fmtNum, fmtInt, fmtCur, getPlotlyLayout, notify } from '../utils.js';
+import { fmtNum, fmtInt, fmtCur, fmtMultiple, getPlotlyLayout, notify, splitModelKey } from '../utils.js';
 import { currentData, historyData, fileHistoricalData, analyticsRange, setAnalyticsRange, setAnalyticsTab, sortCol, sortAsc, setSortCol, setSortAsc, searchTerm, setSearchTerm } from '../state.js';
 
 const isCompactViewport = () => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
@@ -1248,7 +1248,7 @@ const renderScaleTab = () => {
     container.innerHTML = `
         <div class="scale-hero">
             <div class="scale-total">
-                <span class="scale-number">${fmtInt(totalTokens)}</span>
+                <span class="scale-number" title="${fmtInt(totalTokens)}">${fmtNum(totalTokens)}</span>
                 <span class="scale-label">total tokens</span>
             </div>
             <div class="scale-equivalent">
@@ -1272,14 +1272,13 @@ const renderScaleTab = () => {
         <div class="scale-grid">
             ${SCALE_COMPARISONS.map(comp => {
                 const achieved = totalTokens >= comp.tokens;
-                const multiple = achieved ? (totalTokens / comp.tokens).toFixed(1) : null;
                 return `
                     <div class="scale-card ${achieved ? 'achieved' : ''}">
                         <div class="scale-icon">${comp.icon}</div>
                         <div class="scale-name">${comp.name}</div>
                         <div class="scale-desc">${comp.desc}</div>
                         <div class="scale-tokens">${fmtInt(comp.tokens)} tokens</div>
-                        ${achieved ? `<div class="scale-multiple">${multiple}×</div>` : ''}
+                        ${achieved ? `<div class="scale-multiple">${fmtMultiple(comp.tokens ? totalTokens / comp.tokens : 0)}</div>` : ''}
                     </div>
                 `;
             }).join('')}
@@ -1514,7 +1513,7 @@ const renderDailyHeatmap = (container, data) => {
                                  style="background: rgba(251, 191, 36, ${0.1 + intensity * 0.9})"
                                  title="${date} - ${fmtInt(val)} tokens">
                                 <span class="daily-heatmap-day">${dayName}</span>
-                                <span class="daily-heatmap-val">${fmtInt(val)}</span>
+                                <span class="daily-heatmap-val" title="${fmtInt(val)}">${fmtNum(val)}</span>
                             </button>
                         `;
                     }).join('')}
@@ -1560,13 +1559,17 @@ const renderModelHeatmap = (container, data) => {
         <div class="heatmap-wrapper">
             <div class="heatmap-y-labels">
                 ${sortedModels.map(([model]) => {
-                    const shortName = model.split('/').pop();
+                    const shortName = splitModelKey(model).model;
                     return `<div class="heatmap-y-label" title="${model}">${shortName}</div>`;
                 }).join('')}
             </div>
             <div class="heatmap-grid hourly">
                 <div class="heatmap-x-labels">
-                    ${timeLabels.map((_, i) => `<div class="heatmap-x-label">${i}</div>`).join('')}
+                    ${timeLabels.map(t => {
+                        const dt = new Date(t.length === 13 ? t + ':00' : t);
+                        const label = isNaN(dt) ? t.slice(11, 16) : dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + dt.getHours() + ':00';
+                        return `<div class="heatmap-x-label">${label}</div>`;
+                    }).join('')}
                 </div>
                 <div class="heatmap-cells">
                     ${sortedModels.map(([model, usage]) => `
@@ -1679,5 +1682,9 @@ export {
     updateHeatmap,
     showCommitDetails,
     toggleSessionMessages,
-    closeCommitDetails
+    closeCommitDetails,
+    renderScaleTab,
+    renderHeatmapsTab,
+    renderDailyHeatmap,
+    renderModelHeatmap
 };
