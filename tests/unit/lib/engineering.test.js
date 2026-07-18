@@ -30,6 +30,32 @@ describe('lib/engineering extractFileRefs', () => {
     const refs = extractFileRefs(parts.join(' '));
     expect(refs.length).toBeLessThanOrEqual(20);
   });
+
+  test('rejects non-allowlisted extensions on relative paths', () => {
+    const text = 'leaked ./secret.txt and ./config.env and ./notes.txt keep ./ok.js';
+    const refs = extractFileRefs(text);
+    expect(refs).not.toContain('./secret.txt');
+    expect(refs).not.toContain('./config.env');
+    expect(refs).not.toContain('./notes.txt');
+    expect(refs).toContain('./ok.js');
+  });
+
+  test('rejects non-allowlisted extensions under /workspace', () => {
+    const text = 'read /workspace/app/.env.txt and /workspace/app/secrets.env but /workspace/app/main.py is fine';
+    const refs = extractFileRefs(text);
+    expect(refs.some(r => r.endsWith('.env'))).toBe(false);
+    expect(refs.some(r => r.endsWith('.txt'))).toBe(false);
+    expect(refs).toContain('/workspace/app/main.py');
+  });
+
+  test('only returns paths ending in an allowed extension', () => {
+    const text = '/workspace/a/b.js ./c.ts ../d.py /workspace/e.env ./f.txt /workspace/g.pem';
+    const refs = extractFileRefs(text);
+    const allowed = ['.js', '.ts', '.py', '.go', '.rs', '.java', '.rb', '.css', '.html', '.json', '.md'];
+    for (const r of refs) {
+      expect(allowed.some(e => r.toLowerCase().endsWith(e))).toBe(true);
+    }
+  });
 });
 
 describe('lib/engineering getFileExtensionLang', () => {

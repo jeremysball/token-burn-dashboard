@@ -659,14 +659,14 @@ const renderInsightsCards = (container, insights) => {
     container.innerHTML = insights.map((insight, i) => `
         <div class="insight-card--deep" style="animation-delay: ${i * 0.1}s">
             <div class="insight-card__header">
-                <div class="insight-card__icon">${insight.icon}</div>
+                <div class="insight-card__icon">${escapeHtml(insight.icon)}</div>
                 <div>
-                    <div class="insight-card__title">${insight.title}</div>
-                    <div class="insight-card__value">${insight.value}</div>
+                    <div class="insight-card__title">${escapeHtml(insight.title)}</div>
+                    <div class="insight-card__value">${escapeHtml(insight.value)}</div>
                 </div>
             </div>
-            <div class="insight-card__description">${insight.description}</div>
-            <div class="insight-card__detail">${insight.detail}</div>
+            <div class="insight-card__description">${escapeHtml(insight.description)}</div>
+            <div class="insight-card__detail">${escapeHtml(insight.detail)}</div>
         </div>
     `).join('');
 };
@@ -978,15 +978,16 @@ const renderGitBlameData = (data) => {
     
     // Commits list - now with files
     const commitsList = document.getElementById('git-commits-list');
-    commitsList.innerHTML = data.commits.slice(0, 10).map(commit => {
+    const visibleCommits = data.commits.slice(0, 10);
+    commitsList.innerHTML = visibleCommits.map((commit, idx) => {
         const files = commit.files || [];
         const fileList = files.slice(0, 3).map(f => `<span class="commit-file">${escapeHtml(f.split('/').pop())}</span>`).join('');
         const moreFiles = files.length > 3 ? `<span class="commit-file-more">+${files.length - 3} more</span>` : '';
         
         return `
-        <div class="git-commit-item" onclick="showCommitDetails('${commit.hash}')" style="cursor: pointer;">
+        <div class="git-commit-item" data-commit-index="${idx}" role="button" tabindex="0" style="cursor: pointer;">
             <div class="commit-main">
-                <div class="commit-hash">${commit.hash}</div>
+                <div class="commit-hash">${escapeHtml(commit.hash)}</div>
                 <div class="commit-message">${escapeHtml(commit.message)}</div>
                 <div class="commit-files">
                     ${fileList}${moreFiles}
@@ -999,6 +1000,19 @@ const renderGitBlameData = (data) => {
             </div>
         </div>
     `}).join('');
+
+    commitsList.querySelectorAll('.git-commit-item').forEach(item => {
+        const commit = visibleCommits[Number(item.dataset.commitIndex)];
+        if (!commit) return;
+        const open = () => showCommitDetails(commit.hash);
+        item.addEventListener('click', open);
+        item.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                open();
+            }
+        });
+    });
     
     // Project list
     const projects = data.projects || data.files || [];
@@ -1046,7 +1060,7 @@ const renderCommitDetails = (container, data) => {
     
     container.innerHTML = `
         <div class="commit-details-header">
-            <div class="commit-details-hash">${commit.hash}</div>
+            <div class="commit-details-hash">${escapeHtml(commit.hash)}</div>
             <div class="commit-details-message">${escapeHtml(commit.message)}</div>
             <div class="commit-details-date">${new Date(commit.date).toLocaleString()}</div>
         </div>
@@ -1070,16 +1084,16 @@ const renderCommitDetails = (container, data) => {
             <h4>Sessions (${sessions.length})</h4>
             ${sessions.map((session, idx) => `
                 <div class="session-card">
-                    <div class="session-header" onclick="toggleSessionMessages(${idx})">
-                        <span class="session-id">${session.id}</span>
+                    <div class="session-header" data-session-toggle="${idx}" role="button" tabindex="0" style="cursor: pointer;">
+                        <span class="session-id">${escapeHtml(session.id)}</span>
                         <span class="session-cost">$${session.cost.toFixed(2)}</span>
                         <span class="session-tokens">${fmtNum(session.tokens)} tokens</span>
                         <span class="session-toggle">▼</span>
                     </div>
                     <div class="session-models">
                         ${Object.entries(session.models).map(([model, stats]) => `
-                            <span class="session-model-tag" title="${model}: ${fmtNum(stats.tokens)} tokens, ${stats.calls} calls">
-                                ${model.split('/').pop()}: $${stats.cost.toFixed(2)}
+                            <span class="session-model-tag" title="${escapeHtml(`${model}: ${fmtNum(stats.tokens)} tokens, ${stats.calls} calls`)}">
+                                ${escapeHtml(model.split('/').pop())}: $${stats.cost.toFixed(2)}
                             </span>
                         `).join('')}
                     </div>
@@ -1087,7 +1101,7 @@ const renderCommitDetails = (container, data) => {
                         ${session.messages.slice(0, 5).map(msg => `
                             <div class="message-item">
                                 <div class="message-meta">
-                                    <span class="message-model">${msg.model.split('/').pop()}</span>
+                                    <span class="message-model">${escapeHtml(msg.model.split('/').pop())}</span>
                                     <span class="message-cost">$${msg.cost.toFixed(3)}</span>
                                     <span class="message-tokens">${fmtNum(msg.tokens)} tokens</span>
                                 </div>
@@ -1100,6 +1114,18 @@ const renderCommitDetails = (container, data) => {
             `).join('')}
         </div>
     `;
+
+    container.querySelectorAll('.session-header[data-session-toggle]').forEach(header => {
+        const idx = Number(header.dataset.sessionToggle);
+        const toggle = () => toggleSessionMessages(idx);
+        header.addEventListener('click', toggle);
+        header.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggle();
+            }
+        });
+    });
 };
 
 const toggleSessionMessages = (idx) => {
@@ -1840,7 +1866,7 @@ const renderModelHeatmap = (container, data, metric = 'tokens') => {
             <div class="heatmap-y-labels">
                 ${sortedModels.map(([model]) => {
                     const shortName = splitModelKey(model).model;
-                    return `<div class="heatmap-y-label" title="${model}">${shortName}</div>`;
+                    return `<div class="heatmap-y-label" title="${escapeHtml(model)}">${escapeHtml(shortName)}</div>`;
                 }).join('')}
             </div>
             <div class="heatmap-grid hourly model">
@@ -1872,13 +1898,13 @@ const renderModelHeatmap = (container, data, metric = 'tokens') => {
                                     <button type="button" class="heatmap-cell-full model${isCost ? ' cost' : ''}" 
                                          data-heatmap-cell="true"
                                          data-type="info"
-                                         data-label="${model.split('/').pop()} @ ${time}"
-                                         data-value="${display}"
-                                         data-suffix="${suffix}"
+                                         data-label="${escapeHtml(model.split('/').pop())} @ ${escapeHtml(time)}"
+                                         data-value="${escapeHtml(display)}"
+                                         data-suffix="${escapeHtml(suffix)}"
                                          data-detail="${isCost ? 'model cost' : 'model usage'}"
-                                         aria-label="${model} @ ${time} - ${display}${suffix ? ' ' + suffix : ''}"
+                                         aria-label="${escapeHtml(model)} @ ${escapeHtml(time)} - ${escapeHtml(display)}${suffix ? ' ' + suffix : ''}"
                                          style="background: ${bg}, ${opacity})"
-                                         title="${model} @ ${time} - ${display}${suffix ? ' ' + suffix : ''}">
+                                         title="${escapeHtml(model)} @ ${escapeHtml(time)} - ${escapeHtml(display)}${suffix ? ' ' + suffix : ''}">
                                     </button>
                                 `;
                             }).join('')}
@@ -1917,5 +1943,8 @@ export {
     computeSeriesStats,
     computeZScore,
     renderSpikesList,
-    renderInvestigation
+    renderInvestigation,
+    renderInsightsCards,
+    renderGitBlameData,
+    renderCommitDetails
 };
