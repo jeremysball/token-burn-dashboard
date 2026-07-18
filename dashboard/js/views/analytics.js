@@ -624,6 +624,34 @@ const calculateDeepInsights = () => {
         type: outputRatio > 0.6 ? 'warning' : 'neutral'
     });
 
+    // 8. Engineering Efficiency - tokens per LOC changed (heuristic)
+    if (currentData.total_tokens && gitBlameCache && gitBlameCache.commits) {
+        const totalLOC = gitBlameCache.commits.reduce((s, c) => s + (c.loc?.loc || 0), 0)
+            || currentData.total_lines || 0;
+        const tokPerLOC = totalLOC ? currentData.total_tokens / totalLOC : 0;
+        insights.push({
+            icon: '🛠️',
+            title: 'Eng Efficiency',
+            value: tokPerLOC ? `${fmtNum(tokPerLOC)} tok/LOC` : 'n/a',
+            description: 'Tokens per line changed - lower is more efficient. Heuristic.',
+            detail: `${fmtNum(currentData.total_tokens)} tokens / ${fmtNum(totalLOC)} LOC (git shortstat)`,
+            type: 'info'
+        });
+    }
+
+    // 9. Cost per commit (heuristic)
+    if (gitBlameCache?.commits?.length && currentData.total_cost?.total) {
+        const avg = currentData.total_cost.total / gitBlameCache.commits.length;
+        insights.push({
+            icon: '💸',
+            title: 'Cost / Commit',
+            value: `$${avg.toFixed(2)}`,
+            description: 'Avg spend per commit (session->commit heuristic)',
+            detail: `${gitBlameCache.commits.length} commits`,
+            type: 'neutral'
+        });
+    }
+
     return insights;
 };
 

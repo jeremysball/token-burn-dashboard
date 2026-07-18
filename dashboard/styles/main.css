@@ -1871,6 +1871,21 @@
             color: var(--mono-text);
         }
 
+        .insights-header .badge.experimental {
+            display: inline-block;
+            margin-left: 8px;
+            padding: 2px 8px;
+            font-size: 0.65rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            vertical-align: middle;
+            color: var(--mono-bg, #111);
+            background: var(--warning, #d4a017);
+            border-radius: 4px;
+            cursor: help;
+        }
+
         .refresh-insights-btn {
             display: flex;
             align-items: center;
