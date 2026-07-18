@@ -143,6 +143,21 @@ describe('Task 8: real per-model cost with Models.dev pricing', () => {
         const cell = document.querySelector('.heatmap-cell-full.cost');
         expect(cell.getAttribute('data-value')).toBe('$36.75');
     });
+
+    it('prices live history buckets stored under `models` (not `tokens_by_model`)', () => {
+        // Live fallback history stores per-model data under `models`; it must
+        // price the same as `tokens_by_model` rather than showing $0.00.
+        renderHeatmapTab('hourly', [{
+            time: Date.UTC(2026, 6, 10, 5),
+            total: 1_000_000,
+            models: { 'openrouter/z-ai/glm-5': 1_000_000 }
+        }], 'cost');
+        const cell = Array.from(document.querySelectorAll('.heatmap-cell-full.cost'))
+            .find(c => c.getAttribute('data-value') === '$2.00');
+        expect(cell).not.toBeNull();
+        // No unavailable banner since the model is priced.
+        expect(document.querySelector('.heatmap-metric-note.unavailable')).toBeNull();
+    });
 });
 
 describe('Task 8: missing-price behavior', () => {

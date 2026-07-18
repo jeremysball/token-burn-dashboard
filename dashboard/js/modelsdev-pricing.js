@@ -131,6 +131,23 @@ export const calculateCostWithPricing = (tokens, pricing) => {
         const cacheWrite = toNum(tokens.cache_write ?? tokens.cacheWrite);
         const reasoning = toNum(tokens.reasoning);
 
+        // Each nonzero token dimension must have a published Models.dev rate.
+        // A published $0.00 rate (presence flag true, value 0) is legitimate and
+        // contributes $0; a dimension with tokens but no published rate (flag
+        // false) means we would silently fabricate zero cost, so mark unpriced.
+        // Dimensionless zero-token records (all dims 0) stay priced at $0.00.
+        const flagOf = (flag, value) => (flag !== undefined ? !!flag : value > 0);
+        const requireRate = (tok, flag, value) => tok === 0 || flagOf(flag, value);
+
+        const priced =
+            requireRate(input, pricing.hasInput, pricing.input) &&
+            requireRate(output, pricing.hasOutput, pricing.output) &&
+            requireRate(cacheRead, pricing.hasCacheRead, pricing.cacheRead) &&
+            requireRate(cacheWrite, pricing.hasCacheWrite, pricing.cacheWrite) &&
+            requireRate(reasoning, pricing.hasReasoning, pricing.reasoning);
+
+        if (!priced) return { total: 0, priced: false };
+
         const total =
             (input / 1e6) * pricing.input +
             (output / 1e6) * pricing.output +

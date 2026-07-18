@@ -133,6 +133,31 @@ describe('calculateCostWithPricing', () => {
         const r = calculateCostWithPricing(1_000_000, partial);
         expect(r.priced).toBe(false);
     });
+
+    it('marks a token object unpriced when a nonzero dimension has no published rate', () => {
+        // Cache-only pricing (hasInput false) but the record carries input tokens.
+        // Facturing $0 here would hide real cost, so it must be unpriced.
+        const cacheOnly = normalizeModelsDevCost({ cache_read: 0.5 });
+        const r = calculateCostWithPricing({ input: 1_000_000, cache_read: 0 }, cacheOnly);
+        expect(r.priced).toBe(false);
+        expect(r.total).toBe(0);
+    });
+
+    it('prices a token object when every nonzero dimension has a published rate', () => {
+        // Input + cache tokens both have published rates (cache-only model).
+        const cacheOnly = normalizeModelsDevCost({ cache_read: 0.5 });
+        const r = calculateCostWithPricing({ input: 0, output: 0, cache_read: 1_000_000 }, cacheOnly);
+        expect(r.priced).toBe(true);
+        expect(r.total).toBeCloseTo(0.5, 5);
+    });
+
+    it('keeps a dimensionless zero-token record priced at $0.00', () => {
+        // No tokens in any dimension: nothing to fabricate, legitimate $0.00.
+        const cacheOnly = normalizeModelsDevCost({ cache_read: 0.5 });
+        const r = calculateCostWithPricing({ input: 0, output: 0, cache_read: 0 }, cacheOnly);
+        expect(r.priced).toBe(true);
+        expect(r.total).toBe(0);
+    });
 });
 
 describe('fetchModelsDevCatalog', () => {

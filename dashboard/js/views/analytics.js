@@ -1404,8 +1404,12 @@ const computeBucketCost = (d) => {
     let total = 0;
     let unpriced = false;
 
-    if (d.tokens_by_model && Object.keys(d.tokens_by_model).length > 0) {
-        for (const [model, tokens] of Object.entries(d.tokens_by_model)) {
+    // Live fallback history stores per-model data under `models`; file-derived
+    // history uses `tokens_by_model`. Normalize so both sources price the same.
+    const modelData = d.tokens_by_model || d.models || {};
+
+    if (Object.keys(modelData).length > 0) {
+        for (const [model, tokens] of Object.entries(modelData)) {
             const pricing = lookupModelsDevPrice(model);
             const r = calculateCostWithPricing(tokens, pricing);
             total += r.total;
