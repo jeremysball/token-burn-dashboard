@@ -1158,6 +1158,11 @@ const renderSpikesList = (spikes) => {
     const stats = computeSeriesStats(historyData);
     const validSpikes = spikes.filter(spike => isValidSpikeTime(spike.time));
 
+    if (validSpikes.length === 0) {
+        listEl.innerHTML = '<div class="loading-placeholder">No significant spikes detected</div>';
+        return;
+    }
+
     listEl.innerHTML = validSpikes.map((spike, idx) => {
         const date = new Date(spike.time);
         const timeStr = date.toLocaleString('en-US', {
@@ -1171,7 +1176,7 @@ const renderSpikesList = (spikes) => {
         const zScore = computeZScore(spike.tokens, stats);
 
         return `
-            <div class="spike-card spike-ratio-badge ${level}" data-spike-index="${idx}" role="button" tabindex="0" aria-label="Investigate spike at ${timeStr}">
+            <div class="spike-card ${level}" data-spike-index="${idx}" role="button" tabindex="0" aria-label="Investigate spike at ${timeStr}">
                 <div class="spike-card-head">
                     <div class="spike-time">${timeStr}</div>
                     <span class="spike-ratio-badge ${level}">${ratio}x</span>

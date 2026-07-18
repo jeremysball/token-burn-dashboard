@@ -151,6 +151,25 @@ describe('renderSpikesList safety', () => {
         expect(cards[0].dataset.spikeIndex).toBe('0');
     });
 
+    it('keeps spike-ratio-badge off the card; only the inner badge carries it', () => {
+        document.body.innerHTML = '<div id="spikes-list"></div>';
+        renderSpikesList([{ time: 1700000000000, tokens: 500000, ratio: '5.0', previousAvg: 100000 }]);
+        const card = document.querySelector('.spike-card');
+        expect(card.classList.contains('spike-ratio-badge')).toBe(false);
+        expect(card.classList.contains('high')).toBe(true);
+        expect(card.querySelector('.spike-ratio-badge').classList.contains('high')).toBe(true);
+    });
+
+    it('renders empty state when all spikes have invalid timestamps', () => {
+        document.body.innerHTML = '<div id="spikes-list"></div>';
+        renderSpikesList([
+            { time: 'not-a-number', tokens: 200000, ratio: '2.0', previousAvg: 100000 },
+            { time: NaN, tokens: 100000, ratio: '1.0', previousAvg: 100000 }
+        ]);
+        expect(document.querySelectorAll('.spike-card').length).toBe(0);
+        expect(document.getElementById('spikes-list').textContent).toContain('No significant spikes detected');
+    });
+
     it('activates investigation via click and keyboard (Enter/Space) without inline handlers', () => {
         global.fetch = jest.fn(() => Promise.resolve({
             ok: true,
