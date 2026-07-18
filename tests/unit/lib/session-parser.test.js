@@ -1,0 +1,136 @@
+/**
+ * Tests for session-parser usage parsing including reasoning tokens
+ */
+
+const { parsePiUsage, parseClaudeUsage, normalizeModelInfo } = require('../../../lib/session-parser');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { parseJsonlFile } = require('../../../lib/session-parser');
+
+describe('parsePiUsage', () => {
+  it('preserves explicit totalTokens of 0 (not truthy fallback)', () => {
+    const u = parsePiUsage({ input: 1, output: 1, reasoning: 5, totalTokens: 0 });
+    expect(u.total).toBe(0);
+    expect(u.reasoning).toBe(5);
+  });
+
+  it('computes total from components when totalTokens absent', () => {
+    const u = parsePiUsage({ input: 1, output: 1, reasoning: 5 });
+    expect(u.total).toBe(7);
+    expect(u.reasoning).toBe(5);
+  });
+
+  it('preserves explicit totalTokens when present', () => {
+    const u = parsePiUsage({ input: 1, output: 1, reasoning: 5, totalTokens: 100 });
+    expect(u.total).toBe(100);
+    expect(u.reasoning).toBe(5);
+  });
+
+  it('reads reasoning_tokens alternate key', () => {
+    const u = parsePiUsage({ input: 2, output: 2, reasoning_tokens: 9 });
+    expect(u.reasoning).toBe(9);
+    expect(u.total).toBe(13);
+  });
+
+  it('handles zero values without NaN', () => {
+    const u = parsePiUsage({});
+    expect(u.total).toBe(0);
+    expect(u.reasoning).toBe(0);
+    expect(u.input).toBe(0);
+  });
+
+  it('drops negative and non-finite token components', () => {
+    const u = parsePiUsage({ input: '-7', output: '3', cacheRead: '1e309' });
+    expect(u).toMatchObject({ input: 0, output: 3, cacheRead: 0, total: 3 });
+  });
+});
+
+describe('normalizeModelInfo first-slash semantics', () => {
+  it('splits provider/model at the FIRST slash only', () => {
+    const { provider, model } = normalizeModelInfo(
+      { model: 'anthropic/claude-3-5-sonnet/20240620' },
+      'claude'
+    );
+    expect(provider).toBe('anthropic');
+    expect(model).toBe('claude-3-5-sonnet/20240620');
+  });
+
+  it('treats a slashless claude model as anthropic and keeps model as-is', () => {
+    const { provider, model } = normalizeModelInfo(
+      { model: 'claude-3-opus' },
+      'claude'
+    );
+    expect(provider).toBe('anthropic');
+    expect(model).toBe('claude-3-opus');
+  });
+
+  it('pi source keeps provider/model and applies first-slash only to key', () => {
+    const { provider, model, modelKey } = normalizeModelInfo(
+      { provider: 'openai', model: 'openai/gpt-4o/mini' },
+      'pi'
+    );
+    expect(provider).toBe('openai');
+    expect(model).toBe('openai/gpt-4o/mini');
+    expect(modelKey).toBe('openai/openai/gpt-4o/mini');
+  });
+});
+
+describe('parseClaudeUsage', () => {
+  it('includes reasoning in computed total', () => {
+    const u = parseClaudeUsage({ input_tokens: 1, output_tokens: 1, reasoning_tokens: 5 });
+    expect(u.total).toBe(7);
+    expect(u.reasoning).toBe(5);
+  });
+
+  it('reads reasoning alternate key', () => {
+    const u = parseClaudeUsage({ input_tokens: 2, output_tokens: 2, reasoning: 9 });
+    expect(u.reasoning).toBe(9);
+  });
+
+  it('sums nested cache_creation ephemeral fields', () => {
+    const u = parseClaudeUsage({
+      input_tokens: 10,
+      output_tokens: 10,
+      cache_creation: { ephemeral_5m_input_tokens: 3, ephemeral_1h_input_tokens: 7 }
+    });
+    expect(u.cacheWrite).toBe(10);
+    expect(u.total).toBe(30);
+  });
+
+  it('preserves explicit totalTokens when provided', () => {
+    const u = parseClaudeUsage({ input_tokens: 1, output_tokens: 1, reasoning_tokens: 5, totalTokens: 50 });
+    expect(u.total).toBe(50);
+  });
+
+  it('preserves explicit totalTokens of 0 (not truthy fallback)', () => {
+    const u = parseClaudeUsage({ input_tokens: 1, output_tokens: 1, reasoning_tokens: 5, totalTokens: 0 });
+    expect(u.total).toBe(0);
+    expect(u.reasoning).toBe(5);
+  });
+
+  it('handles zero values without NaN', () => {
+    const u = parseClaudeUsage({});
+    expect(u.total).toBe(0);
+    expect(u.reasoning).toBe(0);
+  });
+
+  it('drops negative and non-finite token components', () => {
+    const u = parseClaudeUsage({ input_tokens: '-7', output_tokens: '3', reasoning_tokens: '1e309' });
+    expect(u).toMatchObject({ input: 0, output: 3, reasoning: 0, total: 3 });
+  });
+});
+
+describe('parseJsonlFile line accounting', () => {
+  it('counts nonblank source lines without a trailing newline artifact', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'token-burn-parser-'));
+    const file = path.join(dir, 'session.jsonl');
+    fs.writeFileSync(file, '\n{"type":"system"}\n\n', 'utf8');
+
+    try {
+      expect(parseJsonlFile(file).total_lines).toBe(1);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
