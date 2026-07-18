@@ -21,7 +21,7 @@ export const renderDeepInsightsTab = () => {
     generateDeepInsights();
 };
 
-const generateDeepInsights = () => {
+export const generateDeepInsights = () => {
     const container = document.getElementById('deep-insights-container');
     if (!container) return;
 
