@@ -7,7 +7,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/dashboard/styles/main.css?v=11">
+    <link rel="stylesheet" href="/dashboard/styles/main.css?v=12">
+    <link rel="stylesheet" href="/dashboard/styles/design-v2.css?v=13">
 </head>
 <body>
     <!-- Ambient particles background -->
@@ -162,7 +163,7 @@
             <!-- Deep Insights Tab -->
             <div id="analytics-tab-insights" class="analytics-content" style="display:none;">
                 <div class="insights-header">
-                    <h3>🔮 Deep Pattern Analysis</h3>
+                    <h3>🔮 Deep Pattern Analysis <span class="badge experimental" title="Heuristic best-effort, not exact accounting">experimental</span></h3>
                     <button class="refresh-insights-btn" onclick="generateDeepInsights()">
                         <span class="refresh-icon">↻</span> Refresh Analysis
                     </button>
@@ -282,8 +283,11 @@
                         <option value="hourly">Hourly Patterns</option>
                         <option value="daily">Daily Patterns</option>
                         <option value="model">Model Usage</option>
-                        <option value="cost">Cost Intensity</option>
                     </select>
+                    <div class="heatmap-metric-toggle" id="heatmap-metric-toggle">
+                        <button type="button" data-metric="tokens" class="active" onclick="setHeatmapMetric('tokens')">Tokens</button>
+                        <button type="button" data-metric="cost" onclick="setHeatmapMetric('cost')">Cost</button>
+                    </div>
                 </div>
                 <div id="heatmaps-container" class="heatmaps-container"></div>
             </div>
@@ -317,6 +321,6 @@
     </div>
 
     <script src="https://cdn.plot.ly/plotly-basic-2.35.2.min.js"></script>
-    <script type="module" src="/dashboard/js/main.js?v=11"></script>
+    <script type="module" src="/dashboard/js/main.js?v=12"></script>
 </body>
 </html>

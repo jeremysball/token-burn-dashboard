@@ -1,3 +1,11 @@
+        /* Owner: main.css provides base variables and the component styles NOT owned by
+           design-v2.css. As of this change dashboard/index.html loads design-v2.css after
+           main.css, so design-v2.css is the runtime owner for badges (pricing-source-badge),
+           top-model-name, hero, and insights component styles. Those definitions were removed
+           from main.css. main.css retains base variables, hero-spark, scale layout, the
+           deep-insights tab styles, and all unrelated styles.
+           See dashboard/styles/README.md for the full selector-ownership policy. */
+
         :root {
             --mono-bg: #0a0a0a;
             --mono-surface: #141414;
@@ -132,51 +140,8 @@
         }
 
         /* ===== HERO SECTION ===== */
-        .hero-section {
-            display: grid;
-            grid-template-columns: 2fr 1fr;
-            gap: 20px;
-            margin-bottom: 24px;
-        }
-        @media (max-width: 768px) {
-            .hero-section { grid-template-columns: 1fr; }
-        }
-
-        .hero-stat {
-            background: var(--mono-surface);
-            border: 1px solid var(--mono-border);
-            border-radius: 12px;
-            padding: 24px;
-            position: relative;
-            overflow: hidden;
-        }
-        .hero-stat.primary {
-            border-color: var(--mono-accent);
-            background: linear-gradient(135deg, var(--mono-surface) 0%, var(--mono-accent-dim) 100%);
-        }
-
-        .hero-label {
-            font-size: 0.7rem;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            color: var(--mono-text-muted);
-            margin-bottom: 8px;
-        }
-
-        .hero-value {
-            font-size: 3rem;
-            font-weight: 700;
-            color: var(--mono-text);
-            transition: all 0.3s ease;
-        }
-        .hero-value.pulse {
-            animation: pulse-value 0.5s ease;
-        }
-        @keyframes pulse-value {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); color: var(--mono-accent); }
-            100% { transform: scale(1); }
-        }
+        /* Base hero component styles (.hero-section, .hero-stat, .hero-label,
+           .hero-value) are owned by design-v2.css. See dashboard/styles/README.md. */
 
         .hero-spark {
             position: absolute;
@@ -193,10 +158,8 @@
         }
 
         /* ===== BURN RATE GAUGE ===== */
-        .hero-stat.burn-rate {
-            display: flex;
-            flex-direction: column;
-        }
+        /* .hero-stat.burn-rate layout is owned by design-v2.css (including the
+           display:flex / flex-direction:column behavior). See README. */
         .burn-rate-badge {
             font-size: 0.6rem;
             margin-left: 4px;
@@ -323,35 +286,8 @@
             flex-wrap: wrap;
         }
         .top-model-emoji { font-size: 1.2rem; }
-        .top-model-name {
-            font-size: 0.85rem;
-            color: var(--mono-text-muted);
-            min-width: 0;
-        }
-        .pricing-source-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            padding: 2px 6px;
-            border-radius: 999px;
-            border: 1px solid var(--mono-border);
-            font-size: 0.6rem;
-            line-height: 1;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-            white-space: nowrap;
-            flex: 0 0 auto;
-        }
-        .pricing-source-badge.openrouter {
-            color: var(--mono-accent);
-            background: rgba(251, 191, 36, 0.12);
-            border-color: rgba(251, 191, 36, 0.28);
-        }
-        .pricing-source-badge.local {
-            color: var(--mono-text-muted);
-            background: var(--mono-surface-hover);
-            border-color: var(--mono-border);
-        }
+        /* .top-model-name and .pricing-source-badge are owned by design-v2.css.
+           See dashboard/styles/README.md. */
         .top-model-value {
             font-size: 1.5rem;
             font-weight: 700;
@@ -360,27 +296,8 @@
         .top-model-spark { opacity: 0.5; }
 
         /* ===== INSIGHTS ===== */
-        .insights-section {
-            margin-bottom: 24px;
-        }
-        .insights-section h2 {
-            font-size: 0.8rem;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            color: var(--mono-text-muted);
-            margin-bottom: 16px;
-        }
-        .insights-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 16px;
-        }
-        @media (max-width: 1200px) {
-            .insights-grid { grid-template-columns: repeat(2, 1fr); }
-        }
-        @media (max-width: 640px) {
-            .insights-grid { grid-template-columns: 1fr; }
-        }
+        /* .insights-section, .insights-section h2, .insights-grid base AND responsive
+           styles are owned by design-v2.css. See dashboard/styles/README.md. */
 
         .insight-card {
             background: var(--mono-surface);
@@ -1954,6 +1871,21 @@
             color: var(--mono-text);
         }
 
+        .insights-header .badge.experimental {
+            display: inline-block;
+            margin-left: 8px;
+            padding: 2px 8px;
+            font-size: 0.65rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            vertical-align: middle;
+            color: var(--mono-bg, #111);
+            background: var(--warning, #d4a017);
+            border-radius: 4px;
+            cursor: help;
+        }
+
         .refresh-insights-btn {
             display: flex;
             align-items: center;
@@ -2615,7 +2547,11 @@
 
         .scale-number {
             display: block;
-            font-size: 3rem;
+            font-size: clamp(1.8rem, 5vw, 3rem);
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
             font-weight: 700;
             color: var(--mono-accent);
             line-height: 1;
@@ -2923,6 +2859,9 @@
         .heatmap-wrapper {
             display: flex;
             gap: 8px;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            min-width: 0;
         }
 
         .heatmap-y-labels {
@@ -2936,10 +2875,19 @@
             font-size: 0.75rem;
             color: var(--mono-text-muted);
             text-align: right;
+            width: 110px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex-shrink: 0;
         }
 
         .heatmap-grid {
             flex: 1;
+        }
+
+        .heatmap-grid.model {
+            flex: 0 0 auto;
         }
 
         .heatmap-x-labels {
@@ -2954,6 +2902,26 @@
             color: var(--mono-text-muted);
             width: 20px;
             text-align: center;
+        }
+
+        .heatmap-grid.model .heatmap-x-labels {
+            gap: 2px;
+            padding: 0;
+        }
+
+        .heatmap-grid.model .heatmap-x-label,
+        .heatmap-grid.model .heatmap-cell-full {
+            flex: 0 0 88px;
+            width: 88px;
+        }
+
+        .heatmap-grid.model .heatmap-x-label {
+            white-space: nowrap;
+        }
+
+        .heatmap-grid.model .heatmap-cell-full {
+            aspect-ratio: auto;
+            height: 24px;
         }
 
         .heatmap-cells {
@@ -3031,6 +2999,7 @@
             font: inherit;
             color: inherit;
             background: transparent;
+            overflow: hidden;
         }
 
         .daily-heatmap-cell:hover {
@@ -3043,9 +3012,12 @@
         }
 
         .daily-heatmap-val {
-            font-size: 0.8rem;
+            font-size: 0.7rem;
             font-weight: 600;
             color: var(--mono-text);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
         }
 
         .model-heatmap {

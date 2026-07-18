@@ -1,3 +1,5 @@
+import { splitModelKey, formatModelPrice as formatModelPriceFromUtils } from './utils.js';
+
 // ===== CACHE CONFIG =====
 export const CACHE_KEY = 'tokenBurnCache';
 export const HISTORY_KEY = 'tokenBurnHistory';
@@ -61,15 +63,23 @@ export const MODEL_PRICING = [
 ];
 
 export const getPricing = (modelName) => {
-    const name = modelName.toLowerCase();
-    // Extract just the model name if it includes a provider prefix
-    const modelOnly = name.includes('/') ? name.split('/').pop() : name;
-    
+    const name = String(modelName || '').toLowerCase();
+    const { model } = splitModelKey(name);
+    const modelOnly = model || name;
+
     for (const p of MODEL_PRICING) {
         if (p.pattern.test(modelOnly)) return p;
     }
     return MODEL_PRICING[MODEL_PRICING.length - 1];
 };
+
+export const getPricingForModel = (name, pricing_by_model) => {
+    if (pricing_by_model && pricing_by_model[name]) return pricing_by_model[name];
+    return getPricing(name);
+};
+
+export const getPricingForModelWrapper = getPricingForModel;
+export const formatModelPrice = formatModelPriceFromUtils;
 
 export const calculateCost = (tokens, modelName) => {
     const p = getPricing(modelName);

@@ -19,7 +19,8 @@ export default [
     rules: {
       'no-unused-vars': 'warn',
       'no-console': 'off',
-      'no-empty': ['warn', { allowEmptyCatch: true }]
+      'no-empty': ['warn', { allowEmptyCatch: true }],
+      'max-lines': ['warn', { max: 300, skipBlankLines: true, skipComments: true }]
     }
   },
   {

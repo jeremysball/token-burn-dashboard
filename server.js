@@ -131,7 +131,7 @@ server.on('error', (e) => {
     console.log(`Port ${currentPort} in use, trying ${nextPort}...`);
     currentPort = nextPort;
     server.close();
-    server.listen(currentPort);
+    server.listen(currentPort, '0.0.0.0');
   } else {
     console.error(e);
     process.exit(1);
@@ -156,7 +156,7 @@ server.on('listening', () => {
 `);
 });
 
-server.listen(currentPort);
+server.listen(currentPort, '0.0.0.0');
 
 // Graceful shutdown - prevent duplicate handlers
 let isShuttingDown = false;

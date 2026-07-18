@@ -85,6 +85,6 @@ test.describe('Mobile Responsive Tests', () => {
 
     await expect(page.locator('.subnav-btn[data-tab="spikes"]')).toBeVisible({ timeout: 10000 });
     await page.click('button:has-text("Spikes")');
-    await expect(page.locator('#spikes-list .spike-item')).toHaveCount(2, { timeout: 10000 });
+    await expect(page.locator('#spikes-list .spike-card')).toHaveCount(2, { timeout: 10000 });
   });
 });

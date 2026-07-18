@@ -1,5 +1,5 @@
-import { CHART_COLORS, getEmoji, getPricing } from '../config.js';
-import { fmtNum, fmtCur, createSparkline } from '../utils.js';
+import { CHART_COLORS, getEmoji, getPricingForModel } from '../config.js';
+import { fmtNum, fmtCur, createSparkline, splitModelKey, displayModel, escapeHtml, parseModelKey, notify } from '../utils.js';
 import { currentData, historyData, fileHistoricalData } from '../state.js';
 
 // ===== FLASHY DASHBOARD =====
@@ -167,10 +167,13 @@ const renderBurnRateHeatmap = () => {
         const color = getHeatmapColor(rate, maxRate);
         const height = Math.max((rate / maxRate) * 100, 15);
         const tooltip = `${fmtNum(rate)}/min`;
-        return `<div class="heatmap-cell" style="background: ${color}; height: ${height}%" title="${tooltip}"></div>`;
+        return `<button type="button" class="heatmap-cell" style="background: ${color}; height: ${height}%" title="${tooltip}" aria-label="${fmtNum(rate)} tokens per minute" data-rate="${rate}"></button>`;
     }).join('');
     
     container.innerHTML = heatmapHTML;
+    container.querySelectorAll('.heatmap-cell').forEach(cell => {
+        cell.addEventListener('click', () => notify(`${fmtNum(Number(cell.dataset.rate))} tokens/min`, 'info'));
+    });
 };
 
 const updateBurnRateGauge = () => {
@@ -203,7 +206,8 @@ const renderTopModels = (tokens_by_model, fullRender = true) => {
 
     // On full render or if count changed, rebuild everything
     const existingCards = container.querySelectorAll('.top-model-card');
-    if (fullRender || existingCards.length !== models.length) {
+    const cardKeysMatch = models.every(([name], i) => existingCards[i]?.dataset.modelKey === name);
+    if (fullRender || existingCards.length !== models.length || !cardKeysMatch) {
         container.innerHTML = models.map(([name, stats], i) => createTopModelCard(name, stats, i)).join('');
         return;
     }
@@ -216,8 +220,10 @@ const renderTopModels = (tokens_by_model, fullRender = true) => {
         const valueEl = card.querySelector('.top-model-value');
         const priceEl = card.querySelector('.top-model-price');
         const sourceEl = card.querySelector('.pricing-source-badge');
+        const providerEl = card.querySelector('.provider-badge');
         const sparkEl = card.querySelector('.top-model-spark');
-        const pricing = currentData?.pricing_by_model?.[name] || getPricing(name);
+        const modelNameEl = card.querySelector('.top-model-name');
+        const pricing = getPricingForModel(name, currentData?.pricing_by_model);
         const priceSummary = `${fmtCur(pricing.input || 0)} in / ${fmtCur(pricing.output || 0)} out`;
         const priceDetails = `${priceSummary} · cache ${fmtCur(pricing.cacheRead || 0)} read / ${fmtCur(pricing.cacheWrite || 0)} write · ${pricing.source === 'openrouter' ? 'OpenRouter' : 'local fallback'}`;
         const sourceLabel = pricing.source === 'openrouter' ? 'OpenRouter' : 'Local';
@@ -225,6 +231,7 @@ const renderTopModels = (tokens_by_model, fullRender = true) => {
             ? 'Pricing sourced from OpenRouter'
             : 'Using local fallback pricing';
         const sourceClass = pricing.source === 'openrouter' ? 'openrouter' : 'local';
+        const { provider, model } = splitModelKey(name);
         
         if (valueEl && valueEl.textContent !== fmtNum(stats.total)) {
             valueEl.textContent = fmtNum(stats.total);
@@ -232,20 +239,36 @@ const renderTopModels = (tokens_by_model, fullRender = true) => {
             setTimeout(() => valueEl.classList.remove('value-updated'), 300);
         }
         
-        if (priceEl && priceEl.textContent.trim() !== priceSummary) {
-            priceEl.textContent = priceSummary;
+        if (priceEl) {
+            if (priceEl.textContent.trim() !== priceSummary) {
+                priceEl.textContent = priceSummary;
+            }
             priceEl.title = priceDetails;
         }
-        
-        if (sourceEl && (sourceEl.textContent !== sourceLabel || !sourceEl.classList.contains(sourceClass))) {
-            sourceEl.textContent = sourceLabel;
-            sourceEl.className = `pricing-source-badge ${sourceClass}`;
+
+        if (sourceEl) {
+            if (sourceEl.textContent !== sourceLabel || !sourceEl.classList.contains(sourceClass)) {
+                sourceEl.textContent = sourceLabel;
+                sourceEl.className = `pricing-source-badge ${sourceClass}`;
+            }
             sourceEl.title = sourceTitle;
+        }
+
+        if (providerEl && providerEl.textContent !== provider) {
+            providerEl.textContent = provider;
+        }
+
+        if (modelNameEl) {
+            const display = model;
+            if (modelNameEl.textContent !== model) {
+                modelNameEl.textContent = display;
+                modelNameEl.title = displayModel(name);
+            }
         }
         
         if (sparkEl) {
             const sparkData = historyData.slice(-15).map(h => (h.models && h.models[name]) || 0);
-            sparkEl.innerHTML = createSparkline(sparkData, 120, 30);
+            sparkEl.innerHTML = createSparkline(sparkData, 120, 30, { gradient: true });
         }
     });
 };
@@ -253,7 +276,7 @@ const renderTopModels = (tokens_by_model, fullRender = true) => {
 const createTopModelCard = (name, stats, i) => {
     const sparkData = historyData.slice(-15).map(h => (h.models && h.models[name]) || 0);
     const color = CHART_COLORS[i % CHART_COLORS.length];
-    const pricing = currentData?.pricing_by_model?.[name] || getPricing(name);
+    const pricing = getPricingForModel(name, currentData?.pricing_by_model);
     const priceSummary = `${fmtCur(pricing.input || 0)} in / ${fmtCur(pricing.output || 0)} out`;
     const priceDetails = `${priceSummary} · cache ${fmtCur(pricing.cacheRead || 0)} read / ${fmtCur(pricing.cacheWrite || 0)} write · ${pricing.source === 'openrouter' ? 'OpenRouter' : 'local fallback'}`;
     const sourceLabel = pricing.source === 'openrouter' ? 'OpenRouter' : 'Local';
@@ -261,12 +284,20 @@ const createTopModelCard = (name, stats, i) => {
     const sourceTitle = pricing.source === 'openrouter'
         ? 'Pricing sourced from OpenRouter'
         : 'Using local fallback pricing';
+    const { provider, model } = splitModelKey(name);
+    const parsed = parseModelKey(name);
+    const providerBadge = provider
+        ? `<span class="provider-badge" title="Provider: ${escapeHtml(provider)}${parsed.vendor ? ` · Vendor: ${escapeHtml(parsed.vendor)}` : ''}">${escapeHtml(provider)}</span>`
+        : '';
+    const modelDisplay = escapeHtml(model);
+    const fullTitle = escapeHtml(displayModel(name));
 
     return `
-        <div class="top-model-card" style="--card-color: ${color}">
+        <div class="top-model-card" data-model-key="${escapeHtml(name)}" style="--card-color: ${color}">
             <div class="top-model-header">
                 <span class="top-model-emoji">${getEmoji(name)}</span>
-                <span class="top-model-name">${name.split('/').pop()}</span>
+                <span class="top-model-name" title="${fullTitle}">${modelDisplay}</span>
+                ${providerBadge}
                 <span class="pricing-source-badge ${sourceClass}" title="${sourceTitle}">${sourceLabel}</span>
             </div>
             <div class="top-model-price" title="${priceDetails}" style="font-size: 0.72rem; color: var(--mono-text-muted); margin-top: 2px;">
@@ -276,7 +307,7 @@ const createTopModelCard = (name, stats, i) => {
                 ${fmtNum(stats.total)}
             </div>
             <div class="top-model-spark">
-                ${createSparkline(sparkData, 120, 30)}
+                ${createSparkline(sparkData, 120, 30, { gradient: true })}
             </div>
         </div>
     `;
@@ -363,11 +394,11 @@ const generateInsights = (fullRender = true) => {
 
 const createInsightCard = (insight) => `
     <div class="insight-card">
-        <div class="insight-icon">${insight.icon}</div>
+        <div class="insight-icon">${escapeHtml(insight.icon)}</div>
         <div class="insight-content">
-            <div class="insight-title">${insight.title}</div>
-            <div class="insight-value">${insight.value}</div>
-            <div class="insight-detail">${insight.detail}</div>
+            <div class="insight-title">${escapeHtml(insight.title)}</div>
+            <div class="insight-value">${escapeHtml(insight.value)}</div>
+            <div class="insight-detail">${escapeHtml(insight.detail)}</div>
         </div>
     </div>
 `;
