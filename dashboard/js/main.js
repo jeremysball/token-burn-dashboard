@@ -225,9 +225,17 @@ window.toggleSpikeSession = (idx) => {
 };
 
 // ===== INIT =====
+export const getSavedTheme = () => {
+    try {
+        return localStorage.getItem('tokenBurnTheme') || 'dark';
+    } catch {
+        return 'dark';
+    }
+};
+
 const init = () => {
     // Load theme
-    const savedTheme = localStorage.getItem('tokenBurnTheme') || 'dark';
+    const savedTheme = getSavedTheme();
     document.documentElement.setAttribute('data-theme', savedTheme);
 
     // Initialize ambient particles

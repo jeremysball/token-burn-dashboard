@@ -224,18 +224,18 @@ describe('Task 7: CSS overflow guards', () => {
   });
 });
 
-describe('Task 7: mobile subnav 33% wrap', () => {
-  it('preserves wrapped navigation and stacked controls under 768px', () => {
+describe('Task 7: mobile subnav strip', () => {
+  it('keeps analytics navigation in one scrollable row under 768px', () => {
     const rules = cssRules(designV2Css);
     const subnav = findMobileRule(rules, '.analytics-subnav').style;
     const button = findMobileRule(rules, '.analytics-subnav .subnav-btn').style;
     const controls = findMobileRule(rules, '.controls-bar').style;
     const range = findMobileRule(rules, '.range-selector').style;
     const heatmapControls = findMobileRule(rules, '.heatmap-controls').style;
-    expect(subnav.getPropertyValue('flex-wrap')).toBe('wrap');
-    expect(subnav.getPropertyValue('overflow-x')).toBe('visible');
-    expect(button.getPropertyValue('flex')).toBe('1 1 calc(33% - 6px)');
-    expect(button.getPropertyValue('min-width')).toBe('90px');
+    expect(subnav.getPropertyValue('flex-wrap')).toBe('nowrap');
+    expect(subnav.getPropertyValue('overflow-x')).toBe('auto');
+    expect(button.getPropertyValue('flex')).toBe('0 0 auto');
+    expect(button.getPropertyValue('min-width')).toBe('auto');
     expect(controls.getPropertyValue('flex-direction')).toBe('column');
     expect(range.getPropertyValue('width')).toBe('100%');
     expect(range.getPropertyValue('overflow-x')).toBe('auto');

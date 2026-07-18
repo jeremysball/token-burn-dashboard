@@ -1,5 +1,5 @@
 import { CHART_COLORS, getEmoji, getPricingForModel } from '../config.js';
-import { fmtNum, fmtCur, createSparkline, splitModelKey, displayModel, escapeHtml, parseModelKey } from '../utils.js';
+import { fmtNum, fmtCur, createSparkline, splitModelKey, displayModel, escapeHtml, parseModelKey, notify } from '../utils.js';
 import { currentData, historyData, fileHistoricalData } from '../state.js';
 
 // ===== FLASHY DASHBOARD =====
@@ -167,10 +167,13 @@ const renderBurnRateHeatmap = () => {
         const color = getHeatmapColor(rate, maxRate);
         const height = Math.max((rate / maxRate) * 100, 15);
         const tooltip = `${fmtNum(rate)}/min`;
-        return `<div class="heatmap-cell" style="background: ${color}; height: ${height}%" title="${tooltip}"></div>`;
+        return `<button type="button" class="heatmap-cell" style="background: ${color}; height: ${height}%" title="${tooltip}" aria-label="${fmtNum(rate)} tokens per minute" data-rate="${rate}"></button>`;
     }).join('');
     
     container.innerHTML = heatmapHTML;
+    container.querySelectorAll('.heatmap-cell').forEach(cell => {
+        cell.addEventListener('click', () => notify(`${fmtNum(Number(cell.dataset.rate))} tokens/min`, 'info'));
+    });
 };
 
 const updateBurnRateGauge = () => {

@@ -88,4 +88,28 @@ describe('dashboard model cards', () => {
     expect(source.textContent).toBe('OpenRouter');
     expect(source.title).toBe('Pricing sourced from OpenRouter');
   });
+
+  it('shows a burn-rate reading when a heatmap bar is selected', () => {
+    document.body.innerHTML = `
+      <div id="burn-rate"></div>
+      <div id="burn-rate-heatmap"></div>
+      <div id="top-models-grid"></div>
+      <div id="notifications"></div>
+    `;
+    setCurrentData(dataForModel('gpt-4o'));
+    setHistoryData([
+      { time: 0, total: 100 },
+      { time: 60_000, total: 200 }
+    ]);
+
+    renderDashboard(true);
+
+    const bar = document.querySelector('button.heatmap-cell');
+    expect(bar).not.toBeNull();
+    expect(bar.getAttribute('aria-label')).toBe('200 tokens per minute');
+
+    bar.click();
+    expect(document.querySelector('#notifications .notification.info').textContent)
+      .toBe('200 tokens/min');
+  });
 });

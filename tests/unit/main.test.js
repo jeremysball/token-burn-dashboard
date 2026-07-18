@@ -4,6 +4,7 @@
 
 describe('animateNumber', () => {
   let animateNumber;
+  let getSavedTheme;
 
   beforeAll(async () => {
     document.body.innerHTML = `
@@ -12,7 +13,7 @@ describe('animateNumber', () => {
     `;
     Object.defineProperty(document, 'readyState', { configurable: true, value: 'loading' });
     global.fetch = jest.fn().mockRejectedValue(new Error('test fetch'));
-    ({ animateNumber } = await import('../../dashboard/js/main.js'));
+    ({ animateNumber, getSavedTheme } = await import('../../dashboard/js/main.js'));
   });
 
   beforeEach(() => {
@@ -39,5 +40,17 @@ describe('animateNumber', () => {
     jest.runOnlyPendingTimers();
 
     expect(element.textContent).toBe('2.50B');
+  });
+
+  it('uses the dark theme when localStorage is unavailable', () => {
+    const descriptor = Object.getOwnPropertyDescriptor(window, 'localStorage');
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      get: () => { throw new Error('Storage is unavailable'); }
+    });
+
+    expect(getSavedTheme()).toBe('dark');
+
+    Object.defineProperty(window, 'localStorage', descriptor);
   });
 });
