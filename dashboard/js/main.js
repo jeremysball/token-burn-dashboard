@@ -220,6 +220,9 @@ window.toggleSessionMessages = (idx) => {
 window.closeCommitDetails = () => {
     import('./views/analytics.js').then(m => m.closeCommitDetails());
 };
+window.toggleSpikeSession = (idx) => {
+    import('./views/analytics.js').then(m => m.toggleSpikeSession(idx));
+};
 
 // ===== INIT =====
 const init = () => {
