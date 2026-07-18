@@ -228,6 +228,20 @@ describe('server pricing', () => {
     expect(record.input).not.toBeUndefined();
   });
 
+  it('keeps an explicit zero reasoning rate free', () => {
+    setOpenRouterPricingSnapshot({
+      fetchedAt: Date.now(),
+      source: 'openrouter',
+      models: [{
+        id: 'openai/gpt-4o',
+        pricing: { prompt: '0.0000025', completion: '0.00001', reasoning: '0' }
+      }],
+      error: null
+    });
+
+    expect(calculateCost({ reasoning: 1_000_000 }, 'openai/gpt-4o').reasoning).toBe(0);
+  });
+
   it('matches OpenRouter pricing by full id and alias', () => {
     setOpenRouterPricingSnapshot({
       fetchedAt: Date.now(),

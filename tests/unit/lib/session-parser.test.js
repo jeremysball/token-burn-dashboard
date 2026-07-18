@@ -3,6 +3,10 @@
  */
 
 const { parsePiUsage, parseClaudeUsage, normalizeModelInfo } = require('../../../lib/session-parser');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { parseJsonlFile } = require('../../../lib/session-parser');
 
 describe('parsePiUsage', () => {
   it('preserves explicit totalTokens of 0 (not truthy fallback)', () => {
@@ -34,6 +38,11 @@ describe('parsePiUsage', () => {
     expect(u.total).toBe(0);
     expect(u.reasoning).toBe(0);
     expect(u.input).toBe(0);
+  });
+
+  it('drops negative and non-finite token components', () => {
+    const u = parsePiUsage({ input: '-7', output: '3', cacheRead: '1e309' });
+    expect(u).toMatchObject({ input: 0, output: 3, cacheRead: 0, total: 3 });
   });
 });
 
@@ -104,5 +113,24 @@ describe('parseClaudeUsage', () => {
     const u = parseClaudeUsage({});
     expect(u.total).toBe(0);
     expect(u.reasoning).toBe(0);
+  });
+
+  it('drops negative and non-finite token components', () => {
+    const u = parseClaudeUsage({ input_tokens: '-7', output_tokens: '3', reasoning_tokens: '1e309' });
+    expect(u).toMatchObject({ input: 0, output: 3, reasoning: 0, total: 3 });
+  });
+});
+
+describe('parseJsonlFile line accounting', () => {
+  it('counts nonblank source lines without a trailing newline artifact', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'token-burn-parser-'));
+    const file = path.join(dir, 'session.jsonl');
+    fs.writeFileSync(file, '\n{"type":"system"}\n\n', 'utf8');
+
+    try {
+      expect(parseJsonlFile(file).total_lines).toBe(1);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
