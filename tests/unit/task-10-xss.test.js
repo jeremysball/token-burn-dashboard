@@ -344,6 +344,29 @@ describe('calculateDeepInsights cache savings', () => {
         // Savings = 2M cached * ($3/M input - $0.30/M cache-read) = 2M * $2.70/M = $5.40
         expect(cache.description).toContain('$5.40');
     });
+
+    it('sums cache savings using each model pricing record', () => {
+        state.setCurrentData({
+            tokens_by_model: {
+                expensive: { total: 3_000_000, cache_read: 2_000_000, input: 1_000_000 },
+                flat: { total: 2_000_000, cache_read: 1_000_000, input: 1_000_000 }
+            },
+            pricing_by_model: {
+                expensive: { input: 10, cacheRead: 1 },
+                flat: { input: 1, cacheRead: 1 }
+            },
+            costs_by_model: { expensive: { total: 10 }, flat: { total: 2 } },
+            total_tokens: 5_000_000,
+            total_input: 2_000_000,
+            total_output: 0,
+            total_cache_read: 3_000_000,
+            total_cost: { input: 11, total: 12 }
+        });
+        state.setHistoryData([]);
+
+        const cache = calculateDeepInsights().find(i => i.title === 'Cache Efficiency');
+        expect(cache.description).toContain('$18.00');
+    });
 });
 
 describe('calculateDeepInsights finite-value guards', () => {

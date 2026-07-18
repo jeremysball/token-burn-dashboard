@@ -73,7 +73,21 @@ export const calculateDeepInsights = () => {
     const totalInput = currentData.total_input || 0;
     const cacheRate = totalCacheRead / (totalInput + totalCacheRead || 1);
 
-    // Top model by cost drives the cache discount ratio
+    // Use each model's own cache discount. Applying the top model's pricing to
+    // all cached tokens overstates savings when the workload mixes models.
+    const perModelCacheSavings = models.reduce((summary, [name, stats]) => {
+        const cacheRead = Number(stats.cache_read ?? stats.cacheRead ?? 0);
+        const pricing = getPricingForModel(name);
+        const inputRate = Number(pricing?.input);
+        const cacheReadRate = Number(pricing?.cacheRead);
+        if (!Number.isFinite(cacheRead) || cacheRead <= 0
+            || !Number.isFinite(inputRate) || !Number.isFinite(cacheReadRate)) {
+            return summary;
+        }
+        return summary + (cacheRead / 1e6) * Math.max(0, inputRate - cacheReadRate);
+    }, 0);
+
+    // Top model remains a fallback only for the potential-savings explanation.
     const topModel = models.length > 0
         ? models.slice().sort((a, b) =>
             (costs_by_model?.[b[0]]?.total || 0) - (costs_by_model?.[a[0]]?.total || 0))[0][0]
@@ -89,7 +103,9 @@ export const calculateDeepInsights = () => {
         : 0.000003;
     const avgCacheReadCostPerToken = cacheDiscountRatio * avgInputCostPerToken;
 
-    const cacheSavings = Math.max(0, totalCacheRead * (avgInputCostPerToken - avgCacheReadCostPerToken));
+    const cacheSavings = perModelCacheSavings > 0
+        ? perModelCacheSavings
+        : Math.max(0, totalCacheRead * (avgInputCostPerToken - avgCacheReadCostPerToken));
 
     insights.push({
         icon: cacheRate > 0.5 ? '💾' : '📦',
@@ -373,4 +389,3 @@ export const renderLLMInsights = (text, warningMessage = null) => {
         </div>
     `;
 };
-
