@@ -38,6 +38,21 @@ describe('normalizeModelsDevCost', () => {
         expect(normalizeModelsDevCost({})).toBeNull();
         expect(normalizeModelsDevCost(undefined)).toBeNull();
     });
+
+    it('does not treat null or empty string fields as valid free pricing', () => {
+        // Number(null) and Number('') are 0, but a missing/empty field must stay
+        // absent (not present). With only absent fields the cost is unusable.
+        const p = normalizeModelsDevCost({ input: null, output: '' });
+        expect(p).toBeNull();
+    });
+
+    it('preserves an explicit numeric zero as a present free rate', () => {
+        const p = normalizeModelsDevCost({ input: 0, output: 0 });
+        expect(p.hasInput).toBe(true);
+        expect(p.hasOutput).toBe(true);
+        expect(p.input).toBe(0);
+        expect(p.output).toBe(0);
+    });
 });
 
 describe('lookupModelsDevPrice', () => {
@@ -78,7 +93,7 @@ describe('lookupModelsDevPrice', () => {
 });
 
 describe('calculateCostWithPricing', () => {
-    const pricing = { input: 5, output: 25, reasoning: 10, cacheRead: 0.5, cacheWrite: 6.25, source: 'models.dev' };
+    const pricing = { input: 5, output: 25, reasoning: 10, cacheRead: 0.5, cacheWrite: 6.25, source: 'models.dev', hasInput: true, hasOutput: true, hasReasoning: true, hasCacheRead: true, hasCacheWrite: true };
 
     it('uses real per-model rates for a token object with all dims', () => {
         const r = calculateCostWithPricing({ input: 1e6, output: 1e6, cache_read: 1e6, cache_write: 1e6, reasoning: 1e6 }, pricing);
@@ -92,13 +107,6 @@ describe('calculateCostWithPricing', () => {
         const r = calculateCostWithPricing(2_000_000, pricing);
         expect(r.priced).toBe(true);
         expect(r.total).toBeCloseTo(30, 5);
-    });
-
-    it('falls back to reasoning rate when only reasoning is present', () => {
-        const rp = { input: 0, output: 0, reasoning: 10, cacheRead: 0, cacheWrite: 0, source: 'models.dev' };
-        const r = calculateCostWithPricing(1_000_000, rp);
-        expect(r.priced).toBe(true);
-        expect(r.total).toBeCloseTo(10, 5);
     });
 
     it('reports unpriced when pricing is missing', () => {
@@ -157,6 +165,27 @@ describe('calculateCostWithPricing', () => {
         const r = calculateCostWithPricing({ input: 0, output: 0, cache_read: 0 }, cacheOnly);
         expect(r.priced).toBe(true);
         expect(r.total).toBe(0);
+    });
+
+    it('requires both input and output rates for an aggregate total token count', () => {
+        // Input-only pricing cannot fairly price an undimensioned total, so it is
+        // unpriced rather than inferred.
+        const inputOnly = normalizeModelsDevCost({ input: 5 });
+        const r = calculateCostWithPricing(1_000_000, inputOnly);
+        expect(r.priced).toBe(false);
+    });
+
+    it('keeps an aggregate total priced when input and output are both published (incl. explicit $0)', () => {
+        // Valid free model: input:0 and output:0 are both published -> priced $0.00.
+        const free = normalizeModelsDevCost({ input: 0, output: 0 });
+        const r = calculateCostWithPricing(1_000_000, free);
+        expect(r.priced).toBe(true);
+        expect(r.total).toBe(0);
+        // A non-free model priced at the (input+output)/2 average per 1M.
+        const both = normalizeModelsDevCost({ input: 1, output: 3 });
+        const r2 = calculateCostWithPricing(1_000_000, both);
+        expect(r2.priced).toBe(true);
+        expect(r2.total).toBeCloseTo(2, 5);
     });
 });
 

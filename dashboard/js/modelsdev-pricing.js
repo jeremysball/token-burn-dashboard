@@ -45,28 +45,37 @@ export const clearCatalogCache = () => {
 export const normalizeModelsDevCost = (cost) => {
     if (!cost || typeof cost !== 'object') return null;
 
-    const input = Number(cost.input);
-    const output = Number(cost.output);
-    const reasoning = Number(cost.reasoning);
-    const cacheRead = Number(cost.cache_read);
-    const cacheWrite = Number(cost.cache_write);
+    // Only accept finite numeric fields from the catalog. Number(null) and
+    // Number('') both coerce to 0, which would wrongly count a missing field as
+    // a valid (free) rate; an explicit numeric 0 is preserved as present.
+    const read = (v) => {
+        const n = typeof v === 'number' ? v : Number(v);
+        const present = typeof v === 'number' && Number.isFinite(v);
+        return { value: present ? n : 0, present };
+    };
 
-    const hasInput = Number.isFinite(input);
-    const hasOutput = Number.isFinite(output);
-    const hasReasoning = Number.isFinite(reasoning);
-    const hasCacheRead = Number.isFinite(cacheRead);
-    const hasCacheWrite = Number.isFinite(cacheWrite);
+    const input = read(cost.input);
+    const output = read(cost.output);
+    const reasoning = read(cost.reasoning);
+    const cacheRead = read(cost.cache_read);
+    const cacheWrite = read(cost.cache_write);
+
+    const hasInput = input.present;
+    const hasOutput = output.present;
+    const hasReasoning = reasoning.present;
+    const hasCacheRead = cacheRead.present;
+    const hasCacheWrite = cacheWrite.present;
 
     if (!hasInput && !hasOutput && !hasReasoning && !hasCacheRead && !hasCacheWrite) {
         return null;
     }
 
     return {
-        input: hasInput ? input : 0,
-        output: hasOutput ? output : 0,
-        reasoning: hasReasoning ? reasoning : 0,
-        cacheRead: hasCacheRead ? cacheRead : 0,
-        cacheWrite: hasCacheWrite ? cacheWrite : 0,
+        input: input.value,
+        output: output.value,
+        reasoning: reasoning.value,
+        cacheRead: cacheRead.value,
+        cacheWrite: cacheWrite.value,
         // Presence flags distinguish an explicit $0.00 rate (valid, free model)
         // from a field that Models.dev simply did not publish (truly missing).
         hasInput,
@@ -159,27 +168,19 @@ export const calculateCostWithPricing = (tokens, pricing) => {
     }
 
     const total = toNum(tokens);
-    // Only input + output are known for an aggregate total token count.
-    // Prefer explicit presence flags (set by normalizeModelsDevCost) so an
-    // explicit $0.00 Models.dev rate stays priced, while a flagless caller falls
-    // back to the numeric value to preserve prior behavior.
-    const flagOf = (flag, value) => (flag !== undefined ? !!flag : value > 0);
-    const hasInput = flagOf(pricing.hasInput, pricing.input);
-    const hasOutput = flagOf(pricing.hasOutput, pricing.output);
-    const hasReasoning = flagOf(pricing.hasReasoning, pricing.reasoning);
+    // Only input + output are known for an aggregate total token count, with no
+    // dimension split. A one-sided rate would infer a misleading cost, so both
+    // input and output must be published (explicit $0.00 for a valid free model
+    // counts as published). Reasoning-only or one-sided pricing is unpriced.
+    const hasInput = !!pricing.hasInput;
+    const hasOutput = !!pricing.hasOutput;
 
-    if (!hasInput && !hasOutput && !hasReasoning) {
+    if (!hasInput || !hasOutput) {
         return { total: 0, priced: false };
     }
 
-    // Use the model's own real per-1M rates, never a global constant.
-    const rate = hasInput && hasOutput
-        ? (pricing.input + pricing.output) / 2
-        : hasInput
-            ? pricing.input
-            : hasReasoning
-                ? pricing.reasoning
-                : pricing.output;
+    // Use the model's own real per-1M average of input + output, never a constant.
+    const rate = (pricing.input + pricing.output) / 2;
 
     return { total: (total / 1e6) * rate, priced: true };
 };
