@@ -75,27 +75,41 @@ export const calculateDeepInsights = () => {
 
     // Use each model's own cache discount. Applying the top model's pricing to
     // all cached tokens overstates savings when the workload mixes models.
-    const perModelCacheSavings = models.reduce((summary, [name, stats]) => {
+    // Track whether any model had usable pricing, separately from the summed
+    // total, so a genuinely-zero result (e.g. a free model) isn't mistaken
+    // for "couldn't compute" and overridden by the fallback below.
+    let perModelCacheSavings = 0;
+    let perModelDiscountNumerator = 0;
+    let perModelDiscountDenominator = 0;
+    let perModelCoverage = false;
+    for (const [name, stats] of models) {
         const cacheRead = Number(stats.cache_read ?? stats.cacheRead ?? 0);
         const pricing = getPricingForModel(name);
         const inputRate = Number(pricing?.input);
         const cacheReadRate = Number(pricing?.cacheRead);
         if (!Number.isFinite(cacheRead) || cacheRead <= 0
             || !Number.isFinite(inputRate) || !Number.isFinite(cacheReadRate)) {
-            return summary;
+            continue;
         }
-        return summary + (cacheRead / 1e6) * Math.max(0, inputRate - cacheReadRate);
-    }, 0);
+        perModelCoverage = true;
+        perModelCacheSavings += (cacheRead / 1e6) * Math.max(0, inputRate - cacheReadRate);
+        perModelDiscountNumerator += cacheRead * cacheReadRate;
+        perModelDiscountDenominator += cacheRead * inputRate;
+    }
 
-    // Top model remains a fallback only for the potential-savings explanation.
+    // Top model remains a fallback only when no model had usable pricing.
     const topModel = models.length > 0
         ? models.slice().sort((a, b) =>
             (costs_by_model?.[b[0]]?.total || 0) - (costs_by_model?.[a[0]]?.total || 0))[0][0]
         : null;
     const pricing = getPricingForModel(topModel) || { input: 3, output: 15, cacheRead: 0.3 };
 
-    // Real cache discount ratio derived from model pricing (cacheRead/input)
-    const cacheDiscountRatio = cacheDiscountRatioFromPricing(pricing);
+    // Real cache discount ratio derived from model pricing (cacheRead/input),
+    // preferring the blended per-model ratio so the displayed discount
+    // matches the dollar figure above instead of just the top model's rate.
+    const cacheDiscountRatio = perModelDiscountDenominator > 0
+        ? perModelDiscountNumerator / perModelDiscountDenominator
+        : cacheDiscountRatioFromPricing(pricing);
 
     // Average input cost per token, falling back to a sensible default
     const avgInputCostPerToken = totalInput > 0 && total_cost?.input
@@ -103,7 +117,7 @@ export const calculateDeepInsights = () => {
         : 0.000003;
     const avgCacheReadCostPerToken = cacheDiscountRatio * avgInputCostPerToken;
 
-    const cacheSavings = perModelCacheSavings > 0
+    const cacheSavings = perModelCoverage
         ? perModelCacheSavings
         : Math.max(0, totalCacheRead * (avgInputCostPerToken - avgCacheReadCostPerToken));
 
