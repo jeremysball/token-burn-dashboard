@@ -2871,6 +2871,10 @@
             flex: 1;
         }
 
+        .heatmap-grid.model {
+            flex: 0 0 auto;
+        }
+
         .heatmap-x-labels {
             display: flex;
             justify-content: space-between;
@@ -2883,6 +2887,26 @@
             color: var(--mono-text-muted);
             width: 20px;
             text-align: center;
+        }
+
+        .heatmap-grid.model .heatmap-x-labels {
+            gap: 2px;
+            padding: 0;
+        }
+
+        .heatmap-grid.model .heatmap-x-label,
+        .heatmap-grid.model .heatmap-cell-full {
+            flex: 0 0 88px;
+            width: 88px;
+        }
+
+        .heatmap-grid.model .heatmap-x-label {
+            white-space: nowrap;
+        }
+
+        .heatmap-grid.model .heatmap-cell-full {
+            aspect-ratio: auto;
+            height: 24px;
         }
 
         .heatmap-cells {

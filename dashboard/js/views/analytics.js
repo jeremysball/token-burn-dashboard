@@ -1500,7 +1500,10 @@ const renderDailyHeatmap = (container, data) => {
                     ${week.map(date => {
                         const val = byDate[date];
                         const intensity = val / maxVal;
-                        const dayName = new Date(date).toLocaleDateString('en', { weekday: 'short' });
+                        const dayName = new Date(date).toLocaleDateString('en', {
+                            weekday: 'short',
+                            timeZone: 'UTC'
+                        });
                         return `
                             <button type="button" class="daily-heatmap-cell" 
                                  data-heatmap-cell="true"
@@ -1563,11 +1566,18 @@ const renderModelHeatmap = (container, data) => {
                     return `<div class="heatmap-y-label" title="${model}">${shortName}</div>`;
                 }).join('')}
             </div>
-            <div class="heatmap-grid hourly">
+            <div class="heatmap-grid hourly model">
                 <div class="heatmap-x-labels">
                     ${timeLabels.map(t => {
-                        const dt = new Date(t.length === 13 ? t + ':00' : t);
-                        const label = isNaN(dt) ? t.slice(11, 16) : dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + dt.getHours() + ':00';
+                        const dt = new Date(t.length === 13 ? t + ':00Z' : t);
+                        const dateLabel = dt.toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            timeZone: 'UTC'
+                        });
+                        const label = isNaN(dt)
+                            ? t.slice(11, 16)
+                            : `${dateLabel} ${String(dt.getUTCHours()).padStart(2, '0')}:00`;
                         return `<div class="heatmap-x-label">${label}</div>`;
                     }).join('')}
                 </div>
@@ -1682,9 +1692,5 @@ export {
     updateHeatmap,
     showCommitDetails,
     toggleSessionMessages,
-    closeCommitDetails,
-    renderScaleTab,
-    renderHeatmapsTab,
-    renderDailyHeatmap,
-    renderModelHeatmap
+    closeCommitDetails
 };
