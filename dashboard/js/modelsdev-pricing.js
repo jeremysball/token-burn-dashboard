@@ -9,18 +9,34 @@
 
 export const MODELS_DEV_API = 'https://models.dev/api.json';
 
+// Catalog load status so callers can tell a permanent failure apart from an
+// in-flight load. Values: 'idle' | 'loading' | 'ready' | 'failed'.
+let catalogStatus = 'idle';
+let catalogError = null;
+
 let catalogCache = null;
 let catalogPromise = null;
 
 export const setCatalog = (catalog) => {
     catalogCache = catalog || null;
+    catalogStatus = catalog ? 'ready' : 'idle';
+    catalogError = null;
 };
 
 export const getCatalog = () => catalogCache;
 
+export const getCatalogStatus = () => catalogStatus;
+
+export const getCatalogError = () => catalogError;
+
+export const isCatalogFailed = () => catalogStatus === 'failed';
+
+// Reset to idle so a later fetchModelsDevCatalog call can retry after a failure.
 export const clearCatalogCache = () => {
     catalogCache = null;
     catalogPromise = null;
+    catalogStatus = 'idle';
+    catalogError = null;
 };
 
 // Convert a Models.dev cost object (USD per 1M tokens) into our pricing shape.
@@ -141,24 +157,37 @@ export const calculateCostWithPricing = (tokens, pricing) => {
 };
 
 // Fetch and cache the Models.dev catalog. Safe to call repeatedly; only the
-// first in-flight request hits the network. Rejects (does not throw) on failure
-// so callers can keep the token metric usable and render an unavailable state.
+// first in-flight request hits the network. On failure it records a 'failed'
+// status (not just a cleared promise) so callers can surface an explicit
+// unavailable message instead of confusing it with a still-loading state, while
+// still rejecting so the token metric stays usable. A prior failure can be
+// retried by clearing the cache (clearCatalogCache) first.
 export const fetchModelsDevCatalog = async (fetchFn = fetch) => {
     if (catalogCache) return catalogCache;
-    if (catalogPromise) return catalogPromise;
+    if (catalogStatus === 'loading' && catalogPromise) return catalogPromise;
+    if (catalogStatus === 'failed') {
+        // Allow a deliberate retry: a failed request is re-attempted only when
+        // the caller explicitly clears the cache first, avoiding silent loops.
+        throw new Error('Models.dev catalog previously failed; clear cache to retry');
+    }
 
+    catalogStatus = 'loading';
     catalogPromise = (async () => {
-        const res = await fetchFn(MODELS_DEV_API);
-        if (!res.ok) throw new Error(`Models.dev catalog request failed: ${res.status}`);
-        const json = await res.json();
-        catalogCache = json;
-        return json;
+        try {
+            const res = await fetchFn(MODELS_DEV_API);
+            if (!res.ok) throw new Error(`Models.dev catalog request failed: ${res.status}`);
+            const json = await res.json();
+            catalogCache = json;
+            catalogStatus = 'ready';
+            catalogError = null;
+            return json;
+        } catch (err) {
+            catalogStatus = 'failed';
+            catalogError = err?.message || String(err);
+            catalogPromise = null;
+            throw err;
+        }
     })();
 
-    try {
-        return await catalogPromise;
-    } catch (err) {
-        catalogPromise = null;
-        throw err;
-    }
+    return catalogPromise;
 };

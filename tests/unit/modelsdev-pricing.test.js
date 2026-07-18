@@ -9,6 +9,8 @@ import {
     fetchModelsDevCatalog,
     setCatalog,
     getCatalog,
+    getCatalogStatus,
+    isCatalogFailed,
     clearCatalogCache,
     MODELS_DEV_API
 } from '../../dashboard/js/modelsdev-pricing.js';
@@ -124,13 +126,32 @@ describe('fetchModelsDevCatalog', () => {
         expect(fetchFn).toHaveBeenCalledTimes(1);
     });
 
-    it('rejects without throwing on a failed catalog request', async () => {
+    it('rejects without throwing on a failed catalog request and allows a cleared retry', async () => {
         const fetchFn = jest.fn().mockResolvedValue({ ok: false, status: 503, json: async () => ({}) });
         await expect(fetchModelsDevCatalog(fetchFn)).rejects.toThrow();
-        // cache cleared so a later retry can succeed
         expect(getCatalog()).toBeNull();
+        // A failed request rejects immediately on reuse (no silent retry).
+        await expect(fetchModelsDevCatalog(fetchFn)).rejects.toThrow();
+        // Clearing the cache resets status so a deliberate retry can succeed.
+        clearCatalogCache();
         const ok = jest.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ openrouter: { models: {} } }) });
         await expect(fetchModelsDevCatalog(ok)).resolves.toBeDefined();
+    });
+
+    it('records an explicit failed status (not just a cleared promise) and allows retry after clear', async () => {
+        const fail = jest.fn().mockResolvedValue({ ok: false, status: 503, json: async () => ({}) });
+        await expect(fetchModelsDevCatalog(fail)).rejects.toThrow();
+        expect(getCatalogStatus()).toBe('failed');
+        expect(isCatalogFailed()).toBe(true);
+        // A failed request must not be silently retried on a second call.
+        await expect(fetchModelsDevCatalog(fail)).rejects.toThrow();
+        // Clearing the cache resets status so a deliberate retry can succeed.
+        clearCatalogCache();
+        expect(getCatalogStatus()).toBe('idle');
+        expect(isCatalogFailed()).toBe(false);
+        const ok = jest.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ openrouter: { models: {} } }) });
+        await expect(fetchModelsDevCatalog(ok)).resolves.toBeDefined();
+        expect(getCatalogStatus()).toBe('ready');
     });
 
     it('uses an injected catalog for lookup', () => {

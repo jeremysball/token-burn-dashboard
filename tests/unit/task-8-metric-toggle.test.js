@@ -6,7 +6,7 @@
  */
 
 import { renderAnalytics, setHeatmapMetric } from '../../dashboard/js/views/analytics.js';
-import { setCatalog, clearCatalogCache } from '../../dashboard/js/modelsdev-pricing.js';
+import { setCatalog, clearCatalogCache, fetchModelsDevCatalog } from '../../dashboard/js/modelsdev-pricing.js';
 import {
     setCurrentData,
     setFileHistoricalData,
@@ -171,6 +171,34 @@ describe('Task 8: missing-price behavior', () => {
         expect(note.textContent.toLowerCase()).toMatch(/loading|models\.dev/);
         // token metric path still produces cells (no crash / no invented constant cost)
         expect(document.querySelector('.heatmap-cell-full')).not.toBeNull();
+    });
+});
+
+describe('Task 8: catalog failure state visibility', () => {
+    beforeEach(() => {
+        document.head.innerHTML = '';
+        clearCatalogCache();
+    });
+    afterEach(() => { clearCatalogCache(); setHeatmapMetric('tokens'); });
+
+    it('renders an explicit unavailable message (not loading) when the catalog request fails', async () => {
+        const rejectingFetch = jest.fn().mockResolvedValue({
+            ok: false, status: 503, json: async () => ({})
+        });
+        await expect(fetchModelsDevCatalog(rejectingFetch)).rejects.toThrow();
+
+        renderHeatmapTab('hourly', [{ time: Date.UTC(2026, 6, 10, 5), total: 1000 }], 'cost');
+        const note = document.querySelector('.heatmap-metric-note');
+        expect(note).not.toBeNull();
+        expect(note.classList.contains('unavailable')).toBe(true);
+        expect(note.textContent).toMatch(/cannot be calculated/i);
+        expect(note.textContent.toLowerCase()).not.toMatch(/loading/);
+        // token metric stays fully usable despite the failure
+        setHeatmapMetric('tokens');
+        const tokenCell = Array.from(document.querySelectorAll('.heatmap-cell-full'))
+            .find(c => c.getAttribute('data-value') === '1,000');
+        expect(tokenCell).not.toBeNull();
+        expect(tokenCell.getAttribute('data-suffix')).toBe('tokens');
     });
 });
 

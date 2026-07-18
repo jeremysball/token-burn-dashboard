@@ -3,7 +3,8 @@ import {
     lookupModelsDevPrice,
     calculateCostWithPricing,
     fetchModelsDevCatalog,
-    getCatalog
+    getCatalog,
+    isCatalogFailed
 } from '../modelsdev-pricing.js';
 import { fmtNum, fmtInt, fmtCur, fmtMultiple, getPlotlyLayout, notify, splitModelKey } from '../utils.js';
 import { currentData, historyData, fileHistoricalData, analyticsRange, setAnalyticsRange, setAnalyticsTab, sortCol, sortAsc, setSortCol, setSortAsc, searchTerm, setSearchTerm } from '../state.js';
@@ -1435,6 +1436,9 @@ const computeBucketCost = (d) => {
 
 const renderMetricBanner = (isCost, unpriced) => {
     if (!isCost) return '';
+    if (isCatalogFailed()) {
+        return `<div class="heatmap-metric-note unavailable">Models.dev pricing unavailable; cost values cannot be calculated.</div>`;
+    }
     if (!getCatalog()) {
         return `<div class="heatmap-metric-note">Loading real pricing from Models.dev&hellip;</div>`;
     }
