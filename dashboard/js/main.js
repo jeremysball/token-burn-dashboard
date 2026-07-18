@@ -208,6 +208,9 @@ window.updateHeatmap = () => {
 window.setHeatmapMetric = (metric) => {
     import('./views/analytics.js').then(m => m.setHeatmapMetric?.(metric));
 };
+window.retryModelsDevPricing = () => {
+    import('./views/analytics.js').then(m => m.retryModelsDevPricing?.());
+};
 window.showCommitDetails = (hash) => {
     import('./views/analytics.js').then(m => m.showCommitDetails(hash));
 };

@@ -67,6 +67,13 @@ export const normalizeModelsDevCost = (cost) => {
         reasoning: hasReasoning ? reasoning : 0,
         cacheRead: hasCacheRead ? cacheRead : 0,
         cacheWrite: hasCacheWrite ? cacheWrite : 0,
+        // Presence flags distinguish an explicit $0.00 rate (valid, free model)
+        // from a field that Models.dev simply did not publish (truly missing).
+        hasInput,
+        hasOutput,
+        hasReasoning,
+        hasCacheRead,
+        hasCacheWrite,
         source: 'models.dev'
     };
 };
@@ -136,9 +143,13 @@ export const calculateCostWithPricing = (tokens, pricing) => {
 
     const total = toNum(tokens);
     // Only input + output are known for an aggregate total token count.
-    const hasInput = pricing.input > 0;
-    const hasOutput = pricing.output > 0;
-    const hasReasoning = pricing.reasoning > 0;
+    // Prefer explicit presence flags (set by normalizeModelsDevCost) so an
+    // explicit $0.00 Models.dev rate stays priced, while a flagless caller falls
+    // back to the numeric value to preserve prior behavior.
+    const flagOf = (flag, value) => (flag !== undefined ? !!flag : value > 0);
+    const hasInput = flagOf(pricing.hasInput, pricing.input);
+    const hasOutput = flagOf(pricing.hasOutput, pricing.output);
+    const hasReasoning = flagOf(pricing.hasReasoning, pricing.reasoning);
 
     if (!hasInput && !hasOutput && !hasReasoning) {
         return { total: 0, priced: false };

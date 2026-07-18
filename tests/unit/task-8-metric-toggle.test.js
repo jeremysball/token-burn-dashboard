@@ -5,7 +5,7 @@
  * These tests assert the post-implementation behavior and fail before it lands.
  */
 
-import { renderAnalytics, setHeatmapMetric } from '../../dashboard/js/views/analytics.js';
+import { renderAnalytics, setHeatmapMetric, retryModelsDevPricing } from '../../dashboard/js/views/analytics.js';
 import { setCatalog, clearCatalogCache, fetchModelsDevCatalog } from '../../dashboard/js/modelsdev-pricing.js';
 import {
     setCurrentData,
@@ -199,6 +199,58 @@ describe('Task 8: catalog failure state visibility', () => {
             .find(c => c.getAttribute('data-value') === '1,000');
         expect(tokenCell).not.toBeNull();
         expect(tokenCell.getAttribute('data-suffix')).toBe('tokens');
+    });
+
+    it('exposes a Retry pricing button and clears the failure on retry', async () => {
+        const failFetch = jest.fn().mockResolvedValue({ ok: false, status: 503, json: async () => ({}) });
+        global.fetch = failFetch;
+        await expect(fetchModelsDevCatalog()).rejects.toThrow();
+
+        renderHeatmapTab('hourly', [{ time: Date.UTC(2026, 6, 10, 5), total: 1000 }], 'cost');
+        const retryBtn = document.querySelector('.heatmap-retry-btn');
+        expect(retryBtn).not.toBeNull();
+        expect(retryBtn.textContent).toMatch(/retry/i);
+
+        // Flip the network to success and invoke the visible retry handler.
+        const okFetch = jest.fn().mockResolvedValue({
+            ok: true, status: 200, json: async () => ({ openrouter: { models: { 'z-ai/glm-5': { cost: { input: 1, output: 3 } } } } })
+        });
+        global.fetch = okFetch;
+        retryModelsDevPricing();
+        // allow the async fetch + re-render to settle
+        await new Promise(r => setTimeout(r, 0));
+        await new Promise(r => setTimeout(r, 0));
+
+        // The failure state is cleared: the "cannot be calculated" message is gone.
+        expect(document.body.textContent).not.toMatch(/cannot be calculated/i);
+        const note = document.querySelector('.heatmap-metric-note');
+        expect(note).not.toBeNull();
+        expect(note.textContent.toLowerCase()).toMatch(/models\.dev/);
+    });
+});
+
+describe('Task 8: hourly UTC grouping', () => {
+    beforeEach(() => {
+        document.head.innerHTML = '';
+        clearCatalogCache();
+        setHeatmapMetric('tokens');
+    });
+    afterEach(() => { clearCatalogCache(); setHeatmapMetric('tokens'); });
+
+    it('groups a bucket by UTC day/hour, independent of viewer timezone', () => {
+        // 2026-07-10T05:00:00Z is Thursday 05:00 UTC.
+        renderHeatmapTab('hourly', [{ time: Date.UTC(2026, 6, 10, 5), total: 1000 }], 'tokens');
+        const cell = Array.from(document.querySelectorAll('.heatmap-cell-full'))
+            .find(c => c.getAttribute('title') === 'Thu 5:00 - 1,000 tokens');
+        expect(cell).not.toBeNull();
+    });
+
+    it('places a different UTC hour in the matching column', () => {
+        // 2026-07-10T23:00:00Z is Thursday 23:00 UTC.
+        renderHeatmapTab('hourly', [{ time: Date.UTC(2026, 6, 10, 23), total: 500 }], 'tokens');
+        const cell = Array.from(document.querySelectorAll('.heatmap-cell-full'))
+            .find(c => c.getAttribute('title') === 'Thu 23:00 - 500 tokens');
+        expect(cell).not.toBeNull();
     });
 });
 

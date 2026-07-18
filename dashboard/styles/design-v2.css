@@ -1054,6 +1054,24 @@ body {
   color: #fbbf24;
 }
 
+.heatmap-retry-btn {
+  margin-left: 8px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  border: 1px solid var(--mono-accent);
+  background: transparent;
+  color: var(--mono-accent);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.heatmap-retry-btn:hover {
+  background: var(--mono-accent);
+  color: #000;
+}
+
 /* ===== Footer ===== */
 .mono-footer {
   margin-top: 40px;

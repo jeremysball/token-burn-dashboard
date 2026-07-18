@@ -4,7 +4,8 @@ import {
     calculateCostWithPricing,
     fetchModelsDevCatalog,
     getCatalog,
-    isCatalogFailed
+    isCatalogFailed,
+    clearCatalogCache
 } from '../modelsdev-pricing.js';
 import { fmtNum, fmtInt, fmtCur, fmtMultiple, getPlotlyLayout, notify, splitModelKey } from '../utils.js';
 import { currentData, historyData, fileHistoricalData, analyticsRange, setAnalyticsRange, setAnalyticsTab, sortCol, sortAsc, setSortCol, setSortAsc, searchTerm, setSearchTerm } from '../state.js';
@@ -1437,7 +1438,7 @@ const computeBucketCost = (d) => {
 const renderMetricBanner = (isCost, unpriced) => {
     if (!isCost) return '';
     if (isCatalogFailed()) {
-        return `<div class="heatmap-metric-note unavailable">Models.dev pricing unavailable; cost values cannot be calculated.</div>`;
+        return `<div class="heatmap-metric-note unavailable">Models.dev pricing unavailable; cost values cannot be calculated. <button type="button" class="heatmap-retry-btn" onclick="retryModelsDevPricing()">Retry pricing</button></div>`;
     }
     if (!getCatalog()) {
         return `<div class="heatmap-metric-note">Loading real pricing from Models.dev&hellip;</div>`;
@@ -1446,6 +1447,21 @@ const renderMetricBanner = (isCost, unpriced) => {
         return `<div class="heatmap-metric-note unavailable">Some models have no Models.dev price &mdash; cost shown only where pricing is available.</div>`;
     }
     return `<div class="heatmap-metric-note">Cost priced from Models.dev (real per-model rates).</div>`;
+};
+
+// User-accessible retry after a Models.dev catalog failure: clear the failed
+// cache and re-attempt the fetch, re-rendering safely when it settles. Token
+// mode remains usable regardless of the outcome.
+export const retryModelsDevPricing = () => {
+    clearCatalogCache();
+    fetchModelsDevCatalog()
+        .then(() => {
+            if (heatmapMetric === 'cost') renderHeatmapsTab();
+        })
+        .catch(() => {
+            if (heatmapMetric === 'cost') renderHeatmapsTab();
+        });
+    if (heatmapMetric === 'cost') renderHeatmapsTab();
 };
 
 let heatmapMetric = 'tokens';
@@ -1505,8 +1521,10 @@ const renderHourlyHeatmap = (container, data, metric = 'tokens') => {
 
     data.forEach(d => {
         const date = new Date(d.time);
-        const day = date.getDay();
-        const hour = date.getHours();
+        // UTC accessors keep grouping independent of the viewer's timezone and
+        // consistent with the historical labels elsewhere in this view.
+        const day = date.getUTCDay();
+        const hour = date.getUTCHours();
         let value = d.total || 0;
         if (metric === 'cost') {
             const r = computeBucketCost(d);

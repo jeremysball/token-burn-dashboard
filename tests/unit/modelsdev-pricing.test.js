@@ -18,7 +18,10 @@ import {
 describe('normalizeModelsDevCost', () => {
     it('normalizes full cost object to pricing shape with reasoning/cache', () => {
         const p = normalizeModelsDevCost({ input: 5, output: 25, reasoning: 10, cache_read: 0.5, cache_write: 6.25 });
-        expect(p).toEqual({ input: 5, output: 25, reasoning: 10, cacheRead: 0.5, cacheWrite: 6.25, source: 'models.dev' });
+        expect(p).toEqual({
+            input: 5, output: 25, reasoning: 10, cacheRead: 0.5, cacheWrite: 6.25, source: 'models.dev',
+            hasInput: true, hasOutput: true, hasReasoning: true, hasCacheRead: true, hasCacheWrite: true
+        });
     });
 
     it('keeps source tag and zero-fills missing dimensions', () => {
@@ -107,6 +110,27 @@ describe('calculateCostWithPricing', () => {
     it('reports unpriced when the model has no usable rate', () => {
         const zero = { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0, source: 'models.dev' };
         const r = calculateCostWithPricing(1_000_000, zero);
+        expect(r.priced).toBe(false);
+    });
+
+    it('keeps an explicit $0.00 Models.dev rate priced via presence flags', () => {
+        // Free model: Models.dev published input:0, output:0 (valid, not missing).
+        const free = normalizeModelsDevCost({ input: 0, output: 0 });
+        expect(free.hasInput).toBe(true);
+        expect(free.hasOutput).toBe(true);
+        const r = calculateCostWithPricing(2_000_000, free);
+        expect(r.priced).toBe(true);
+        expect(r.total).toBe(0);
+    });
+
+    it('treats a field Models.dev never published as truly missing (unpriced)', () => {
+        // Only cache_read published; no input/output/reasoning -> cannot price an
+        // aggregate total token count, so it is truly unavailable.
+        const partial = normalizeModelsDevCost({ cache_read: 0.5 });
+        expect(partial.hasInput).toBe(false);
+        expect(partial.hasOutput).toBe(false);
+        expect(partial.hasReasoning).toBe(false);
+        const r = calculateCostWithPricing(1_000_000, partial);
         expect(r.priced).toBe(false);
     });
 });
