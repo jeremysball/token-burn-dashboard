@@ -13,11 +13,38 @@ import {
     renderCommitDetails,
     renderModelHeatmap,
     renderModelsTab,
-    calculateDeepInsights
+    calculateDeepInsights,
+    renderLLMInsights
 } from '../../dashboard/js/views/analytics';
+import { renderDashboard } from '../../dashboard/js/views/dashboard.js';
 import * as state from '../../dashboard/js/state';
 
 const XSS = '<img src=x onerror=alert(1)>';
+const QUOTE_PAYLOAD = 'x" onmouseover=alert(1)';
+
+describe('renderLLMInsights XSS safety', () => {
+    beforeEach(() => {
+        document.body.innerHTML = '<div id="llm-insights-content"></div>';
+    });
+
+    it('escapes HTML in LLM response before applying bold formatting', () => {
+        const payload = '<img src=x onerror=alert(1)>';
+        renderLLMInsights(`**Bold** text and ${payload}`);
+        const container = document.getElementById('llm-insights-content');
+        expect(container.querySelector('img')).toBeNull();
+        expect(container.innerHTML).not.toContain('<img src=x');
+        expect(container.innerHTML).toContain('<strong>Bold</strong>');
+    });
+
+    it('escapes HTML in warning messages', () => {
+        const payload = '<img src=x onerror=alert(1)>';
+        renderLLMInsights('Safe content', `Warning: ${payload}`);
+        const container = document.getElementById('llm-insights-content');
+        expect(container.querySelector('img')).toBeNull();
+        expect(container.innerHTML).not.toContain('<img src=x');
+        expect(container.innerHTML).toContain('&lt;img');
+    });
+});
 
 describe('renderInsightsCards XSS safety', () => {
     it('escapes model-derived title/value/description/detail/icon', () => {
@@ -147,6 +174,25 @@ describe('renderCommitDetails XSS safety', () => {
         expect(hashEl.textContent).toContain('<img');
     });
 
+    it('does not create event handlers from model names in title attributes', () => {
+        document.body.innerHTML = '<div id="content"></div>';
+        const container = document.getElementById('content');
+        renderCommitDetails(container, {
+            commit: { hash: 'h', message: 'm', date: Date.now() },
+            sessions: [{
+                id: 's1',
+                cost: 1,
+                tokens: 100,
+                models: { [`provider/${QUOTE_PAYLOAD}`]: { tokens: 10, calls: 1, cost: 0.5 } },
+                messages: []
+            }],
+            summary: { totalSessions: 1, totalTokens: 100, totalCost: 1 }
+        });
+        const tag = container.querySelector('.session-model-tag');
+        expect(tag.getAttribute('onmouseover')).toBeNull();
+        expect(container.innerHTML).toContain('&quot;');
+    });
+
     it('wires session toggle via data attribute + listener, no inline onclick', () => {
         document.body.innerHTML = '<div id="content"></div>';
         const container = document.getElementById('content');
@@ -194,6 +240,22 @@ describe('renderModelHeatmap XSS safety', () => {
         expect(yLabel.querySelector('img')).toBeNull();
         expect(yLabel.querySelector('script')).toBeNull();
     });
+
+    it('escapes quote payloads in model attributes', () => {
+        document.body.innerHTML = `
+            <div id="model-intensity-heatmap">
+                <div class="heatmap-wrapper"></div>
+            </div>`;
+        const el = document.getElementById('model-intensity-heatmap');
+        renderModelHeatmap(el, [{
+            time: '2026-01-01T00:00:00Z',
+            models: { [`provider/${QUOTE_PAYLOAD}`]: 5 }
+        }], 'tokens');
+        const cell = el.querySelector('[data-heatmap-cell="true"]');
+        expect(cell).not.toBeNull();
+        expect(cell.getAttribute('onmouseover')).toBeNull();
+        expect(el.innerHTML).toContain('&quot;');
+    });
 });
 
 describe('renderModelsTab XSS safety', () => {
@@ -223,6 +285,64 @@ describe('renderModelsTab XSS safety', () => {
         expect(badge.getAttribute('title')).not.toContain('<');
         const price = tbody.querySelector('.model-price');
         expect(price.getAttribute('title')).not.toContain('<');
+    });
+});
+
+describe('renderDashboard top-model-card attribute XSS', () => {
+    it('escapes quote payloads in model key attributes', () => {
+        document.body.innerHTML = `
+            <div id="hero-tokens"></div>
+            <div id="hero-cost"></div>
+            <div id="last-update"></div>
+            <div id="footer-stats"></div>
+            <div id="top-models-grid"></div>
+            <div id="insights-grid"></div>
+            <div id="notifications"></div>`;
+        window.animateNumber = jest.fn();
+        window.checkThresholds = jest.fn();
+
+        const modelKey = `provider/${QUOTE_PAYLOAD}`;
+        state.setCurrentData({
+            tokens_by_model: { [modelKey]: { total: 100, cache_read: 0 } },
+            costs_by_model: { [modelKey]: { total: 1 } },
+            pricing_by_model: { [modelKey]: { input: 2.5, output: 10, cacheRead: 1.25, cacheWrite: 0, source: 'local' } },
+            total_tokens: 100,
+            total_cost: { total: 1 },
+            total_input: 50,
+            total_output: 50,
+            total_cache_read: 0
+        });
+        state.setHistoryData([]);
+        state.setFileHistoricalData([]);
+
+        renderDashboard(true);
+
+        const card = document.querySelector('.top-model-card');
+        expect(card).not.toBeNull();
+        expect(card.getAttribute('onmouseover')).toBeNull();
+        expect(card.querySelector('img')).toBeNull();
+        expect(document.getElementById('top-models-grid').innerHTML).toContain('&quot;');
+    });
+});
+
+describe('calculateDeepInsights cache savings', () => {
+    it('reports savings as input cost minus cache-read cost, not cache spend', () => {
+        state.setCurrentData({
+            tokens_by_model: { 'anthropic/claude': { total: 3_500_000, cache_read: 2_000_000, input: 1_000_000 } },
+            costs_by_model: { 'anthropic/claude': { total: 10.5 } },
+            total_tokens: 3_500_000,
+            total_input: 1_000_000,
+            total_output: 500_000,
+            total_cache_read: 2_000_000,
+            total_cost: { input: 3, output: 7.5, total: 10.5 }
+        });
+        state.setHistoryData([]);
+
+        const insights = calculateDeepInsights();
+        const cache = insights.find(i => i.title === 'Cache Efficiency');
+        expect(cache).toBeDefined();
+        // Savings = 2M cached * ($3/M input - $0.30/M cache-read) = 2M * $2.70/M = $5.40
+        expect(cache.description).toContain('$5.40');
     });
 });
 

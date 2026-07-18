@@ -117,9 +117,12 @@ const createSparkline = (data, width, height) => {
 
 const escapeHtml = (text) => {
     if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 };
 
 // Shared mutable state for cross-tab coordination. Declared once here so the

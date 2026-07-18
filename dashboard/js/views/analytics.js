@@ -11,6 +11,7 @@ import {
     generateDeepInsights,
     calculateDeepInsights,
     generateLLMInsights,
+    renderLLMInsights,
     renderInsightsCards
 } from './analytics/tabs/insights.js';
 import { renderScaleTab } from './analytics/tabs/scale.js';
@@ -138,6 +139,7 @@ export {
     generateDeepInsights,
     calculateDeepInsights,
     generateLLMInsights,
+    renderLLMInsights,
     loadGitBlame,
     investigateSpike,
     closeInvestigation,

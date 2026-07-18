@@ -327,5 +327,24 @@ describe('Utils Module', () => {
       expect(escapeHtml('')).toBe('');
       expect(escapeHtml(null)).toBe('');
     });
+    it('escapes double quotes so attribute payloads cannot break out', () => {
+      const payload = 'x" onmouseover="alert(1)';
+      const escaped = escapeHtml(payload);
+      expect(escaped).not.toContain('"');
+      expect(escaped).toContain('&quot;');
+      document.body.innerHTML = `<div data-key="${escaped}"></div>`;
+      const el = document.querySelector('div');
+      expect(el.getAttribute('onmouseover')).toBeNull();
+      expect(el.dataset.key).toContain('onmouseover');
+    });
+    it('escapes single quotes for attribute safety', () => {
+      const payload = "x' onmouseover='alert(1)";
+      const escaped = escapeHtml(payload);
+      expect(escaped).not.toContain("'");
+      expect(escaped).toContain('&#39;');
+      document.body.innerHTML = `<div data-key="${escaped}"></div>`;
+      const el = document.querySelector('div');
+      expect(el.getAttribute('onmouseover')).toBeNull();
+    });
   });
 });

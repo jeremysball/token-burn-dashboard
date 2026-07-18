@@ -89,7 +89,7 @@ export const calculateDeepInsights = () => {
         : 0.000003;
     const avgCacheReadCostPerToken = cacheDiscountRatio * avgInputCostPerToken;
 
-    const cacheSavings = totalCacheRead * avgCacheReadCostPerToken;
+    const cacheSavings = Math.max(0, totalCacheRead * (avgInputCostPerToken - avgCacheReadCostPerToken));
 
     insights.push({
         icon: cacheRate > 0.5 ? '💾' : '📦',
@@ -179,7 +179,7 @@ export const calculateDeepInsights = () => {
     if (sourceData.length > 0) {
         const hourBuckets = new Array(24).fill(0);
         sourceData.forEach(d => {
-            const hour = new Date(d.time).getHours();
+            const hour = new Date(d.time).getUTCHours();
             hourBuckets[hour] += d.total || 0;
         });
         
@@ -350,7 +350,7 @@ export const generateLLMInsights = async () => {
         container.innerHTML = `
             <div class="llm-error">
                 <p><strong>AI Analysis Failed</strong></p>
-                <p>${err.message || 'Unable to connect to analysis service'}</p>
+                <p>${escapeHtml(err.message || 'Unable to connect to analysis service')}</p>
                 <p class="error-help">Check your KIMI_API_KEY configuration or try again later.</p>
                 <button onclick="generateLLMInsights()" class="retry-btn">↻ Retry</button>
             </div>
@@ -360,13 +360,14 @@ export const generateLLMInsights = async () => {
     btn.disabled = false;
 };
 
-const renderLLMInsights = (text, warningMessage = null) => {
+export const renderLLMInsights = (text, warningMessage = null) => {
     const container = document.getElementById('llm-insights-content');
     if (!container) return;
 
-    const paragraphs = text.split('\n\n').filter(p => p.trim());
+    const safeText = escapeHtml(text);
+    const paragraphs = safeText.split('\n\n').filter(p => p.trim());
     container.innerHTML = `
-        ${warningMessage ? `<div class="llm-warning">${warningMessage}</div>` : ''}
+        ${warningMessage ? `<div class="llm-warning">${escapeHtml(warningMessage)}</div>` : ''}
         <div class="llm-analysis-text">
             ${paragraphs.map(p => `<p>${p.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')}</p>`).join('')}
         </div>

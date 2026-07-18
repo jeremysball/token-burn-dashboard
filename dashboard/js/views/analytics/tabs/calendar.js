@@ -24,7 +24,7 @@ export function renderCalendarTab(container) {
 
     const labels = days.map(([day]) => {
         const d = new Date(day);
-        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
     });
     const values = days.map(([, tokens]) => tokens);
     const maxVal = Math.max(...values);
@@ -91,7 +91,8 @@ export function renderCalendarTab(container) {
         const formattedDate = date.toLocaleDateString('en-US', {
             weekday: 'short',
             month: 'short',
-            day: 'numeric'
+            day: 'numeric',
+            timeZone: 'UTC'
         });
 
         notify(`${formattedDate}: ${fmtNum(tokens)} tokens`, 'info');

@@ -303,4 +303,10 @@ describe('server pricing', () => {
       output: 10
     });
   });
+
+  it('charges reasoning tokens at the output rate when no explicit reasoning rate exists', () => {
+    const cost = calculateCost({ input: 1_000_000, output: 0, reasoning: 1_000_000 }, 'gpt-4o');
+    expect(cost.reasoning).toBeCloseTo(10, 5);
+    expect(cost.total).toBeCloseTo(12.5, 5);
+  });
 });

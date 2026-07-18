@@ -82,6 +82,16 @@ describe('Security: safeStaticPath traversal guard', () => {
     expect(result3).toBeNull();
   });
 
+  test('dashboard routes are resolved against dashboard/ directory, not repo root', () => {
+    const repoRoot = path.resolve(__dirname, '../../../..');
+    const res = { writeHead: jest.fn(), end: jest.fn() };
+    const url = new URL('/dashboard/%2e%2e%2fpackage.json', 'http://localhost');
+    const result = staticRoute.handleStaticRoutes(url, res, null, repoRoot);
+    expect(result).toBe(true);
+    expect(res.writeHead).toHaveBeenCalledWith(403, expect.any(Object));
+    expect(res.end).toHaveBeenCalledWith('Forbidden');
+  });
+
   test('safeStaticPath allows valid paths inside root', () => {
     const root = '/workspace/dashboard';
     const good = staticRoute.safeStaticPath(root, 'index.html');
