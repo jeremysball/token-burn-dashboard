@@ -56,6 +56,35 @@ describe('lib/engineering extractFileRefs', () => {
       expect(allowed.some(e => r.toLowerCase().endsWith(e))).toBe(true);
     }
   });
+
+  test('rejects file refs embedded in URL suffixes', () => {
+    const text = 'see https://example.com/workspace/app/main.js and https://host/workspace/x/y.ts';
+    const refs = extractFileRefs(text);
+    expect(refs).not.toContain('/workspace/app/main.js');
+    expect(refs).not.toContain('/workspace/x/y.ts');
+    expect(refs).toEqual([]);
+  });
+
+  test('rejects traversal paths that escape /workspace', () => {
+    const text = 'leaked /workspace/../outside/secret.js and /workspace/../../etc/passwd';
+    const refs = extractFileRefs(text);
+    expect(refs).not.toContain('/workspace/../outside/secret.js');
+    expect(refs).not.toContain('/workspace/../../etc/passwd');
+    expect(refs).toEqual([]);
+  });
+
+  test('keeps /workspace paths that stay within root after traversal', () => {
+    const text = 'edited /workspace/app/../app/main.js';
+    const refs = extractFileRefs(text);
+    expect(refs).toContain('/workspace/app/../app/main.js');
+  });
+
+  test('rejects absolute paths with a scheme even when path looks valid', () => {
+    const text = 'http://localhost/workspace/a/b.js';
+    const refs = extractFileRefs(text);
+    expect(refs).not.toContain('/workspace/a/b.js');
+    expect(refs).toEqual([]);
+  });
 });
 
 describe('lib/engineering getFileExtensionLang', () => {
