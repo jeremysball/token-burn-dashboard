@@ -205,6 +205,9 @@ window.closeInvestigation = () => {
 window.updateHeatmap = () => {
     import('./views/analytics.js').then(m => m.updateHeatmap?.() || console.log('Heatmap update not available'));
 };
+window.setHeatmapMetric = (metric) => {
+    import('./views/analytics.js').then(m => m.setHeatmapMetric?.(metric));
+};
 window.showCommitDetails = (hash) => {
     import('./views/analytics.js').then(m => m.showCommitDetails(hash));
 };

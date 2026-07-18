@@ -283,8 +283,11 @@
                         <option value="hourly">Hourly Patterns</option>
                         <option value="daily">Daily Patterns</option>
                         <option value="model">Model Usage</option>
-                        <option value="cost">Cost Intensity</option>
                     </select>
+                    <div class="heatmap-metric-toggle" id="heatmap-metric-toggle">
+                        <button type="button" data-metric="tokens" class="active" onclick="setHeatmapMetric('tokens')">Tokens</button>
+                        <button type="button" data-metric="cost" onclick="setHeatmapMetric('cost')">Cost</button>
+                    </div>
                 </div>
                 <div id="heatmaps-container" class="heatmaps-container"></div>
             </div>

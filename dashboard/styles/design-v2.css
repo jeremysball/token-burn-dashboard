@@ -1007,6 +1007,53 @@ body {
   box-shadow: 0 0 0 3px var(--mono-accent-dim);
 }
 
+.heatmap-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.heatmap-metric-toggle {
+  display: inline-flex;
+  gap: 2px;
+  background: var(--mono-surface);
+  border: 1px solid var(--mono-border);
+  border-radius: 9999px;
+  padding: 3px;
+}
+
+.heatmap-metric-toggle button {
+  padding: 6px 12px;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: transparent;
+  color: var(--mono-text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.heatmap-metric-toggle button:hover {
+  color: var(--mono-text);
+}
+
+.heatmap-metric-toggle button.active {
+  background: var(--mono-accent);
+  color: #000;
+}
+
+.heatmap-metric-note {
+  font-size: 0.72rem;
+  color: var(--mono-text-muted);
+  margin: 4px 0 10px;
+}
+
+.heatmap-metric-note.unavailable {
+  color: #fbbf24;
+}
+
 /* ===== Footer ===== */
 .mono-footer {
   margin-top: 40px;

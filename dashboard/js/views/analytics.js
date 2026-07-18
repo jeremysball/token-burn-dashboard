@@ -1,4 +1,10 @@
 import { CHART_COLORS, getPricing } from '../config.js';
+import {
+    lookupModelsDevPrice,
+    calculateCostWithPricing,
+    fetchModelsDevCatalog,
+    getCatalog
+} from '../modelsdev-pricing.js';
 import { fmtNum, fmtInt, fmtCur, fmtMultiple, getPlotlyLayout, notify, splitModelKey } from '../utils.js';
 import { currentData, historyData, fileHistoricalData, analyticsRange, setAnalyticsRange, setAnalyticsTab, sortCol, sortAsc, setSortCol, setSortAsc, searchTerm, setSearchTerm } from '../state.js';
 
@@ -1387,6 +1393,78 @@ const renderCodeStatsTab = () => {
 };
 
 // ===== HEATMAPS TAB =====
+// Compute the real cost of a single historical bucket using Models.dev pricing.
+// Each bucket carries tokens_by_model (per model) and aggregate input/output/
+// cache/reasoning totals. We never fall back to local hardcoded pricing or a
+// constant rate; if a model has no Models.dev price we mark it unpriced so the
+// UI can surface an explicit "price unavailable" state.
+const computeBucketCost = (d) => {
+    let total = 0;
+    let unpriced = false;
+
+    if (d.tokens_by_model && Object.keys(d.tokens_by_model).length > 0) {
+        for (const [model, tokens] of Object.entries(d.tokens_by_model)) {
+            const pricing = lookupModelsDevPrice(model);
+            const r = calculateCostWithPricing(tokens, pricing);
+            total += r.total;
+            if (!pricing || !r.priced) unpriced = true;
+        }
+        return { total, unpriced };
+    }
+
+    // No per-model breakdown. Price the aggregate with the bucket's own
+    // input/output/cache/reasoning totals if we can attribute a model.
+    // Without a model key we cannot price honestly, so mark unpriced.
+    if (d.model) {
+        const pricing = lookupModelsDevPrice(d.model);
+        const r = calculateCostWithPricing(
+            {
+                input: d.input || 0,
+                output: d.output || 0,
+                cache_read: d.cache_read || 0,
+                cache_write: d.cache_write || 0,
+                reasoning: d.reasoning || 0
+            },
+            pricing
+        );
+        return { total: r.total, unpriced: !pricing || !r.priced };
+    }
+
+    return { total: 0, unpriced: true };
+};
+
+const renderMetricBanner = (isCost, unpriced) => {
+    if (!isCost) return '';
+    if (!getCatalog()) {
+        return `<div class="heatmap-metric-note">Loading real pricing from Models.dev&hellip;</div>`;
+    }
+    if (unpriced) {
+        return `<div class="heatmap-metric-note unavailable">Some models have no Models.dev price &mdash; cost shown only where pricing is available.</div>`;
+    }
+    return `<div class="heatmap-metric-note">Cost priced from Models.dev (real per-model rates).</div>`;
+};
+
+let heatmapMetric = 'tokens';
+
+export const setHeatmapMetric = (m) => {
+    if (m !== 'tokens' && m !== 'cost') return;
+    heatmapMetric = m;
+    document.querySelectorAll('#heatmap-metric-toggle button').forEach(b => {
+        b.classList.toggle('active', b.dataset.metric === m);
+    });
+    if (m === 'cost' && !getCatalog()) {
+        // Kick off catalog load; re-render safely when it settles.
+        fetchModelsDevCatalog()
+            .then(() => {
+                if (heatmapMetric === 'cost') renderHeatmapsTab();
+            })
+            .catch(() => {
+                if (heatmapMetric === 'cost') renderHeatmapsTab();
+            });
+    }
+    renderHeatmapsTab();
+};
+
 const renderHeatmapsTab = () => {
     const container = document.getElementById('heatmaps-container');
     if (!container) return;
@@ -1401,36 +1479,45 @@ const renderHeatmapsTab = () => {
 
     switch (heatmapType) {
         case 'hourly':
-            renderHourlyHeatmap(container, sourceData);
+            renderHourlyHeatmap(container, sourceData, heatmapMetric);
             break;
         case 'daily':
-            renderDailyHeatmap(container, sourceData);
+            renderDailyHeatmap(container, sourceData, heatmapMetric);
             break;
         case 'model':
-            renderModelHeatmap(container, sourceData);
+            renderModelHeatmap(container, sourceData, heatmapMetric);
             break;
         case 'cost':
-            renderCostHeatmap(container, sourceData);
+            renderHourlyHeatmap(container, sourceData, 'cost');
             break;
     }
 };
 
-const renderHourlyHeatmap = (container, data) => {
+const renderHourlyHeatmap = (container, data, metric = 'tokens') => {
     // Create 7 days x 24 hours matrix
     const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const matrix = Array(7).fill(null).map(() => Array(24).fill(0));
-    
+    let unpriced = false;
+
     data.forEach(d => {
         const date = new Date(d.time);
         const day = date.getDay();
         const hour = date.getHours();
-        matrix[day][hour] += d.total || 0;
+        let value = d.total || 0;
+        if (metric === 'cost') {
+            const r = computeBucketCost(d);
+            value = r.total;
+            if (r.unpriced) unpriced = true;
+        }
+        matrix[day][hour] += value;
     });
 
-    const maxVal = Math.max(...matrix.flat(), 1);
+    const maxVal = Math.max(...matrix.flat(), metric === 'cost' ? 0.01 : 1);
+    const isCost = metric === 'cost';
 
     container.innerHTML = `
-        <div class="heatmap-title">Hourly Usage Patterns (Last 7 Days)</div>
+        <div class="heatmap-title">${isCost ? 'Hourly Cost Patterns' : 'Hourly Usage Patterns'} (Last 7 Days)</div>
+        ${renderMetricBanner(isCost, unpriced)}
         <div class="heatmap-wrapper">
             <div class="heatmap-y-labels">
                 ${days.map(d => `<div class="heatmap-y-label">${d}</div>`).join('')}
@@ -1445,17 +1532,20 @@ const renderHourlyHeatmap = (container, data) => {
                             ${day.map((val, hour) => {
                                 const intensity = val / maxVal;
                                 const opacity = 0.1 + (intensity * 0.9);
+                                const bg = isCost ? 'rgba(239, 68, 68' : 'rgba(251, 191, 36';
+                                const display = isCost ? fmtCur(val) : fmtInt(val);
+                                const suffix = isCost ? '' : 'tokens';
                                 return `
-                                    <button type="button" class="heatmap-cell-full" 
+                                    <button type="button" class="heatmap-cell-full${isCost ? ' cost' : ''}" 
                                          data-heatmap-cell="true"
                                          data-type="info"
                                          data-label="${days[dayIdx]} ${hour}:00"
-                                         data-value="${fmtInt(val)}"
-                                         data-suffix="tokens"
-                                         data-detail="hourly usage"
-                                         aria-label="${days[dayIdx]} ${hour}:00 - ${fmtInt(val)} tokens"
-                                         style="background: rgba(251, 191, 36, ${opacity})"
-                                         title="${days[dayIdx]} ${hour}:00 - ${fmtInt(val)} tokens">
+                                         data-value="${display}"
+                                         data-suffix="${suffix}"
+                                         data-detail="${isCost ? 'hourly cost' : 'hourly usage'}"
+                                         aria-label="${days[dayIdx]} ${hour}:00 - ${display}${suffix ? ' ' + suffix : ''}"
+                                         style="background: ${bg}, ${opacity})"
+                                         title="${days[dayIdx]} ${hour}:00 - ${display}${suffix ? ' ' + suffix : ''}">
                                     </button>
                                 `;
                             }).join('')}
@@ -1466,25 +1556,33 @@ const renderHourlyHeatmap = (container, data) => {
         </div>
         <div class="heatmap-legend">
             <span>Low</span>
-            <div class="heatmap-gradient"></div>
-            <span>High (${fmtNum(maxVal)} tokens)</span>
+            <div class="heatmap-gradient${isCost ? ' cost' : ''}"></div>
+            <span>High (${isCost ? fmtCur(maxVal) + '/hr' : fmtNum(maxVal) + ' tokens'})</span>
         </div>
     `;
 
     bindHeatmapInteractions(container);
 };
 
-const renderDailyHeatmap = (container, data) => {
+const renderDailyHeatmap = (container, data, metric = 'tokens') => {
     // Group by date
     const byDate = {};
+    let unpriced = false;
     data.forEach(d => {
         const date = new Date(d.time).toISOString().split('T')[0];
         if (!byDate[date]) byDate[date] = 0;
-        byDate[date] += d.total || 0;
+        let value = d.total || 0;
+        if (metric === 'cost') {
+            const r = computeBucketCost(d);
+            value = r.total;
+            if (r.unpriced) unpriced = true;
+        }
+        byDate[date] += value;
     });
 
     const dates = Object.keys(byDate).sort();
-    const maxVal = Math.max(...Object.values(byDate), 1);
+    const maxVal = Math.max(...Object.values(byDate), metric === 'cost' ? 0.01 : 1);
+    const isCost = metric === 'cost';
 
     // Group into weeks for display
     const weeks = [];
@@ -1493,7 +1591,8 @@ const renderDailyHeatmap = (container, data) => {
     }
 
     container.innerHTML = `
-        <div class="heatmap-title">Daily Usage Over Time</div>
+        <div class="heatmap-title">${isCost ? 'Daily Cost Over Time' : 'Daily Usage Over Time'}</div>
+        ${renderMetricBanner(isCost, unpriced)}
         <div class="daily-heatmap">
             ${weeks.map(week => `
                 <div class="heatmap-week">
@@ -1504,19 +1603,22 @@ const renderDailyHeatmap = (container, data) => {
                             weekday: 'short',
                             timeZone: 'UTC'
                         });
+                        const display = isCost ? fmtCur(val) : fmtInt(val);
+                        const suffix = isCost ? '' : 'tokens';
+                        const bg = isCost ? 'rgba(239, 68, 68' : 'rgba(251, 191, 36';
                         return `
-                            <button type="button" class="daily-heatmap-cell" 
+                            <button type="button" class="daily-heatmap-cell${isCost ? ' cost' : ''}" 
                                  data-heatmap-cell="true"
                                  data-type="info"
                                  data-label="${date}"
-                                 data-value="${fmtInt(val)}"
-                                 data-suffix="tokens"
-                                 data-detail="daily total"
-                                 aria-label="${date} - ${fmtInt(val)} tokens"
-                                 style="background: rgba(251, 191, 36, ${0.1 + intensity * 0.9})"
-                                 title="${date} - ${fmtInt(val)} tokens">
+                                 data-value="${display}"
+                                 data-suffix="${suffix}"
+                                 data-detail="${isCost ? 'daily cost' : 'daily total'}"
+                                 aria-label="${date} - ${display}${suffix ? ' ' + suffix : ''}"
+                                 style="background: ${bg}, ${0.1 + intensity * 0.9})"
+                                 title="${date} - ${display}${suffix ? ' ' + suffix : ''}">
                                 <span class="daily-heatmap-day">${dayName}</span>
-                                <span class="daily-heatmap-val" title="${fmtInt(val)}">${fmtNum(val)}</span>
+                                <span class="daily-heatmap-val" title="${display}">${isCost ? fmtCur(val) : fmtNum(val)}</span>
                             </button>
                         `;
                     }).join('')}
@@ -1525,28 +1627,36 @@ const renderDailyHeatmap = (container, data) => {
         </div>
         <div class="heatmap-legend">
             <span>Low</span>
-            <div class="heatmap-gradient"></div>
-            <span>High (${fmtNum(maxVal)} tokens)</span>
+            <div class="heatmap-gradient${isCost ? ' cost' : ''}"></div>
+            <span>High (${isCost ? fmtCur(maxVal) : fmtNum(maxVal) + ' tokens'})</span>
         </div>
     `;
 
     bindHeatmapInteractions(container);
 };
 
-const renderModelHeatmap = (container, data) => {
+const renderModelHeatmap = (container, data, metric = 'tokens') => {
     // Get model usage over time
     const modelUsage = {};
     const timeSlots = [];
-    
+    let unpriced = false;
+
     data.forEach(d => {
         const timeKey = new Date(d.time).toISOString().slice(0, 13); // Hourly buckets
         if (!timeSlots.includes(timeKey)) timeSlots.push(timeKey);
-        
+
         const models = d.tokens_by_model || d.models || {};
         Object.entries(models).forEach(([model, tokens]) => {
             if (!modelUsage[model]) modelUsage[model] = {};
             if (!modelUsage[model][timeKey]) modelUsage[model][timeKey] = 0;
-            modelUsage[model][timeKey] += tokens || 0;
+            let value = tokens || 0;
+            if (metric === 'cost') {
+                const pricing = lookupModelsDevPrice(model);
+                const r = calculateCostWithPricing(tokens, pricing);
+                value = r.total;
+                if (!pricing || !r.priced) unpriced = true;
+            }
+            modelUsage[model][timeKey] += value;
         });
     });
 
@@ -1554,11 +1664,13 @@ const renderModelHeatmap = (container, data) => {
         .sort((a, b) => Object.values(b[1]).reduce((s, v) => s + v, 0) - Object.values(a[1]).reduce((s, v) => s + v, 0))
         .slice(0, 8);
 
-    const maxVal = Math.max(...sortedModels.flatMap(m => Object.values(m[1])), 1);
+    const maxVal = Math.max(...sortedModels.flatMap(m => Object.values(m[1])), metric === 'cost' ? 0.01 : 1);
     const timeLabels = timeSlots.slice(-24);
+    const isCost = metric === 'cost';
 
     container.innerHTML = `
-        <div class="heatmap-title">Model Usage Intensity</div>
+        <div class="heatmap-title">${isCost ? 'Model Cost Intensity' : 'Model Usage Intensity'}</div>
+        ${renderMetricBanner(isCost, unpriced)}
         <div class="heatmap-wrapper">
             <div class="heatmap-y-labels">
                 ${sortedModels.map(([model]) => {
@@ -1588,17 +1700,20 @@ const renderModelHeatmap = (container, data) => {
                                 const val = usage[time] || 0;
                                 const intensity = val / maxVal;
                                 const opacity = 0.1 + (intensity * 0.9);
+                                const bg = isCost ? 'rgba(239, 68, 68' : 'rgba(251, 191, 36';
+                                const display = isCost ? fmtCur(val) : fmtInt(val);
+                                const suffix = isCost ? '' : 'tokens';
                                 return `
-                                    <button type="button" class="heatmap-cell-full model" 
+                                    <button type="button" class="heatmap-cell-full model${isCost ? ' cost' : ''}" 
                                          data-heatmap-cell="true"
                                          data-type="info"
                                          data-label="${model.split('/').pop()} @ ${time}"
-                                         data-value="${fmtInt(val)}"
-                                         data-suffix="tokens"
-                                         data-detail="model usage"
-                                         aria-label="${model} @ ${time} - ${fmtInt(val)} tokens"
-                                         style="background: rgba(251, 191, 36, ${opacity})"
-                                         title="${model} @ ${time} - ${fmtInt(val)} tokens">
+                                         data-value="${display}"
+                                         data-suffix="${suffix}"
+                                         data-detail="${isCost ? 'model cost' : 'model usage'}"
+                                         aria-label="${model} @ ${time} - ${display}${suffix ? ' ' + suffix : ''}"
+                                         style="background: ${bg}, ${opacity})"
+                                         title="${model} @ ${time} - ${display}${suffix ? ' ' + suffix : ''}">
                                     </button>
                                 `;
                             }).join('')}
@@ -1609,69 +1724,8 @@ const renderModelHeatmap = (container, data) => {
         </div>
         <div class="heatmap-legend">
             <span>Low</span>
-            <div class="heatmap-gradient"></div>
-            <span>High (${fmtNum(maxVal)} tokens)</span>
-        </div>
-    `;
-
-    bindHeatmapInteractions(container);
-};
-
-const renderCostHeatmap = (container, data) => {
-    // Cost by hour and day
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const costMatrix = Array(7).fill(null).map(() => Array(24).fill(0));
-    
-    data.forEach(d => {
-        const date = new Date(d.time);
-        const day = date.getDay();
-        const hour = date.getHours();
-        // Estimate cost at $2 per 1M tokens
-        const cost = (d.total || 0) * 0.000002;
-        costMatrix[day][hour] += cost;
-    });
-
-    const maxCost = Math.max(...costMatrix.flat(), 0.01);
-
-    container.innerHTML = `
-        <div class="heatmap-title">Cost Intensity by Hour ($${(data.reduce((s, d) => s + (d.total || 0), 0) * 0.000002).toFixed(2)} total)</div>
-        <div class="heatmap-wrapper">
-            <div class="heatmap-y-labels">
-                ${days.map(d => `<div class="heatmap-y-label">${d}</div>`).join('')}
-            </div>
-            <div class="heatmap-grid hourly">
-                <div class="heatmap-x-labels">
-                    ${Array(24).fill(0).map((_, i) => `<div class="heatmap-x-label">${i}</div>`).join('')}
-                </div>
-                <div class="heatmap-cells">
-                    ${costMatrix.map((day, dayIdx) => `
-                        <div class="heatmap-row">
-                            ${day.map((cost, hour) => {
-                                const intensity = cost / maxCost;
-                                const opacity = 0.1 + (intensity * 0.9);
-                                return `
-                                    <button type="button" class="heatmap-cell-full cost" 
-                                         data-heatmap-cell="true"
-                                         data-type="info"
-                                         data-label="${days[dayIdx]} ${hour}:00"
-                                         data-value="$${cost.toFixed(3)}"
-                                         data-suffix=""
-                                         data-detail="hourly cost"
-                                         aria-label="${days[dayIdx]} ${hour}:00 - $${cost.toFixed(3)}"
-                                         style="background: rgba(239, 68, 68, ${opacity})"
-                                         title="${days[dayIdx]} ${hour}:00 - $${cost.toFixed(3)}">
-                                    </button>
-                                `;
-                            }).join('')}
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        </div>
-        <div class="heatmap-legend">
-            <span>Low</span>
-            <div class="heatmap-gradient cost"></div>
-            <span>High ($${maxCost.toFixed(2)}/hr)</span>
+            <div class="heatmap-gradient${isCost ? ' cost' : ''}"></div>
+            <span>High (${isCost ? fmtCur(maxVal) : fmtNum(maxVal) + ' tokens'})</span>
         </div>
     `;
 
