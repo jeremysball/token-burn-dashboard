@@ -33,6 +33,7 @@ import {
 } from './analytics/tabs/git.js';
 import {
     renderSpikeDetectiveTab,
+    loadSpikes,
     investigateSpike,
     closeInvestigation,
     toggleSpikeSession,
@@ -43,10 +44,14 @@ import {
     renderInvestigation
 } from './analytics/tabs/spikes.js';
 
-export const renderAnalytics = () => {
+export const renderAnalytics = (fullRender = true) => {
     if (!currentData) return;
 
     const tab = document.querySelector('.subnav-btn.active')?.dataset.tab || 'models';
+
+    // Ambient (SSE-driven) refreshes rebuild the same markup as a fresh render, but
+    // shouldn't replay the tab's entrance animations every few seconds like a fresh load does.
+    document.getElementById('view-analytics')?.classList.toggle('is-ambient-update', !fullRender);
 
     switch (tab) {
         case 'models':
@@ -141,6 +146,7 @@ export {
     generateLLMInsights,
     renderLLMInsights,
     loadGitBlame,
+    loadSpikes,
     investigateSpike,
     closeInvestigation,
     showCommitDetails,
