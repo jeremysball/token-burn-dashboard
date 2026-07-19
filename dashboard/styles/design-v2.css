@@ -1616,6 +1616,16 @@ body {
   animation: fadeIn 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Ambient (SSE-driven) analytics refreshes rebuild the same tab markup every few
+   seconds; suppress the entrance animations so only a real load/tab-switch/sort
+   plays them, not every background data tick. */
+.is-ambient-update .mono-table tbody tr,
+.is-ambient-update .legend-item,
+.is-ambient-update .bar-item,
+.is-ambient-update .insight-card--deep {
+  animation: none;
+}
+
 /* ===== Plotly theming ===== */
 .js-plotly-plot .plotly .modebar {
   display: none !important;

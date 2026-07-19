@@ -42,7 +42,7 @@ describe('dashboard stylesheet links', () => {
   it('links main.css then design-v2.css in document order', () => {
     const links = stylesheetLinks(indexHtml);
     const mainIdx = links.indexOf('/dashboard/styles/main.css?v=12');
-    const v2Idx = links.indexOf('/dashboard/styles/design-v2.css?v=13');
+    const v2Idx = links.indexOf('/dashboard/styles/design-v2.css?v=14');
     expect(mainIdx).toBeGreaterThanOrEqual(0);
     expect(v2Idx).toBeGreaterThan(mainIdx);
   });
@@ -50,7 +50,7 @@ describe('dashboard stylesheet links', () => {
   it('uses the current cache-busting version for each stylesheet', () => {
     const links = stylesheetLinks(indexHtml);
     expect(links).toContain('/dashboard/styles/main.css?v=12');
-    expect(links).toContain('/dashboard/styles/design-v2.css?v=13');
+    expect(links).toContain('/dashboard/styles/design-v2.css?v=14');
   });
 });
 
