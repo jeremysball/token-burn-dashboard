@@ -231,8 +231,10 @@ const renderTopModels = (tokens_by_model, fullRender = true) => {
             ? 'Pricing sourced from OpenRouter'
             : 'Using local fallback pricing';
         const sourceClass = pricing.source === 'openrouter' ? 'openrouter' : 'local';
-        const { provider, model } = splitModelKey(name);
-        
+        const { model } = splitModelKey(name);
+        const parsed = parseModelKey(name);
+        const providerLabel = parsed.routingProvider ? (parsed.vendor || parsed.routingProvider) : parsed.provider;
+
         if (valueEl && valueEl.textContent !== fmtNum(stats.total)) {
             valueEl.textContent = fmtNum(stats.total);
             valueEl.classList.add('value-updated');
@@ -254,8 +256,8 @@ const renderTopModels = (tokens_by_model, fullRender = true) => {
             sourceEl.title = sourceTitle;
         }
 
-        if (providerEl && providerEl.textContent !== provider) {
-            providerEl.textContent = provider;
+        if (providerEl && providerEl.textContent !== providerLabel) {
+            providerEl.textContent = providerLabel;
         }
 
         if (modelNameEl) {
@@ -284,10 +286,14 @@ const createTopModelCard = (name, stats, i) => {
     const sourceTitle = pricing.source === 'openrouter'
         ? 'Pricing sourced from OpenRouter'
         : 'Using local fallback pricing';
-    const { provider, model } = splitModelKey(name);
+    const { model } = splitModelKey(name);
     const parsed = parseModelKey(name);
-    const providerBadge = provider
-        ? `<span class="provider-badge" title="Provider: ${escapeHtml(provider)}${parsed.vendor ? ` · Vendor: ${escapeHtml(parsed.vendor)}` : ''}">${escapeHtml(provider)}</span>`
+    const providerLabel = parsed.routingProvider ? (parsed.vendor || parsed.routingProvider) : parsed.provider;
+    const providerTitle = parsed.routingProvider
+        ? `Provider: ${escapeHtml(providerLabel)} · Routed via: ${escapeHtml(parsed.routingProvider)}`
+        : `Provider: ${escapeHtml(providerLabel)}`;
+    const providerBadge = providerLabel
+        ? `<span class="provider-badge" title="${providerTitle}">${escapeHtml(providerLabel)}</span>`
         : '';
     const modelDisplay = escapeHtml(model);
     const fullTitle = escapeHtml(displayModel(name));
