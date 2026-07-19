@@ -2,7 +2,7 @@ import { fmtNum, notify } from './utils.js';
 import { setCurrentView, loadCache, loadHistoryFromCache } from './state.js';
 import { connectSSE, updateData, refreshData } from './api.js';
 import { renderDashboard, updateDashboardCharts } from './views/dashboard.js';
-import { renderAnalytics, setAnalyticsTabHandler, setAnalyticsRangeHandler } from './views/analytics.js';
+import { renderAnalytics, setAnalyticsTabHandler, setAnalyticsRangeHandler, loadGitBlame, loadSpikes } from './views/analytics.js';
 
 // ===== ANIMATED NUMBER COUNTER =====
 
@@ -260,6 +260,12 @@ const init = () => {
 
     // Connect SSE
     connectSSE();
+
+    // Prefetch Git and Spike Detective data in the background so those tabs
+    // are already populated on first visit instead of showing a loading
+    // skeleton every time.
+    loadGitBlame();
+    loadSpikes();
 };
 
 // Start
