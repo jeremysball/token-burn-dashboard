@@ -39,7 +39,7 @@ describe('dashboard model cards', () => {
 
     const card = document.querySelector('.top-model-card');
     expect(card.dataset.modelKey).toBe('openrouter/tencent/hy3:free');
-    expect(card.querySelector('.provider-badge').textContent).toBe('openrouter');
+    expect(card.querySelector('.provider-badge').textContent).toBe('tencent');
     expect(card.querySelector('.top-model-name').textContent).toBe('tencent/hy3:free');
   });
 
