@@ -1330,7 +1330,7 @@
         /* ===== NOTIFICATIONS ===== */
         .notification-container {
             position: fixed;
-            top: 80px;
+            bottom: 20px;
             right: 20px;
             z-index: 1001;
             display: flex;

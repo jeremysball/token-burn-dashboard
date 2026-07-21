@@ -1,4 +1,4 @@
-import { fmtNum, notify, positionNotifications } from './utils.js';
+import { fmtNum, notify } from './utils.js';
 import { setCurrentView, loadCache, loadHistoryFromCache } from './state.js';
 import { connectSSE, updateData, refreshData } from './api.js';
 import { renderDashboard, updateDashboardCharts } from './views/dashboard.js';
@@ -236,10 +236,6 @@ const init = () => {
 
     // Initialize ambient particles
     initParticles();
-
-    // Position notifications below the header
-    positionNotifications();
-    window.addEventListener('resize', positionNotifications);
 
     // Load cache
     const cached = loadCache();

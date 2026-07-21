@@ -55,6 +55,8 @@ export const refreshData = async () => {
     } catch (err) {
         console.warn('Historical refresh failed:', err.message);
     }
+
+    notify('Data refreshed', 'success');
 };
 
 export const updateData = (data) => {
