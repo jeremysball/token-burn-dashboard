@@ -14,7 +14,7 @@ export function renderTimelineTab(container) {
         const currentRange = rangeLabels[analyticsRange] || analyticsRange;
         container.innerHTML = `
             <div style="text-align: center; padding: 60px 40px; color: var(--mono-text-muted);">
-                <div style="font-size: 2rem; margin-bottom: 16px;">📊</div>
+                <div style="font-size: 2rem; margin-bottom: 16px;">∅</div>
                 <div style="margin-bottom: 8px;">Not enough data for the last <strong>${currentRange}</strong></div>
                 <div style="font-size: 0.85rem; opacity: 0.7;">Try selecting a wider time range above</div>
             </div>`;

@@ -34,22 +34,18 @@ export const renderCodeStatsTab = () => {
     summaryContainer.innerHTML = `
         <div class="code-summary-grid">
             <div class="code-stat-card primary">
-                <div class="code-stat-icon">📄</div>
                 <div class="code-stat-value">${fmtNum(totalLines)}</div>
                 <div class="code-stat-label">Lines of Code Processed</div>
             </div>
             <div class="code-stat-card">
-                <div class="code-stat-icon">📁</div>
                 <div class="code-stat-value">${fmtNum(filesProcessed)}</div>
                 <div class="code-stat-label">Files Analyzed</div>
             </div>
             <div class="code-stat-card">
-                <div class="code-stat-icon">📊</div>
                 <div class="code-stat-value">${fmtNum(totalTokens / (filesProcessed || 1))}</div>
                 <div class="code-stat-label">Avg Tokens per File</div>
             </div>
             <div class="code-stat-card">
-                <div class="code-stat-icon">⚡</div>
                 <div class="code-stat-value">${fmtNum(totalTokens / (totalLines || 1))}</div>
                 <div class="code-stat-label">Avg Tokens per Line</div>
             </div>
@@ -57,7 +53,7 @@ export const renderCodeStatsTab = () => {
     `;
 
     breakdownContainer.innerHTML = `
-        <h4>📊 Equivalent Code Volume by Language</h4>
+        <h4>Equivalent Code Volume by Language</h4>
         <p class="code-explanation">Your ${fmtNum(totalTokens)} tokens could represent this many lines of code:</p>
         <div class="code-lang-grid">
             ${langStats.map(lang => `
@@ -72,7 +68,7 @@ export const renderCodeStatsTab = () => {
             `).join('')}
         </div>
         <div class="code-project-comparison">
-            <h4>🏢 Project Scale Comparison</h4>
+            <h4>Project Scale Comparison</h4>
             <div class="project-comparisons">
                 <div class="project-comp">
                     <span class="project-name">Linux Kernel</span>

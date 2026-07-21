@@ -31,4 +31,18 @@ describe('decorative emoji sweep', () => {
   it('dashboard/js/views/dashboard.js has no decorative emoji', () => {
     expectNoDecorativeEmoji('dashboard/js/views/dashboard.js');
   });
+
+  it('dashboard/js/views/analytics.js has no decorative emoji', () => {
+    expectNoDecorativeEmoji('dashboard/js/views/analytics.js');
+  });
+
+  const analyticsTabFiles = fs
+    .readdirSync(path.join(__dirname, '../../dashboard/js/views/analytics/tabs'))
+    .filter((f) => f.endsWith('.js'));
+
+  analyticsTabFiles.forEach((file) => {
+    it(`dashboard/js/views/analytics/tabs/${file} has no decorative emoji`, () => {
+      expectNoDecorativeEmoji(`dashboard/js/views/analytics/tabs/${file}`);
+    });
+  });
 });

@@ -59,7 +59,7 @@ export const calculateDeepInsights = () => {
         const savings = (worst.costPer1M - best.costPer1M) * (best.efficiency * (best.costPer1M / 1e6)) / 1e6;
         
         insights.push({
-            icon: '⚡',
+            icon: '#',
             title: 'Most Efficient Model',
             value: best.name.split('/').pop(),
             description: `Best tokens-per-dollar ratio at $${best.costPer1M.toFixed(2)} per 1M tokens`,
@@ -122,7 +122,7 @@ export const calculateDeepInsights = () => {
         : Math.max(0, totalCacheRead * (avgInputCostPerToken - avgCacheReadCostPerToken));
 
     insights.push({
-        icon: cacheRate > 0.5 ? '💾' : '📦',
+        icon: cacheRate > 0.5 ? '▲' : '▽',
         title: 'Cache Efficiency',
         value: `${(cacheRate * 100).toFixed(1)}%`,
         description: cacheRate > 0.5
@@ -146,7 +146,7 @@ export const calculateDeepInsights = () => {
         const monthlyCost = (monthlyTokens / 1e6) * ((total_cost?.total || 0) / (total_tokens / 1e6 || 1));
 
         insights.push({
-            icon: change >= 20 ? '🚀' : change >= 0 ? '📈' : change >= -20 ? '➡️' : '📉',
+            icon: change >= 20 ? '»' : change >= 0 ? '▲' : change >= -20 ? '→' : '▼',
             title: 'Usage Trend',
             value: `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`,
             description: change >= 20 
@@ -173,7 +173,7 @@ export const calculateDeepInsights = () => {
         const concentration = topModelCost / total_cost.total;
         
         insights.push({
-            icon: concentration > 0.8 ? '⚠️' : concentration > 0.5 ? '🎯' : '🌈',
+            icon: concentration > 0.8 ? '!' : concentration > 0.5 ? 'Δ' : '○',
             title: 'Cost Concentration',
             value: `${(concentration * 100).toFixed(0)}%`,
             description: concentration > 0.8 
@@ -192,7 +192,7 @@ export const calculateDeepInsights = () => {
         const tokensPerLine = total_tokens / total_lines;
         
         insights.push({
-            icon: tokensPerLine > 500 ? '🔧' : tokensPerLine > 100 ? '⚙️' : '📝',
+            icon: tokensPerLine > 500 ? 'Δ' : tokensPerLine > 100 ? '·' : '▽',
             title: 'Token Productivity',
             value: `${fmtNum(tokensPerLine)}/line`,
             description: tokensPerLine > 500 
@@ -218,12 +218,12 @@ export const calculateDeepInsights = () => {
         const totalBucketed = hourBuckets.reduce((a, b) => a + b, 0);
         const peakShare = totalBucketed > 0 ? peakTokens / totalBucketed : 0;
         
-        const timeLabel = peakHour >= 5 && peakHour < 12 ? 'morning ☀️' :
-                         peakHour >= 12 && peakHour < 17 ? 'afternoon 🌤️' :
-                         peakHour >= 17 && peakHour < 21 ? 'evening 🌅' : 'night 🌙';
+        const timeLabel = peakHour >= 5 && peakHour < 12 ? 'morning' :
+                         peakHour >= 12 && peakHour < 17 ? 'afternoon' :
+                         peakHour >= 17 && peakHour < 21 ? 'evening' : 'night';
 
         insights.push({
-            icon: '🕐',
+            icon: '·',
             title: 'Peak Hour',
             value: `${peakHour}:00`,
             description: `${(peakShare * 100).toFixed(0)}% of daily tokens used in the ${timeLabel}`,
@@ -238,7 +238,7 @@ export const calculateDeepInsights = () => {
     const ratio = outputRatio > 0 ? inputRatio / outputRatio : 0;
 
     insights.push({
-        icon: inputRatio > 0.8 ? '📥' : outputRatio > 0.5 ? '📤' : '⚖️',
+        icon: inputRatio > 0.8 ? '←' : outputRatio > 0.5 ? '→' : '○',
         title: 'I/O Pattern',
         value: `${ratio.toFixed(1)}:1`,
         description: inputRatio > 0.8
@@ -260,7 +260,7 @@ export const calculateDeepInsights = () => {
             || currentData.total_lines || 0;
         const tokPerLOC = totalLOC ? currentData.total_tokens / totalLOC : 0;
         insights.push({
-            icon: '🛠️',
+            icon: '·',
             title: 'Eng Efficiency',
             value: tokPerLOC ? `${fmtNum(tokPerLOC)} tok/LOC` : 'n/a',
             description: 'Tokens per line changed - lower is more efficient. Heuristic.',
@@ -273,7 +273,7 @@ export const calculateDeepInsights = () => {
     if (getGitBlameCache()?.commits?.length && currentData.total_cost?.total) {
         const avg = currentData.total_cost.total / getGitBlameCache().commits.length;
         insights.push({
-            icon: '💸',
+            icon: '$',
             title: 'Cost / Commit',
             value: `$${avg.toFixed(2)}`,
             description: 'Avg spend per commit (session->commit heuristic)',
