@@ -20,7 +20,8 @@ import {
   getPricingForModel,
   formatModelPrice,
   escapeHtml,
-  resizeVisiblePlots
+  resizeVisiblePlots,
+  positionNotifications
 } from '../../dashboard/js/utils.js';
 
 describe('Utils Module', () => {
@@ -382,6 +383,28 @@ describe('Utils Module', () => {
       global.Plotly = undefined;
       expect(() => resizeVisiblePlots()).not.toThrow();
       global.Plotly = original;
+    });
+  });
+
+  describe('positionNotifications', () => {
+    it('positions the container below the header', () => {
+      document.body.innerHTML = `
+        <header class="dashboard-header"></header>
+        <div class="notification-container" id="notifications"></div>
+      `;
+      const header = document.querySelector('.dashboard-header');
+      header.getBoundingClientRect = () => ({ bottom: 88 });
+
+      positionNotifications();
+
+      const container = document.getElementById('notifications');
+      expect(container.style.top).toBe('100px');
+      expect(container.style.bottom).toBe('');
+    });
+
+    it('does nothing when the header or container is missing', () => {
+      document.body.innerHTML = '';
+      expect(() => positionNotifications()).not.toThrow();
     });
   });
 });

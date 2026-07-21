@@ -203,3 +203,14 @@ export const resizeVisiblePlots = () => {
         if (el && el.data) Plotly.Plots.resize(el);
     });
 };
+
+// ===== NOTIFICATION POSITIONING =====
+export const positionNotifications = () => {
+    const header = document.querySelector('.dashboard-header');
+    const container = document.getElementById('notifications');
+    if (!header || !container) return;
+
+    const bottom = header.getBoundingClientRect().bottom;
+    container.style.top = `${Math.round(bottom) + 12}px`;
+    container.style.bottom = '';
+};
