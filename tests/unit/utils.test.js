@@ -2,7 +2,7 @@
  * @jest-environment jsdom
  */
 
-import { fmtNum, fmtCur, fmtDate, createSparkline, notify, setText, hide, show, getPlotlyLayout } from '../../dashboard/js/utils.js';
+import { fmtNum, fmtCur, fmtDate, createSparkline, notify, setText, hide, show, getPlotlyLayout, positionNotifications } from '../../dashboard/js/utils.js';
 
 describe('Utils Module', () => {
   describe('fmtNum', () => {
@@ -168,6 +168,28 @@ describe('Utils Module', () => {
       document.documentElement.setAttribute('data-theme', 'light');
       const layout = getPlotlyLayout();
       expect(layout.paper_bgcolor).toBe('#ffffff');
+    });
+  });
+
+  describe('positionNotifications', () => {
+    it('positions the container below the header', () => {
+      document.body.innerHTML = `
+        <header class="dashboard-header"></header>
+        <div class="notification-container" id="notifications"></div>
+      `;
+      const header = document.querySelector('.dashboard-header');
+      header.getBoundingClientRect = () => ({ bottom: 88 });
+
+      positionNotifications();
+
+      const container = document.getElementById('notifications');
+      expect(container.style.top).toBe('100px');
+      expect(container.style.bottom).toBe('');
+    });
+
+    it('does nothing when the header or container is missing', () => {
+      document.body.innerHTML = '';
+      expect(() => positionNotifications()).not.toThrow();
     });
   });
 });
