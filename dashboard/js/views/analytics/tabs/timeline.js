@@ -1,14 +1,22 @@
-import { CHART_COLORS, historyData, fileHistoricalData, isCompactViewport, getPlotlyLayout, getCutoffTime, analyticsRange } from './shared.js';
+import { CHART_COLORS, historyData, fileHistoricalData, isCompactViewport, getPlotlyLayout, getCutoffTime, analyticsRange, setAnalyticsRange, resolveAvailableRange } from './shared.js';
 
 export function renderTimelineTab(container) {
     if (!container) container = document.getElementById('timeline-chart-container');
     if (!container || typeof Plotly === 'undefined') return;
 
-    const cutoff = getCutoffTime();
     const sourceData = fileHistoricalData.length > 0 ? fileHistoricalData : historyData;
+    const resolvedRange = resolveAvailableRange(sourceData, analyticsRange);
+    if (resolvedRange !== analyticsRange) {
+        setAnalyticsRange(resolvedRange);
+        document.querySelectorAll('.range-selector button').forEach((el) => {
+            el.classList.toggle('active', el.textContent.toLowerCase() === resolvedRange.toLowerCase());
+        });
+    }
+
+    const cutoff = getCutoffTime();
     const filtered = sourceData.filter(h => h.time > cutoff);
 
-    // If 1h range has insufficient data, show message suggesting wider range
+    // If even "all" has insufficient data, show the empty state.
     if (filtered.length < 2) {
         const rangeLabels = { '1h': '1 hour', '24h': '24 hours', '7d': '7 days', '30d': '30 days', 'all': 'all time' };
         const currentRange = rangeLabels[analyticsRange] || analyticsRange;
