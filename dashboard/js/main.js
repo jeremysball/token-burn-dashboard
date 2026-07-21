@@ -1,4 +1,4 @@
-import { fmtNum, notify } from './utils.js';
+import { fmtNum, notify, resizeVisiblePlots } from './utils.js';
 import { setCurrentView, loadCache, loadHistoryFromCache } from './state.js';
 import { connectSSE, updateData, refreshData } from './api.js';
 import { renderDashboard, updateDashboardCharts } from './views/dashboard.js';
@@ -166,6 +166,7 @@ const toggleTheme = () => {
     document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('tokenBurnTheme', next);
     updateThemeToggleGlyph(next);
+    resizeVisiblePlots();
 };
 
 // ===== RENDER ALL (for data updates) =====

@@ -186,3 +186,20 @@ export const getPlotlyConfig = () => ({
     displayModeBar: false,
     responsive: true
 });
+
+// ===== PLOTLY RESIZE =====
+const LIVE_PLOT_CONTAINER_IDS = [
+    'dashboard-live-chart',
+    'compare-chart-container',
+    'timeline-chart-container',
+    'calendar-container',
+    'distribution-chart-container'
+];
+
+export const resizeVisiblePlots = () => {
+    if (typeof Plotly === 'undefined' || !Plotly.Plots) return;
+    LIVE_PLOT_CONTAINER_IDS.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el && el.data) Plotly.Plots.resize(el);
+    });
+};

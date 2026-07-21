@@ -19,7 +19,8 @@ import {
   parseModelKey,
   getPricingForModel,
   formatModelPrice,
-  escapeHtml
+  escapeHtml,
+  resizeVisiblePlots
 } from '../../dashboard/js/utils.js';
 
 describe('Utils Module', () => {
@@ -345,6 +346,42 @@ describe('Utils Module', () => {
       document.body.innerHTML = `<div data-key="${escaped}"></div>`;
       const el = document.querySelector('div');
       expect(el.getAttribute('onmouseover')).toBeNull();
+    });
+  });
+
+  describe('resizeVisiblePlots', () => {
+    beforeEach(() => {
+      document.body.innerHTML = `
+        <div id="dashboard-live-chart"></div>
+        <div id="timeline-chart-container"></div>
+        <div id="compare-chart-container"></div>
+        <div id="calendar-container"></div>
+        <div id="distribution-chart-container"></div>
+      `;
+      global.Plotly.Plots = { resize: jest.fn() };
+    });
+
+    it('resizes only containers that have already been plotted', () => {
+      document.getElementById('dashboard-live-chart').data = [{}];
+      document.getElementById('timeline-chart-container').data = [{}];
+
+      resizeVisiblePlots();
+
+      expect(global.Plotly.Plots.resize).toHaveBeenCalledTimes(2);
+      expect(global.Plotly.Plots.resize).toHaveBeenCalledWith(document.getElementById('dashboard-live-chart'));
+      expect(global.Plotly.Plots.resize).toHaveBeenCalledWith(document.getElementById('timeline-chart-container'));
+    });
+
+    it('does nothing for containers that were never plotted', () => {
+      resizeVisiblePlots();
+      expect(global.Plotly.Plots.resize).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when Plotly is unavailable', () => {
+      const original = global.Plotly;
+      global.Plotly = undefined;
+      expect(() => resizeVisiblePlots()).not.toThrow();
+      global.Plotly = original;
     });
   });
 });
