@@ -108,9 +108,9 @@
                     <input type="text" class="search-box" id="search-box" placeholder="Filter models..." oninput="handleSearch(this.value)">
                     <div class="sort-controls">
                         <span>Sort by:</span>
-                        <button onclick="sortBy('tokens')">Tokens</button>
-                        <button onclick="sortBy('cost')">Cost</button>
-                        <button onclick="sortBy('cache')">Cache</button>
+                        <button data-col="tokens" onclick="sortBy('tokens')">Tokens</button>
+                        <button data-col="cost" onclick="sortBy('cost')">Cost</button>
+                        <button data-col="cache" onclick="sortBy('cache')">Cache</button>
                     </div>
                 </div>
                 <div class="models-table-container">
