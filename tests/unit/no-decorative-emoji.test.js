@@ -23,4 +23,12 @@ describe('decorative emoji sweep', () => {
   it('dashboard/js/main.js has no decorative emoji', () => {
     expectNoDecorativeEmoji('dashboard/js/main.js');
   });
+
+  it('dashboard/js/config.js has no decorative emoji', () => {
+    expectNoDecorativeEmoji('dashboard/js/config.js');
+  });
+
+  it('dashboard/js/views/dashboard.js has no decorative emoji', () => {
+    expectNoDecorativeEmoji('dashboard/js/views/dashboard.js');
+  });
 });
