@@ -92,7 +92,7 @@ const checkThresholds = (totalTokens, totalCost) => {
     if (tokenBillions >= 1 && !shownAchievements.has(tokenKey)) {
         shownAchievements.add(tokenKey);
         newAchievement = true;
-        notify(`🎉 Milestone Reached: ${tokenBillions}B Tokens!`, 'success');
+        notify(`Milestone Reached: ${tokenBillions}B Tokens!`, 'success');
         document.querySelector('.hero-section')?.classList.add('threshold-crossed');
         setTimeout(() => document.querySelector('.hero-section')?.classList.remove('threshold-crossed'), 1000);
     }
@@ -103,7 +103,7 @@ const checkThresholds = (totalTokens, totalCost) => {
     if (costHundreds >= 1 && !shownAchievements.has(costKey)) {
         shownAchievements.add(costKey);
         newAchievement = true;
-        notify(`💰 Milestone Reached: $${costHundreds * 100} Total Spent!`, 'success');
+        notify(`Milestone Reached: $${costHundreds * 100} Total Spent!`, 'success');
     }
     
     // Save to localStorage if any new achievements were shown
@@ -153,11 +153,19 @@ const setView = (view) => {
 };
 
 // ===== THEME =====
+const THEME_GLYPHS = { dark: '☾', light: '☀' };
+
+const updateThemeToggleGlyph = (theme) => {
+    const toggle = document.querySelector('.theme-toggle');
+    if (toggle) toggle.textContent = THEME_GLYPHS[theme] || THEME_GLYPHS.dark;
+};
+
 const toggleTheme = () => {
     const current = document.documentElement.getAttribute('data-theme');
     const next = current === 'light' ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('tokenBurnTheme', next);
+    updateThemeToggleGlyph(next);
 };
 
 // ===== RENDER ALL (for data updates) =====
@@ -237,6 +245,7 @@ const init = () => {
     // Load theme
     const savedTheme = getSavedTheme();
     document.documentElement.setAttribute('data-theme', savedTheme);
+    updateThemeToggleGlyph(savedTheme);
 
     // Initialize ambient particles
     initParticles();
