@@ -12,3 +12,8 @@ test-results/
 nohup.out
 test-*.js
 fix_ports.js.worktrees/
+
+.superpowers/*
+!.superpowers/plans/
+!.superpowers/specs/
+!.superpowers/.completed/
