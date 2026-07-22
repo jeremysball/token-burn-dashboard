@@ -3,7 +3,7 @@ const {
   getOpenRouterPricingRecord,
   setOpenRouterPricingSnapshot
 } = require('../../lib/openrouter');
-const { getPricing, calculateCost } = require('../../lib/pricing');
+const { findLocalPricing, getPricing, calculateCost } = require('../../lib/pricing');
 
 describe('server pricing', () => {
   beforeEach(() => {
@@ -36,9 +36,210 @@ describe('server pricing', () => {
       input: 2.5,
       output: 10,
       cacheRead: 1.25,
-      cacheWrite: null,
+      cacheWrite: undefined,
       source: 'openrouter'
     });
+  });
+
+  it('does not match embed-m3 as Minimax M3', () => {
+    expect(findLocalPricing('task-embed-m3-model')).toMatchObject({
+      input: 2.5,
+      output: 10
+    });
+  });
+
+  it('matches Minimax M3 through a provider prefix', () => {
+    expect(findLocalPricing('opencode-go/minimax-m3')).toMatchObject({
+      input: 0.5,
+      output: 2
+    });
+  });
+
+  it('does not match an unrelated model containing k2', () => {
+    expect(findLocalPricing('task2')).toMatchObject({
+      input: 2.5,
+      output: 10
+    });
+  });
+
+  it('preserves local pricing when OpenRouter omits cache prices', () => {
+    setOpenRouterPricingSnapshot({
+      fetchedAt: Date.now(),
+      source: 'openrouter',
+      models: [{
+        id: 'openai/gpt-4o',
+        pricing: {
+          prompt: '0.000001',
+          completion: '0.000002'
+        }
+      }],
+      error: null
+    });
+
+    expect(getPricing('openai/gpt-4o')).toMatchObject({
+      input: 1,
+      output: 2,
+      cacheRead: 1.25,
+      cacheWrite: 0,
+      source: 'openrouter'
+    });
+  });
+
+  it('preserves local pricing when OpenRouter supplies explicit null aliases', () => {
+    setOpenRouterPricingSnapshot({
+      fetchedAt: Date.now(),
+      source: 'openrouter',
+      models: [{
+        id: 'openai/gpt-4o',
+        canonical_slug: 'openai/gpt-4o',
+        name: 'OpenAI: GPT-4o',
+        pricing: {
+          prompt: '0.0000025',
+          completion: '0.00001',
+          input_cache_read: null,
+          input_cache_write: null,
+          cache_read: null,
+          cache_write: null
+        }
+      }],
+      error: null
+    });
+
+    const pricing = getPricing('openai/gpt-4o');
+    expect(pricing.source).toBe('openrouter');
+    expect(pricing.input).toBe(2.5);
+    expect(pricing.output).toBe(10);
+    expect(pricing.cacheRead).toBe(1.25);
+    expect(pricing.cacheWrite).toBe(0);
+  });
+
+  it('keeps legitimate numeric zero and does not fall through to local pricing', () => {
+    setOpenRouterPricingSnapshot({
+      fetchedAt: Date.now(),
+      source: 'openrouter',
+      models: [{
+        id: 'openai/gpt-4o',
+        canonical_slug: 'openai/gpt-4o',
+        name: 'OpenAI: GPT-4o',
+        pricing: {
+          prompt: '0',
+          completion: '0',
+          input_cache_read: '0',
+          input_cache_write: '0'
+        }
+      }],
+      error: null
+    });
+
+    const pricing = getPricing('openai/gpt-4o');
+    expect(pricing.source).toBe('openrouter');
+    expect(pricing.input).toBe(0);
+    expect(pricing.output).toBe(0);
+    expect(pricing.cacheRead).toBe(0);
+    expect(pricing.cacheWrite).toBe(0);
+    expect(pricing.input).not.toBe(2.5);
+    expect(pricing.output).not.toBe(10);
+  });
+
+  it('merge keeps local values when OpenRouter record carries explicit null aliases (production merge path)', () => {
+    const localPricing = findLocalPricing('openai/gpt-4o');
+    expect(localPricing.input).toBe(2.5);
+    expect(localPricing.cacheRead).toBe(1.25);
+    expect(localPricing.cacheWrite).toBe(0);
+
+    setOpenRouterPricingSnapshot({
+      fetchedAt: Date.now(),
+      source: 'openrouter',
+      models: [{
+        id: 'openai/gpt-4o',
+        canonical_slug: 'openai/gpt-4o',
+        name: 'OpenAI: GPT-4o',
+        pricing: {
+          prompt: '0.0000025',
+          completion: '0.00001',
+          input_cache_read: null,
+          input_cache_write: null,
+          cache_read: null,
+          cache_write: null
+        }
+      }],
+      error: null
+    });
+
+    const merged = getPricing('openai/gpt-4o');
+    expect(merged.source).toBe('openrouter');
+    expect(merged.input).toBe(2.5);
+    expect(merged.output).toBe(10);
+    expect(merged.cacheRead).toBe(1.25);
+    expect(merged.cacheWrite).toBe(0);
+    expect(merged.cacheRead).not.toBeNull();
+    expect(merged.cacheWrite).not.toBeNull();
+  });
+
+  it('keeps legitimate numeric zero through the production merge path (no fallthrough)', () => {
+    setOpenRouterPricingSnapshot({
+      fetchedAt: Date.now(),
+      source: 'openrouter',
+      models: [{
+        id: 'openai/gpt-4o',
+        canonical_slug: 'openai/gpt-4o',
+        name: 'OpenAI: GPT-4o',
+        pricing: {
+          prompt: '0',
+          completion: '0',
+          input_cache_read: '0',
+          input_cache_write: '0',
+          cache_read: '0',
+          cache_write: '0'
+        }
+      }],
+      error: null
+    });
+
+    const merged = getPricing('openai/gpt-4o');
+    expect(merged.source).toBe('openrouter');
+    expect(merged.input).toBe(0);
+    expect(merged.output).toBe(0);
+    expect(merged.cacheRead).toBe(0);
+    expect(merged.cacheWrite).toBe(0);
+    expect(merged.input).not.toBe(2.5);
+    expect(merged.output).not.toBe(10);
+    expect(merged.input).not.toBeUndefined();
+  });
+
+  it('keeps numeric zero supplied as a number and does not fall through to local pricing', () => {
+    const record = buildOpenRouterPricingRecord({
+      id: 'free/model',
+      canonical_slug: 'free/model',
+      name: 'Free Model',
+      pricing: {
+        prompt: 0,
+        completion: 0,
+        input_cache_read: 0,
+        input_cache_write: 0
+      }
+    });
+
+    expect(record.source).toBe('openrouter');
+    expect(record.input).toBe(0);
+    expect(record.output).toBe(0);
+    expect(record.cacheRead).toBe(0);
+    expect(record.cacheWrite).toBe(0);
+    expect(record.input).not.toBeUndefined();
+  });
+
+  it('keeps an explicit zero reasoning rate free', () => {
+    setOpenRouterPricingSnapshot({
+      fetchedAt: Date.now(),
+      source: 'openrouter',
+      models: [{
+        id: 'openai/gpt-4o',
+        pricing: { prompt: '0.0000025', completion: '0.00001', reasoning: '0' }
+      }],
+      error: null
+    });
+
+    expect(calculateCost({ reasoning: 1_000_000 }, 'openai/gpt-4o').reasoning).toBe(0);
   });
 
   it('matches OpenRouter pricing by full id and alias', () => {
@@ -115,5 +316,11 @@ describe('server pricing', () => {
       input: 2.5,
       output: 10
     });
+  });
+
+  it('charges reasoning tokens at the output rate when no explicit reasoning rate exists', () => {
+    const cost = calculateCost({ input: 1_000_000, output: 0, reasoning: 1_000_000 }, 'gpt-4o');
+    expect(cost.reasoning).toBeCloseTo(10, 5);
+    expect(cost.total).toBeCloseTo(12.5, 5);
   });
 });
