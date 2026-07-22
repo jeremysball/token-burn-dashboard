@@ -20,13 +20,28 @@ function createMockReq(url, headers = { host: 'localhost:7071' }) {
 }
 
 function createMockRes() {
-  return {
-    statusCode: null,
-    headers: null,
-    body: '',
-    writeHead(status, headers) { this.statusCode = status; this.headers = headers; },
-    end(body) { this.body = body || ''; }
+  const res = new EventEmitter();
+  res.statusCode = null;
+  res.headers = null;
+  res.body = '';
+  res.writableEnded = false;
+  res.writeHead = function(status, headers) {
+    this.statusCode = status;
+    this.headers = headers;
+    return this;
   };
+  res.end = function(body) {
+    this.body = body || '';
+    this.writableEnded = true;
+    this.emit('finish');
+    // Real Node responses emit 'close' on a subsequent tick after 'finish'
+    // (after the underlying connection terminates). Mirror that ordering so
+    // listeners attached via res.once('close', ...) — e.g. the cancel-on-close
+    // hook in runTaskferryAnalysis — fire after 'finish' on the same response.
+    process.nextTick(() => this.emit('close'));
+    return this;
+  };
+  return res;
 }
 
 describe('handleGitBlameRoute cwd validation', () => {
@@ -108,6 +123,156 @@ describe('handleInsightsAnalyzeRoute request validation', () => {
     jest.dontMock('child_process');
     jest.resetModules();
   });
+
+  it('rejects a summary missing totals.* numeric fields with 400 (shallow-validation gap)', async () => {
+    jest.resetModules();
+    const execFileMock = jest.fn();
+    jest.doMock('child_process', () => ({ execFile: execFileMock }));
+
+    const { handleInsightsAnalyzeRoute } = require('../../../../lib/routes/api');
+    const req = createMockReq('/api/insights/analyze');
+    const res = createMockRes();
+
+    // Passes the OLD shallow validation (all top-level shapes are valid objects/arrays,
+    // numeric modelCount/cacheRate/inputOutputRatio) but is missing every numeric
+    // field under totals.tokens and totals.cost that buildAnalysisPrompt directly
+    // interpolates — used to throw TypeError: Cannot read properties of undefined
+    // (reading 'toFixed') inside runTaskferryAnalysis, which got caught and
+    // misreported as 503 'AI analysis service unavailable' instead of the 400
+    // this validator exists to produce.
+    const shallowValidButNumericallyBroken = {
+      totals: { cost: {} },
+      modelCount: 1,
+      cacheRate: 0,
+      inputOutputRatio: 0,
+      models: [],
+      history: []
+    };
+
+    const promise = handleInsightsAnalyzeRoute(req, res, undefined);
+    req.emit('data', Buffer.from(JSON.stringify(shallowValidButNumericallyBroken)));
+    req.emit('end');
+    await promise;
+
+    expect(res.statusCode).toBe(400);
+    const errorMessage = JSON.parse(res.body).error;
+    expect(errorMessage).toMatch(/Invalid request body/);
+    expect(errorMessage).toMatch(/totals\.tokens/);
+    expect(execFileMock).not.toHaveBeenCalled();
+
+    jest.dontMock('child_process');
+    jest.resetModules();
+  });
+
+  it('rejects a summary missing totals.cost.* numeric fields with 400', async () => {
+    jest.resetModules();
+    const execFileMock = jest.fn();
+    jest.doMock('child_process', () => ({ execFile: execFileMock }));
+
+    const { handleInsightsAnalyzeRoute } = require('../../../../lib/routes/api');
+    const req = createMockReq('/api/insights/analyze');
+    const res = createMockRes();
+
+    // totals.* is fully numeric but totals.cost.* is an empty object — exercises
+    // the cost-side numeric checks added alongside totals.tokens/input/...
+    const shallowValidButCostBroken = {
+      totals: {
+        tokens: 1, input: 1, output: 1, cacheRead: 0, cacheWrite: 0, reasoning: 0,
+        cost: {}
+      },
+      modelCount: 0,
+      cacheRate: 0,
+      inputOutputRatio: 0,
+      models: [],
+      history: []
+    };
+
+    const promise = handleInsightsAnalyzeRoute(req, res, undefined);
+    req.emit('data', Buffer.from(JSON.stringify(shallowValidButCostBroken)));
+    req.emit('end');
+    await promise;
+
+    expect(res.statusCode).toBe(400);
+    const errorMessage = JSON.parse(res.body).error;
+    expect(errorMessage).toMatch(/Invalid request body/);
+    expect(errorMessage).toMatch(/totals\.cost\.total/);
+    expect(execFileMock).not.toHaveBeenCalled();
+
+    jest.dontMock('child_process');
+    jest.resetModules();
+  });
+
+  it('rejects a summary with a non-object model entry with 400', async () => {
+    jest.resetModules();
+    const execFileMock = jest.fn();
+    jest.doMock('child_process', () => ({ execFile: execFileMock }));
+
+    const { handleInsightsAnalyzeRoute } = require('../../../../lib/routes/api');
+    const req = createMockReq('/api/insights/analyze');
+    const res = createMockRes();
+
+    const withBadModel = {
+      totals: {
+        tokens: 1, input: 1, output: 1, cacheRead: 0, cacheWrite: 0, reasoning: 0,
+        cost: { input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0, total: 0 }
+      },
+      modelCount: 1,
+      cacheRate: 0,
+      inputOutputRatio: 0,
+      models: ['not-an-object'],
+      history: []
+    };
+
+    const promise = handleInsightsAnalyzeRoute(req, res, undefined);
+    req.emit('data', Buffer.from(JSON.stringify(withBadModel)));
+    req.emit('end');
+    await promise;
+
+    expect(res.statusCode).toBe(400);
+    const errorMessage = JSON.parse(res.body).error;
+    expect(errorMessage).toMatch(/Invalid request body/);
+    expect(errorMessage).toMatch(/summary\.models\[0\]/);
+    expect(execFileMock).not.toHaveBeenCalled();
+
+    jest.dontMock('child_process');
+    jest.resetModules();
+  });
+
+  it('rejects a summary with a history entry missing numeric total with 400', async () => {
+    jest.resetModules();
+    const execFileMock = jest.fn();
+    jest.doMock('child_process', () => ({ execFile: execFileMock }));
+
+    const { handleInsightsAnalyzeRoute } = require('../../../../lib/routes/api');
+    const req = createMockReq('/api/insights/analyze');
+    const res = createMockRes();
+
+    const withBadHistory = {
+      totals: {
+        tokens: 1, input: 1, output: 1, cacheRead: 0, cacheWrite: 0, reasoning: 0,
+        cost: { input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0, total: 0 }
+      },
+      modelCount: 0,
+      cacheRate: 0,
+      inputOutputRatio: 0,
+      models: [],
+      history: [{ time: 1234, tokens_by_model: {} }]
+    };
+
+    const promise = handleInsightsAnalyzeRoute(req, res, undefined);
+    req.emit('data', Buffer.from(JSON.stringify(withBadHistory)));
+    req.emit('end');
+    await promise;
+
+    expect(res.statusCode).toBe(400);
+    const errorMessage = JSON.parse(res.body).error;
+    expect(errorMessage).toMatch(/Invalid request body/);
+    expect(errorMessage).toMatch(/summary\.history\[0\]\.total/);
+    expect(execFileMock).not.toHaveBeenCalled();
+
+    jest.dontMock('child_process');
+    jest.resetModules();
+  });
 });
 
 describe('handleInsightsAnalyzeRoute taskferry analysis', () => {
@@ -151,7 +316,7 @@ describe('handleInsightsAnalyzeRoute taskferry analysis', () => {
         const [subcommand] = args;
         if (subcommand === 'dispatch') {
           const promptArg = args[args.indexOf('--prompt') + 1];
-          dataFilePathAtDispatchTime = (promptArg.match(/Complete input data:\*\* (\S+)/) || [])[1];
+          dataFilePathAtDispatchTime = (promptArg.match(/Complete input data:\*\* ([^\n]+)/) || [])[1];
           dataFileContentsAtDispatchTime = fs.readFileSync(dataFilePathAtDispatchTime, 'utf-8')
             .trim().split('\n').map(line => JSON.parse(line));
           process.nextTick(() => callback(null, 'id: oc_test1\nstatus: running\n', ''));
@@ -336,6 +501,49 @@ describe('handleInsightsAnalyzeRoute taskferry analysis', () => {
       expect.any(Error)
     );
     consoleErrorSpy.mockRestore();
+  });
+
+  it('cancels the taskferry worker if the response closes while wait is still pending', async () => {
+    // Regression for the race where the outer gateway timeout
+    // (INSIGHTS_REQUEST_TIMEOUT, 220s) fires while the inner wait() is still
+    // legitimately pending — previously the worker kept running and burning
+    // quota for up to ~200s after the response ended, because cancel was only
+    // wired into the wait() catch block.
+    jest.resetModules();
+    let cancelArgs = null;
+    jest.doMock('child_process', () => ({
+      execFile: jest.fn((file, args, options, callback) => {
+        const [subcommand] = args;
+        if (subcommand === 'dispatch') {
+          process.nextTick(() => callback(null, 'id: oc_test_cancel\nstatus: running\n', ''));
+        } else if (subcommand === 'cancel') {
+          cancelArgs = args;
+          process.nextTick(() => callback(null, '', ''));
+        }
+        // wait/result: never resolve — the test only verifies cancel is
+        // issued when the response closes mid-flight; the handler stays
+        // pending until the 180s wait timeout (well past this test's
+        // lifetime), and jest moves on without awaiting it.
+      })
+    }));
+
+    const { handleInsightsAnalyzeRoute } = require('../../../../lib/routes/api');
+    const req = createMockReq('/api/insights/analyze');
+    const res = createMockRes();
+
+    handleInsightsAnalyzeRoute(req, res, undefined);
+    req.emit('data', Buffer.from(JSON.stringify(validSummary)));
+    req.emit('end');
+
+    // Let dispatch resolve and the cancel-on-close listener register.
+    await new Promise(r => process.nextTick(r));
+    await new Promise(r => process.nextTick(r));
+
+    // Simulate the response closing mid-flight (client disconnect / gateway
+    // timeout). The 'close' listener fires synchronously on emit.
+    res.emit('close');
+
+    expect(cancelArgs).toEqual(['cancel', 'oc_test_cancel']);
   });
 });
 
