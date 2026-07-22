@@ -63,7 +63,7 @@ describe('handleGitBlameRoute cwd validation', () => {
     const req = { url: '/api/git/blame?cwd=' + encodeURIComponent(allowedCwd), headers: { host: 'localhost:7071' } };
     const res = createMockRes();
 
-    await handleGitBlameRoute(req, res, undefined);
+    await handleGitBlameRoute(req, res, undefined); // undefined requestTimeout — no timeout to clear in this test case
 
     expect(res.statusCode).toBe(200);
     expect(gitBlame.getGitBlameRouteData).toHaveBeenCalledWith(30, allowedCwd);
@@ -86,6 +86,52 @@ describe('handleInsightsAnalyzeRoute body size limit', () => {
   });
 });
 
+describe('handleInsightsAnalyzeRoute Kimi analysis error', () => {
+  it('does not leak the raw error message when callKimiAnalysis fails', async () => {
+    const originalKey = process.env.KIMI_API_KEY;
+    process.env.KIMI_API_KEY = 'test-key';
+
+    jest.resetModules();
+    jest.doMock('https', () => ({
+      request: jest.fn(() => {
+        const req = new EventEmitter();
+        req.write = jest.fn();
+        req.end = jest.fn();
+        process.nextTick(() => req.emit('error', new Error('KIMI_NETWORK_FAILURE')));
+        return req;
+      })
+    }));
+
+    const { handleInsightsAnalyzeRoute } = require('../../../../lib/routes/api');
+    const req = createMockReq('/api/insights/analyze');
+    const res = createMockRes();
+
+    let responseResolve;
+    const responseWritten = new Promise(r => { responseResolve = r; });
+    const originalEnd = res.end;
+    res.end = function(body) {
+      originalEnd.call(res, body);
+      responseResolve();
+    };
+
+    handleInsightsAnalyzeRoute(req, res, undefined);
+    req.emit('data', Buffer.from(JSON.stringify({ summary: { topModels: [] } })));
+    req.emit('end');
+    await responseWritten;
+
+    expect(res.statusCode).toBe(503);
+    const parsed = JSON.parse(res.body);
+    expect(parsed.error).toBe('AI analysis service unavailable');
+    expect(parsed).not.toHaveProperty('message');
+    expect(res.body).not.toContain('KIMI_NETWORK_FAILURE');
+
+    if (originalKey === undefined) delete process.env.KIMI_API_KEY;
+    else process.env.KIMI_API_KEY = originalKey;
+    jest.dontMock('https');
+    jest.resetModules();
+  });
+});
+
 describe('handleTokensRoute error responses', () => {
   it('does not leak the raw error message to the client', async () => {
     jest.resetModules();
@@ -102,6 +148,5 @@ describe('handleTokensRoute error responses', () => {
     const parsed = JSON.parse(res.body);
     expect(parsed.error).toBe('Internal server error');
     expect(parsed.error).not.toMatch(/secret/);
-    jest.dontMock('../../../../lib/cache');
   });
 });

@@ -45,17 +45,6 @@ describe('loadGitBlame error escaping', () => {
         expect(html).not.toContain('<img');
         expect(document.getElementById('git-commits-list').querySelector('img')).toBeNull();
     });
-
-    it('escapes err.message in git-files-list so markup is not injected', async () => {
-        global.fetch = jest.fn(() => Promise.reject(new Error(XSS_MSG)));
-
-        await loadGitBlame();
-
-        const html = document.getElementById('git-files-list').innerHTML;
-        // git-files-list shows a static "Could not load" message — no err.message there.
-        // But we verify it still renders safely and doesn't throw.
-        expect(typeof html).toBe('string');
-    });
 });
 
 // ========== git.js: showCommitDetails catch ==========
