@@ -86,19 +86,70 @@ describe('handleInsightsAnalyzeRoute body size limit', () => {
   });
 });
 
-describe('handleInsightsAnalyzeRoute Kimi analysis error', () => {
-  it('does not leak the raw error message when callKimiAnalysis fails', async () => {
-    const originalKey = process.env.KIMI_API_KEY;
-    process.env.KIMI_API_KEY = 'test-key';
+describe('handleInsightsAnalyzeRoute taskferry analysis', () => {
+  const validSummary = {
+    topModels: [{ name: 'gpt-5', tokens: 1_000_000, cost: 1.23, cacheRate: 0.5 }],
+    totalTokens: 2_000_000_000,
+    totalCost: 12.34,
+    modelCount: 3,
+    cacheRate: 0.4,
+    inputOutputRatio: 2.1
+  };
 
+  afterEach(() => {
+    jest.dontMock('child_process');
     jest.resetModules();
-    jest.doMock('https', () => ({
-      request: jest.fn(() => {
-        const req = new EventEmitter();
-        req.write = jest.fn();
-        req.end = jest.fn();
-        process.nextTick(() => req.emit('error', new Error('KIMI_NETWORK_FAILURE')));
-        return req;
+  });
+
+  it('dispatches to taskferry and returns its message as insights text', async () => {
+    jest.resetModules();
+    const { TASKFERRY_INSIGHTS_MODEL, TASKFERRY_SCRATCH_DIR } = require('../../../../lib/config');
+    jest.doMock('child_process', () => ({
+      execFile: jest.fn((file, args, options, callback) => {
+        const [subcommand] = args;
+        if (subcommand === 'dispatch') {
+          process.nextTick(() => callback(null, 'id: oc_test1\nstatus: running\n', ''));
+        } else if (subcommand === 'wait') {
+          process.nextTick(() => callback(null, 'id: oc_test1\nstatus: done\nexitCode: 0\n', ''));
+        } else if (subcommand === 'result') {
+          process.nextTick(() => callback(null, `taskId: oc_test1\nstatus: done\nmessage: ${JSON.stringify('**Use fewer big models.**')}\n`, ''));
+        } else {
+          process.nextTick(() => callback(null, '', ''));
+        }
+      })
+    }));
+
+    const { handleInsightsAnalyzeRoute } = require('../../../../lib/routes/api');
+    const { execFile } = require('child_process');
+    const req = createMockReq('/api/insights/analyze');
+    const res = createMockRes();
+
+    const promise = handleInsightsAnalyzeRoute(req, res, undefined);
+    req.emit('data', Buffer.from(JSON.stringify(validSummary)));
+    req.emit('end');
+    await promise;
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ insights: '**Use fewer big models.**', source: 'taskferry' });
+
+    const dispatchCall = execFile.mock.calls.find(call => call[1][0] === 'dispatch');
+    expect(dispatchCall[1]).toEqual(expect.arrayContaining(['--model', TASKFERRY_INSIGHTS_MODEL, '--directory', TASKFERRY_SCRATCH_DIR]));
+    const waitCall = execFile.mock.calls.find(call => call[1][0] === 'wait');
+    expect(waitCall[1]).toEqual(['wait', 'oc_test1']);
+  });
+
+  it('does not leak the raw error message when the taskferry dispatch fails', async () => {
+    jest.resetModules();
+    jest.doMock('child_process', () => ({
+      execFile: jest.fn((file, args, options, callback) => {
+        const [subcommand] = args;
+        if (subcommand === 'dispatch') {
+          process.nextTick(() => callback(null, 'id: oc_test2\nstatus: running\n', ''));
+        } else if (subcommand === 'wait') {
+          process.nextTick(() => callback(new Error('TASKFERRY_INTERNAL_FAILURE_SENTINEL')));
+        } else {
+          process.nextTick(() => callback(null, '', ''));
+        }
       })
     }));
 
@@ -106,29 +157,14 @@ describe('handleInsightsAnalyzeRoute Kimi analysis error', () => {
     const req = createMockReq('/api/insights/analyze');
     const res = createMockRes();
 
-    let responseResolve;
-    const responseWritten = new Promise(r => { responseResolve = r; });
-    const originalEnd = res.end;
-    res.end = function(body) {
-      originalEnd.call(res, body);
-      responseResolve();
-    };
-
-    handleInsightsAnalyzeRoute(req, res, undefined);
-    req.emit('data', Buffer.from(JSON.stringify({ summary: { topModels: [] } })));
+    const promise = handleInsightsAnalyzeRoute(req, res, undefined);
+    req.emit('data', Buffer.from(JSON.stringify(validSummary)));
     req.emit('end');
-    await responseWritten;
+    await promise;
 
     expect(res.statusCode).toBe(503);
-    const parsed = JSON.parse(res.body);
-    expect(parsed.error).toBe('AI analysis service unavailable');
-    expect(parsed).not.toHaveProperty('message');
-    expect(res.body).not.toContain('KIMI_NETWORK_FAILURE');
-
-    if (originalKey === undefined) delete process.env.KIMI_API_KEY;
-    else process.env.KIMI_API_KEY = originalKey;
-    jest.dontMock('https');
-    jest.resetModules();
+    expect(JSON.parse(res.body)).toEqual({ error: 'AI analysis service unavailable' });
+    expect(res.body).not.toContain('TASKFERRY_INTERNAL_FAILURE_SENTINEL');
   });
 });
 
