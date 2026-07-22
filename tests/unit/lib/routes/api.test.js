@@ -138,6 +138,36 @@ describe('handleInsightsAnalyzeRoute taskferry analysis', () => {
     expect(waitCall[1]).toEqual(['wait', 'oc_test1']);
   });
 
+  it('handles a bare (unquoted) TOON message value', async () => {
+    jest.resetModules();
+    jest.doMock('child_process', () => ({
+      execFile: jest.fn((file, args, options, callback) => {
+        const [subcommand] = args;
+        if (subcommand === 'dispatch') {
+          process.nextTick(() => callback(null, 'id: oc_test3\nstatus: running\n', ''));
+        } else if (subcommand === 'wait') {
+          process.nextTick(() => callback(null, 'id: oc_test3\nstatus: done\nexitCode: 0\n', ''));
+        } else if (subcommand === 'result') {
+          process.nextTick(() => callback(null, 'taskId: oc_test3\nstatus: done\nmessage: OK\n', ''));
+        } else {
+          process.nextTick(() => callback(null, '', ''));
+        }
+      })
+    }));
+
+    const { handleInsightsAnalyzeRoute } = require('../../../../lib/routes/api');
+    const req = createMockReq('/api/insights/analyze');
+    const res = createMockRes();
+
+    const promise = handleInsightsAnalyzeRoute(req, res, undefined);
+    req.emit('data', Buffer.from(JSON.stringify(validSummary)));
+    req.emit('end');
+    await promise;
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ insights: 'OK', source: 'taskferry' });
+  });
+
   it('does not leak the raw error message when the taskferry dispatch fails', async () => {
     jest.resetModules();
     jest.doMock('child_process', () => ({
