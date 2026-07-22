@@ -17,18 +17,18 @@ const { handleTokensRoute, handleHistoricalRoute, handleHealthRoute, handleInsig
 const { handleSseRoute } = require('./lib/routes/sse');
 const { handleStaticRoutes } = require('./lib/routes/static');
 
-let currentPort = PORT;
+let currentPort = Number(PORT);
 
 const server = http.createServer(async (req, res) => {
   const startTime = Date.now();
-  const host = req.headers.host || `localhost:${currentPort}`;
-  const url = new URL(req.url, `http://${host}`);
+  const host = String(req.headers.host || '') || `localhost:${currentPort}`;
+  const url = new URL(req.url || '/', `http://${host}`);
   
   // Log request
   console.log(`[${new Date().toISOString()}] ${req.method} ${url.pathname}`);
   
   // CORS Headers
-  const corsOrigin = resolveCorsOrigin(req.headers.origin, ALLOWED_ORIGINS);
+  const corsOrigin = resolveCorsOrigin(/** @type {string} */ (req.headers.origin), ALLOWED_ORIGINS);
   if (corsOrigin) {
     res.setHeader('Access-Control-Allow-Origin', corsOrigin);
     res.setHeader('Vary', 'Origin');
@@ -42,7 +42,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   
-  if (url.pathname.startsWith('/api/') && !isAuthorized(req, AUTH_TOKEN)) {
+  if (url.pathname.startsWith('/api/') && !isAuthorized(req, /** @type {string|undefined} */ (AUTH_TOKEN))) {
     res.writeHead(401, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Unauthorized' }));
     return;
@@ -62,6 +62,9 @@ const server = http.createServer(async (req, res) => {
   }
   
   // Helper to log response
+  /**
+   * @param {number} statusCode
+   */
   const logResponse = (statusCode) => {
     const duration = Date.now() - startTime;
     console.log(`[${new Date().toISOString()}] ${req.method} ${url.pathname} - ${statusCode} (${duration}ms)`);
@@ -137,10 +140,10 @@ startBackgroundUpdater();
 let attempt = 0;
 
 server.on('error', (e) => {
-  if (e.code === 'EADDRINUSE') {
+  if (/** @type {NodeJS.ErrnoException} */ (e).code === 'EADDRINUSE') {
     attempt++;
     const offset = Math.ceil(attempt / 2) * (attempt % 2 !== 0 ? 1 : -1);
-    const nextPort = PORT + offset;
+    const nextPort = Number(PORT) + offset;
     console.log(`Port ${currentPort} in use, trying ${nextPort}...`);
     currentPort = nextPort;
     server.close();
@@ -184,5 +187,5 @@ function gracefulShutdown() {
   server.close(() => process.exit(0));
 }
 
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown());
+process.on('SIGINT', () => gracefulShutdown());

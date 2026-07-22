@@ -2,8 +2,27 @@ import { CHART_COLORS, getEmoji, getPricingForModel } from '../config.js';
 import { fmtNum, fmtCur, createSparkline, splitModelKey, displayModel, escapeHtml, parseModelKey, notify } from '../utils.js';
 import { currentData, historyData, fileHistoricalData } from '../state.js';
 
+/**
+ * @typedef {{
+ *   total_tokens: number,
+ *   total_cost?: {total?: number},
+ *   total_cache_read: number,
+ *   total_input: number,
+ *   pricing_by_model?: Record<string, {input?: number, output?: number, cacheRead?: number, cacheWrite?: number, source?: string}>,
+ *   tokens_by_model: Record<string, {total: number}>,
+ *   files_processed?: number,
+ *   total_lines?: number
+ * }} DashboardData
+ */
+
+// Looked up live on globalThis at call time (not cached at module load), since
+// these are attached by other scripts after this module is first imported.
+/** @param {string} name @returns {any} */
+const getGlobal = (name) => /** @type {any} */ (globalThis)[name];
+
 // ===== FLASHY DASHBOARD =====
 
+/** @type {string|null} */
 let liveChart = null;
 
 export const renderDashboard = (fullRender = true) => {
@@ -13,15 +32,16 @@ export const renderDashboard = (fullRender = true) => {
     const chartData = historyData.length >= 2 ? historyData.slice(-30) : [];
     const shouldInitChart = chartData.length >= 2 && !liveChart;
 
-    const { total_tokens, total_cost, tokens_by_model, files_processed, total_lines } = currentData;
+    const cd = /** @type {DashboardData} */ (currentData);
+    const { total_tokens, total_cost, tokens_by_model, files_processed, total_lines } = cd;
 
     // Update hero stats with animation
     const heroTokens = document.getElementById('hero-tokens');
     if (heroTokens) {
         const currentTokens = parseInt(heroTokens.dataset.value || '0');
         if (currentTokens !== total_tokens) {
-            heroTokens.dataset.value = total_tokens;
-            window.animateNumber(heroTokens, currentTokens, total_tokens, 800, '', '');
+            heroTokens.dataset.value = String(total_tokens);
+            getGlobal('animateNumber')(heroTokens, currentTokens, total_tokens, 800, '', '');
         }
     }
 
@@ -30,14 +50,15 @@ export const renderDashboard = (fullRender = true) => {
         const cost = total_cost?.total || 0;
         const currentCost = parseFloat(heroCost.dataset.value || '0');
         if (Math.abs(currentCost - cost) > 0.01) {
-            heroCost.dataset.value = cost;
-            window.animateNumber(heroCost, currentCost, cost, 800, '$', '');
+            heroCost.dataset.value = String(cost);
+            getGlobal('animateNumber')(heroCost, currentCost, cost, 800, '$', '');
         }
     }
-    
+
     // Check for milestones
-    if (window.checkThresholds && total_cost?.total) {
-        window.checkThresholds(total_tokens, total_cost.total);
+    const checkThresholds = getGlobal('checkThresholds');
+    if (checkThresholds && total_cost?.total) {
+        checkThresholds(total_tokens, total_cost.total);
     }
 
     // Update timestamp and footer
@@ -131,6 +152,10 @@ const calculateBurnRateHistory = () => {
     return rates;
 };
 
+/**
+ * @param {number} rate
+ * @param {number} maxRate
+ */
 const getHeatmapColor = (rate, maxRate) => {
     if (maxRate === 0) return 'var(--mono-border)';
     const intensity = rate / maxRate;
@@ -172,7 +197,8 @@ const renderBurnRateHeatmap = () => {
     
     container.innerHTML = heatmapHTML;
     container.querySelectorAll('.heatmap-cell').forEach(cell => {
-        cell.addEventListener('click', () => notify(`${fmtNum(Number(cell.dataset.rate))} tokens/min`, 'info'));
+        const heatCell = /** @type {HTMLElement} */ (cell);
+        heatCell.addEventListener('click', () => notify(`${fmtNum(Number(heatCell.dataset.rate))} tokens/min`, 'info'));
     });
 };
 
@@ -196,6 +222,10 @@ const updateBurnRateGauge = () => {
     renderBurnRateHeatmap();
 };
 
+/**
+ * @param {Record<string, {total: number}>} tokens_by_model
+ * @param {boolean} [fullRender]
+ */
 const renderTopModels = (tokens_by_model, fullRender = true) => {
     const container = document.getElementById('top-models-grid');
     if (!container) return;
@@ -206,7 +236,7 @@ const renderTopModels = (tokens_by_model, fullRender = true) => {
 
     // On full render or if count changed, rebuild everything
     const existingCards = container.querySelectorAll('.top-model-card');
-    const cardKeysMatch = models.every(([name], i) => existingCards[i]?.dataset.modelKey === name);
+    const cardKeysMatch = models.every(([name], i) => /** @type {HTMLElement} */ (existingCards[i])?.dataset.modelKey === name);
     if (fullRender || existingCards.length !== models.length || !cardKeysMatch) {
         container.innerHTML = models.map(([name, stats], i) => createTopModelCard(name, stats, i)).join('');
         return;
@@ -217,13 +247,13 @@ const renderTopModels = (tokens_by_model, fullRender = true) => {
         const card = existingCards[i];
         if (!card) return;
         
-        const valueEl = card.querySelector('.top-model-value');
-        const priceEl = card.querySelector('.top-model-price');
-        const sourceEl = card.querySelector('.pricing-source-badge');
-        const providerEl = card.querySelector('.provider-badge');
-        const sparkEl = card.querySelector('.top-model-spark');
-        const modelNameEl = card.querySelector('.top-model-name');
-        const pricing = getPricingForModel(name, currentData?.pricing_by_model);
+        const valueEl = /** @type {HTMLElement|null} */ (card.querySelector('.top-model-value'));
+        const priceEl = /** @type {HTMLElement|null} */ (card.querySelector('.top-model-price'));
+        const sourceEl = /** @type {HTMLElement|null} */ (card.querySelector('.pricing-source-badge'));
+        const providerEl = /** @type {HTMLElement|null} */ (card.querySelector('.provider-badge'));
+        const sparkEl = /** @type {HTMLElement|null} */ (card.querySelector('.top-model-spark'));
+        const modelNameEl = /** @type {HTMLElement|null} */ (card.querySelector('.top-model-name'));
+        const pricing = getPricingForModel(name, /** @type {DashboardData} */ (currentData)?.pricing_by_model);
         const priceSummary = `${fmtCur(pricing.input || 0)} in / ${fmtCur(pricing.output || 0)} out`;
         const priceDetails = `${priceSummary} · cache ${fmtCur(pricing.cacheRead || 0)} read / ${fmtCur(pricing.cacheWrite || 0)} write · ${pricing.source === 'openrouter' ? 'OpenRouter' : 'local fallback'}`;
         const sourceLabel = pricing.source === 'openrouter' ? 'OpenRouter' : 'Local';
@@ -275,10 +305,15 @@ const renderTopModels = (tokens_by_model, fullRender = true) => {
     });
 };
 
+/**
+ * @param {string} name
+ * @param {{total: number}} stats
+ * @param {number} i
+ */
 const createTopModelCard = (name, stats, i) => {
     const sparkData = historyData.slice(-15).map(h => (h.models && h.models[name]) || 0);
     const color = CHART_COLORS[i % CHART_COLORS.length];
-    const pricing = getPricingForModel(name, currentData?.pricing_by_model);
+    const pricing = getPricingForModel(name, /** @type {DashboardData} */ (currentData)?.pricing_by_model);
     const priceSummary = `${fmtCur(pricing.input || 0)} in / ${fmtCur(pricing.output || 0)} out`;
     const priceDetails = `${priceSummary} · cache ${fmtCur(pricing.cacheRead || 0)} read / ${fmtCur(pricing.cacheWrite || 0)} write · ${pricing.source === 'openrouter' ? 'OpenRouter' : 'local fallback'}`;
     const sourceLabel = pricing.source === 'openrouter' ? 'OpenRouter' : 'Local';
@@ -323,9 +358,10 @@ const generateInsights = (fullRender = true) => {
     const container = document.getElementById('insights-grid');
     if (!container || !currentData) return;
 
-    const insights = [];
-    const { tokens_by_model, total_tokens, total_cost } = currentData;
+    const cd = /** @type {DashboardData} */ (currentData);
+    const { tokens_by_model, total_tokens, total_cost } = cd;
     const models = Object.entries(tokens_by_model);
+    const insights = [];
 
     // Top model insight
     if (models.length > 0) {
@@ -340,7 +376,7 @@ const generateInsights = (fullRender = true) => {
     }
 
     // Cache efficiency
-    const cacheRate = currentData.total_cache_read / (currentData.total_input + currentData.total_cache_read || 1);
+    const cacheRate = cd.total_cache_read / (cd.total_input + cd.total_cache_read || 1);
     insights.push({
         icon: cacheRate > 0.5 ? '▲' : '▽',
         title: 'Cache Efficiency',
@@ -398,6 +434,9 @@ const generateInsights = (fullRender = true) => {
     });
 };
 
+/**
+ * @param {{icon: string, title: string, value: string, detail: string}} insight
+ */
 const createInsightCard = (insight) => `
     <div class="insight-card">
         <div class="insight-icon">${escapeHtml(insight.icon)}</div>
@@ -411,6 +450,7 @@ const createInsightCard = (insight) => `
 
 const initLiveChart = () => {
     const container = document.getElementById('dashboard-live-chart');
+    const Plotly = getGlobal('Plotly');
     if (!container || typeof Plotly === 'undefined') {
         console.log('Live chart: container or Plotly not available');
         return;
@@ -470,6 +510,7 @@ const chartLayout = {
 };
 
 export const updateDashboardCharts = () => {
+    const Plotly = getGlobal('Plotly');
     if (!liveChart || typeof Plotly === 'undefined') return;
 
     const data = historyData.slice(-30);
