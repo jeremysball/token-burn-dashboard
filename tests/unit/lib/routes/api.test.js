@@ -7,8 +7,17 @@ jest.mock('../../../../lib/git-blame', () => ({
   getGitBlameCommitDetails: jest.fn(() => ({ commit: {}, sessions: [], summary: {} }))
 }));
 
-const { handleGitBlameRoute } = require('../../../../lib/routes/api');
+const { handleGitBlameRoute, handleInsightsAnalyzeRoute, handleTokensRoute } = require('../../../../lib/routes/api');
 const gitBlame = require('../../../../lib/git-blame');
+const { EventEmitter } = require('events');
+
+function createMockReq(url, headers = { host: 'localhost:7071' }) {
+  const req = new EventEmitter();
+  req.url = url;
+  req.headers = headers;
+  req.destroy = jest.fn();
+  return req;
+}
 
 function createMockRes() {
   return {
@@ -58,5 +67,41 @@ describe('handleGitBlameRoute cwd validation', () => {
 
     expect(res.statusCode).toBe(200);
     expect(gitBlame.getGitBlameRouteData).toHaveBeenCalledWith(30, allowedCwd);
+  });
+});
+
+describe('handleInsightsAnalyzeRoute body size limit', () => {
+  it('rejects a body larger than MAX_REQUEST_BODY_BYTES with 413', async () => {
+    const { MAX_REQUEST_BODY_BYTES } = require('../../../../lib/config');
+    const req = createMockReq('/api/insights/analyze');
+    const res = createMockRes();
+
+    const promise = handleInsightsAnalyzeRoute(req, res, undefined);
+    req.emit('data', Buffer.alloc(MAX_REQUEST_BODY_BYTES + 1, 'a'));
+    await promise;
+
+    expect(res.statusCode).toBe(413);
+    expect(JSON.parse(res.body)).toEqual({ error: 'Request body too large' });
+    expect(req.destroy).toHaveBeenCalled();
+  });
+});
+
+describe('handleTokensRoute error responses', () => {
+  it('does not leak the raw error message to the client', async () => {
+    jest.resetModules();
+    jest.doMock('../../../../lib/cache', () => ({
+      getTokensData: jest.fn(() => Promise.reject(new Error('ENOENT: /secret/internal/path'))),
+      getHistoricalData: jest.fn()
+    }));
+    const { handleTokensRoute: handler } = require('../../../../lib/routes/api');
+    const res = createMockRes();
+
+    await handler({}, res, undefined);
+
+    expect(res.statusCode).toBe(500);
+    const parsed = JSON.parse(res.body);
+    expect(parsed.error).toBe('Internal server error');
+    expect(parsed.error).not.toMatch(/secret/);
+    jest.dontMock('../../../../lib/cache');
   });
 });
