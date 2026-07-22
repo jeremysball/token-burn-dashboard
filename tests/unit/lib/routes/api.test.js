@@ -117,11 +117,18 @@ describe('handleInsightsAnalyzeRoute taskferry analysis', () => {
 
   it('dispatches to taskferry and returns its message as insights text', async () => {
     jest.resetModules();
+    const fs = require('fs');
     const { TASKFERRY_INSIGHTS_MODEL, TASKFERRY_SCRATCH_DIR } = require('../../../../lib/config');
+    let dataFilePathAtDispatchTime;
+    let dataFileContentsAtDispatchTime;
     jest.doMock('child_process', () => ({
       execFile: jest.fn((file, args, options, callback) => {
         const [subcommand] = args;
         if (subcommand === 'dispatch') {
+          const promptArg = args[args.indexOf('--prompt') + 1];
+          dataFilePathAtDispatchTime = (promptArg.match(/Complete input data:\*\* (\S+)/) || [])[1];
+          dataFileContentsAtDispatchTime = fs.readFileSync(dataFilePathAtDispatchTime, 'utf-8')
+            .trim().split('\n').map(line => JSON.parse(line));
           process.nextTick(() => callback(null, 'id: oc_test1\nstatus: running\n', ''));
         } else if (subcommand === 'wait') {
           process.nextTick(() => callback(null, 'id: oc_test1\nstatus: done\nexitCode: 0\n', ''));
@@ -150,6 +157,24 @@ describe('handleInsightsAnalyzeRoute taskferry analysis', () => {
     expect(dispatchCall[1]).toEqual(expect.arrayContaining(['--model', TASKFERRY_INSIGHTS_MODEL, '--directory', TASKFERRY_SCRATCH_DIR]));
     const waitCall = execFile.mock.calls.find(call => call[1][0] === 'wait');
     expect(waitCall[1]).toEqual(['wait', 'oc_test1']);
+
+    // The full dataset must be written to a scratch file as NDJSON (not embedded inline in
+    // argv, which has a hard per-argument size cap, and not as a single JSON blob, which the
+    // worker's own file-read tool truncates past 2000 chars per line) — referenced by path in
+    // the prompt, and cleaned up once the analysis completes.
+    expect(dataFilePathAtDispatchTime).toMatch(new RegExp(`^${TASKFERRY_SCRATCH_DIR.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/insights-data-.*\\.ndjson$`));
+    expect(dataFileContentsAtDispatchTime[0]).toEqual({
+      type: 'meta',
+      totals: validSummary.totals,
+      modelCount: validSummary.modelCount,
+      cacheRate: validSummary.cacheRate,
+      inputOutputRatio: validSummary.inputOutputRatio
+    });
+    expect(dataFileContentsAtDispatchTime.slice(1, 1 + validSummary.models.length))
+      .toEqual(validSummary.models.map(m => ({ type: 'model', ...m })));
+    expect(dataFileContentsAtDispatchTime.slice(1 + validSummary.models.length))
+      .toEqual(validSummary.history.map(h => ({ type: 'history', ...h })));
+    expect(fs.existsSync(dataFilePathAtDispatchTime)).toBe(false);
   });
 
   it('handles a bare (unquoted) TOON message value', async () => {
