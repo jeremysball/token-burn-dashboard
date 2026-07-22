@@ -1,8 +1,8 @@
-import { fmtNum, notify } from './utils.js';
+import { fmtNum, notify, resizeVisiblePlots, positionNotifications } from './utils.js';
 import { setCurrentView, loadCache, loadHistoryFromCache } from './state.js';
 import { connectSSE, updateData, refreshData } from './api.js';
 import { renderDashboard, updateDashboardCharts } from './views/dashboard.js';
-import { renderAnalytics, setAnalyticsTabHandler, setAnalyticsRangeHandler } from './views/analytics.js';
+import { renderAnalytics, setAnalyticsTabHandler, setAnalyticsRangeHandler, loadGitBlame, loadSpikes } from './views/analytics.js';
 
 // ===== ANIMATED NUMBER COUNTER =====
 
@@ -10,6 +10,8 @@ export const animateNumber = (element, startValue, endValue, duration = 800, pre
     const startTime = performance.now();
     const startNum = typeof startValue === 'string' ? parseFloat(startValue.replace(/[^0-9.-]/g, '')) : startValue;
     const endNum = typeof endValue === 'string' ? parseFloat(endValue.replace(/[^0-9.-]/g, '')) : endValue;
+    const decimalMatch = typeof endValue === 'string' ? endValue.match(/\.(\d+)/) : null;
+    const decimalPlaces = decimalMatch ? decimalMatch[1].length : null;
     
     if (isNaN(startNum) || isNaN(endNum)) {
         element.textContent = prefix + endValue + suffix;
@@ -22,31 +24,16 @@ export const animateNumber = (element, startValue, endValue, duration = 800, pre
     const animate = (currentTime) => {
         const elapsed = currentTime - startTime;
         const progress = Math.min(elapsed / duration, 1);
-        
-        // Easing function (ease-out-cubic)
         const easeOut = 1 - Math.pow(1 - progress, 3);
         const current = startNum + (endNum - startNum) * easeOut;
-        
-        // Format based on magnitude
-        let formatted;
-        if (endNum >= 1000000) {
-            formatted = (current / 1000000).toFixed(2) + 'M';
-        } else if (endNum >= 1000) {
-            formatted = (current / 1000).toFixed(1) + 'k';
-        } else if (endNum % 1 !== 0) {
-            formatted = current.toFixed(2);
-        } else {
-            formatted = Math.round(current).toLocaleString();
-        }
-        
+        const formatted = decimalPlaces === null ? fmtNum(current) : current.toFixed(decimalPlaces);
         element.textContent = prefix + formatted + suffix;
-        
         if (progress < 1) {
             requestAnimationFrame(animate);
         } else {
             element.classList.remove('ticking');
-            // Final formatted value
-            element.textContent = prefix + (typeof endValue === 'number' ? fmtNum(endValue) : endValue) + suffix;
+            const finalValue = typeof endValue === 'string' ? endValue : fmtNum(endNum);
+            element.textContent = prefix + finalValue + suffix;
         }
     };
     
@@ -105,7 +92,7 @@ const checkThresholds = (totalTokens, totalCost) => {
     if (tokenBillions >= 1 && !shownAchievements.has(tokenKey)) {
         shownAchievements.add(tokenKey);
         newAchievement = true;
-        notify(`🎉 Milestone Reached: ${tokenBillions}B Tokens!`, 'success');
+        notify(`Milestone Reached: ${tokenBillions}B Tokens!`, 'success');
         document.querySelector('.hero-section')?.classList.add('threshold-crossed');
         setTimeout(() => document.querySelector('.hero-section')?.classList.remove('threshold-crossed'), 1000);
     }
@@ -116,7 +103,7 @@ const checkThresholds = (totalTokens, totalCost) => {
     if (costHundreds >= 1 && !shownAchievements.has(costKey)) {
         shownAchievements.add(costKey);
         newAchievement = true;
-        notify(`💰 Milestone Reached: $${costHundreds * 100} Total Spent!`, 'success');
+        notify(`Milestone Reached: $${costHundreds * 100} Total Spent!`, 'success');
     }
     
     // Save to localStorage if any new achievements were shown
@@ -166,11 +153,20 @@ const setView = (view) => {
 };
 
 // ===== THEME =====
+const THEME_GLYPHS = { dark: '☾', light: '☀' };
+
+const updateThemeToggleGlyph = (theme) => {
+    const toggle = document.querySelector('.theme-toggle');
+    if (toggle) toggle.textContent = THEME_GLYPHS[theme] || THEME_GLYPHS.dark;
+};
+
 const toggleTheme = () => {
     const current = document.documentElement.getAttribute('data-theme');
     const next = current === 'light' ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('tokenBurnTheme', next);
+    updateThemeToggleGlyph(next);
+    resizeVisiblePlots();
 };
 
 // ===== RENDER ALL (for data updates) =====
@@ -218,6 +214,12 @@ window.closeInvestigation = () => {
 window.updateHeatmap = () => {
     import('./views/analytics.js').then(m => m.updateHeatmap?.() || console.log('Heatmap update not available'));
 };
+window.setHeatmapMetric = (metric) => {
+    import('./views/analytics.js').then(m => m.setHeatmapMetric?.(metric));
+};
+window.retryModelsDevPricing = () => {
+    import('./views/analytics.js').then(m => m.retryModelsDevPricing?.());
+};
 window.showCommitDetails = (hash) => {
     import('./views/analytics.js').then(m => m.showCommitDetails(hash));
 };
@@ -227,15 +229,31 @@ window.toggleSessionMessages = (idx) => {
 window.closeCommitDetails = () => {
     import('./views/analytics.js').then(m => m.closeCommitDetails());
 };
+window.toggleSpikeSession = (idx) => {
+    import('./views/analytics.js').then(m => m.toggleSpikeSession(idx));
+};
 
 // ===== INIT =====
+export const getSavedTheme = () => {
+    try {
+        return localStorage.getItem('tokenBurnTheme') || 'dark';
+    } catch {
+        return 'dark';
+    }
+};
+
 const init = () => {
     // Load theme
-    const savedTheme = localStorage.getItem('tokenBurnTheme') || 'dark';
+    const savedTheme = getSavedTheme();
     document.documentElement.setAttribute('data-theme', savedTheme);
+    updateThemeToggleGlyph(savedTheme);
 
     // Initialize ambient particles
     initParticles();
+
+    // Position notifications below the header
+    positionNotifications();
+    window.addEventListener('resize', positionNotifications);
 
     // Load cache
     const cached = loadCache();
@@ -256,6 +274,12 @@ const init = () => {
 
     // Connect SSE
     connectSSE();
+
+    // Prefetch Git and Spike Detective data in the background so those tabs
+    // are already populated on first visit instead of showing a loading
+    // skeleton every time.
+    loadGitBlame();
+    loadSpikes();
 };
 
 // Start

@@ -10,6 +10,7 @@
     "build": "node build.js",
     "test": "jest --coverage",
     "test:watch": "jest --watch",
+    "test:e2e": "npx playwright test tests/playwright/overflow.spec.js --reporter=list",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },
