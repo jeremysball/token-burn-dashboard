@@ -5,7 +5,7 @@ import { CHART_COLORS, currentData, isCompactViewport, getPlotlyLayout } from '.
  */
 export function renderDistributionTab(container) {
     if (!container) container = /** @type {HTMLElement} */ (document.getElementById('distribution-chart-container'));
-    if (!container || typeof /** @type {any} */ (globalThis).Plotly === 'undefined') return;
+    if (!container || typeof (/** @type {any} */ (globalThis).Plotly) === 'undefined') return;
     if (!currentData) return;
 
     const { tokens_by_model } = currentData;

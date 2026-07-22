@@ -3,7 +3,7 @@ import { fmtNum, CHART_COLORS, currentData, isCompactViewport, getPlotlyLayout }
 /** @param {HTMLElement|null} [container] */
 export function renderCompareTab(container) {
     if (!container) container = document.getElementById('compare-chart-container');
-    if (!container || typeof (/** @type {any} */ (globalThis)).Plotly === 'undefined') return;
+    if (!container || typeof (/** @type {any} */ (globalThis).Plotly) === 'undefined') return;
 
     if (!currentData) return;
 
