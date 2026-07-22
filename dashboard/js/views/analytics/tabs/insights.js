@@ -321,21 +321,30 @@ export const generateLLMInsights = async () => {
     `;
 
     // Build summary for LLM
-    const { tokens_by_model, costs_by_model, total_tokens, total_cost } = currentData;
+    const { tokens_by_model, costs_by_model, pricing_by_model, total_tokens, total_cost } = currentData;
     const models = Object.entries(tokens_by_model)
         .sort((a, b) => b[1].total - a[1].total)
-        .slice(0, 5);
+        .slice(0, 8);
 
     const summary = {
         totalTokens: total_tokens,
         totalCost: total_cost?.total || 0,
         modelCount: Object.keys(tokens_by_model).length,
-        topModels: models.map(([name, stats]) => ({
-            name: name.split('/').pop(),
-            tokens: stats.total,
-            cost: costs_by_model?.[name]?.total || 0,
-            cacheRate: stats.cache_read / (stats.input + stats.cache_read || 1)
-        })),
+        topModels: models.map(([name, stats]) => {
+            const pricing = pricing_by_model?.[name];
+            return {
+                name: name.split('/').pop(),
+                tokens: stats.total,
+                inputTokens: stats.input,
+                outputTokens: stats.output,
+                cacheReadTokens: stats.cache_read,
+                cost: costs_by_model?.[name]?.total || 0,
+                cacheRate: stats.cache_read / (stats.input + stats.cache_read || 1),
+                pricePerMillion: pricing
+                    ? { input: pricing.input, output: pricing.output, cacheRead: pricing.cacheRead }
+                    : null
+            };
+        }),
         cacheRate: currentData.total_cache_read / (currentData.total_input + currentData.total_cache_read || 1),
         inputOutputRatio: currentData.total_input / (currentData.total_output || 1)
     };

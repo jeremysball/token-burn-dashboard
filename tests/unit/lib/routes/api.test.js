@@ -88,7 +88,16 @@ describe('handleInsightsAnalyzeRoute body size limit', () => {
 
 describe('handleInsightsAnalyzeRoute taskferry analysis', () => {
   const validSummary = {
-    topModels: [{ name: 'gpt-5', tokens: 1_000_000, cost: 1.23, cacheRate: 0.5 }],
+    topModels: [{
+      name: 'gpt-5',
+      tokens: 1_000_000,
+      inputTokens: 700_000,
+      outputTokens: 200_000,
+      cacheReadTokens: 100_000,
+      cost: 1.23,
+      cacheRate: 0.5,
+      pricePerMillion: { input: 2.5, output: 10, cacheRead: 1.25 }
+    }],
     totalTokens: 2_000_000_000,
     totalCost: 12.34,
     modelCount: 3,
