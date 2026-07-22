@@ -86,6 +86,30 @@ describe('handleInsightsAnalyzeRoute body size limit', () => {
   });
 });
 
+describe('handleInsightsAnalyzeRoute request validation', () => {
+  it('rejects a malformed summary with 400 and does not dispatch to taskferry', async () => {
+    jest.resetModules();
+    const execFileMock = jest.fn();
+    jest.doMock('child_process', () => ({ execFile: execFileMock }));
+
+    const { handleInsightsAnalyzeRoute } = require('../../../../lib/routes/api');
+    const req = createMockReq('/api/insights/analyze');
+    const res = createMockRes();
+
+    const promise = handleInsightsAnalyzeRoute(req, res, undefined);
+    req.emit('data', Buffer.from(JSON.stringify({ totals: {} })));
+    req.emit('end');
+    await promise;
+
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Invalid request body/);
+    expect(execFileMock).not.toHaveBeenCalled();
+
+    jest.dontMock('child_process');
+    jest.resetModules();
+  });
+});
+
 describe('handleInsightsAnalyzeRoute taskferry analysis', () => {
   const validSummary = {
     totals: {
@@ -103,7 +127,7 @@ describe('handleInsightsAnalyzeRoute taskferry analysis', () => {
     models: [{
       name: 'gpt-5',
       tokens: { input: 700_000, output: 200_000, cacheRead: 100_000, cacheWrite: 0, reasoning: 0, total: 1_000_000 },
-      cost: { input: 0.5, output: 0.5, cache_read: 0.2, cache_write: 0, reasoning: 0.03, total: 1.23 },
+      cost: { input: 0.5, output: 0.5, cacheRead: 0.2, cacheWrite: 0, reasoning: 0.03, total: 1.23 },
       cacheRate: 0.5,
       pricePerMillion: { input: 2.5, output: 10, cacheRead: 1.25, cacheWrite: 0, source: 'local' }
     }],
@@ -112,6 +136,7 @@ describe('handleInsightsAnalyzeRoute taskferry analysis', () => {
 
   afterEach(() => {
     jest.dontMock('child_process');
+    jest.dontMock('fs');
     jest.resetModules();
   });
 
@@ -234,6 +259,83 @@ describe('handleInsightsAnalyzeRoute taskferry analysis', () => {
     expect(res.statusCode).toBe(503);
     expect(JSON.parse(res.body)).toEqual({ error: 'AI analysis service unavailable' });
     expect(res.body).not.toContain('TASKFERRY_INTERNAL_FAILURE_SENTINEL');
+  });
+
+  it('does not write again if the outer gateway timeout already ended the response', async () => {
+    jest.resetModules();
+    jest.doMock('child_process', () => ({
+      execFile: jest.fn((file, args, options, callback) => {
+        const [subcommand] = args;
+        if (subcommand === 'dispatch') {
+          process.nextTick(() => callback(null, 'id: oc_test4\nstatus: running\n', ''));
+        } else if (subcommand === 'wait') {
+          process.nextTick(() => callback(null, 'id: oc_test4\nstatus: done\nexitCode: 0\n', ''));
+        } else if (subcommand === 'result') {
+          process.nextTick(() => callback(null, `taskId: oc_test4\nstatus: done\nmessage: ${JSON.stringify('late result')}\n`, ''));
+        } else {
+          process.nextTick(() => callback(null, '', ''));
+        }
+      })
+    }));
+
+    const { handleInsightsAnalyzeRoute } = require('../../../../lib/routes/api');
+    const req = createMockReq('/api/insights/analyze');
+    const res = createMockRes();
+
+    // Simulate server.js's gateway-timeout setTimeout firing and ending the
+    // response before this (slower) taskferry chain resolves.
+    res.writeHead(504, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Gateway timeout' }));
+    res.writableEnded = true;
+    const writeHeadSpy = jest.spyOn(res, 'writeHead');
+
+    const promise = handleInsightsAnalyzeRoute(req, res, undefined);
+    req.emit('data', Buffer.from(JSON.stringify(validSummary)));
+    req.emit('end');
+    await promise;
+
+    expect(writeHeadSpy).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(504);
+  });
+
+  it('logs (but does not throw on) a scratch-file cleanup failure', async () => {
+    jest.resetModules();
+    const realFs = jest.requireActual('fs');
+    jest.doMock('child_process', () => ({
+      execFile: jest.fn((file, args, options, callback) => {
+        const [subcommand] = args;
+        if (subcommand === 'dispatch') {
+          process.nextTick(() => callback(null, 'id: oc_test5\nstatus: running\n', ''));
+        } else if (subcommand === 'wait') {
+          process.nextTick(() => callback(null, 'id: oc_test5\nstatus: done\nexitCode: 0\n', ''));
+        } else if (subcommand === 'result') {
+          process.nextTick(() => callback(null, `taskId: oc_test5\nstatus: done\nmessage: ${JSON.stringify('ok')}\n`, ''));
+        } else {
+          process.nextTick(() => callback(null, '', ''));
+        }
+      })
+    }));
+    jest.doMock('fs', () => ({
+      ...realFs,
+      unlink: jest.fn((filePath, cb) => cb(new Error('EACCES: permission denied')))
+    }));
+
+    const { handleInsightsAnalyzeRoute } = require('../../../../lib/routes/api');
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const req = createMockReq('/api/insights/analyze');
+    const res = createMockRes();
+
+    const promise = handleInsightsAnalyzeRoute(req, res, undefined);
+    req.emit('data', Buffer.from(JSON.stringify(validSummary)));
+    req.emit('end');
+    await promise;
+
+    expect(res.statusCode).toBe(200);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to clean up insights scratch file'),
+      expect.any(Error)
+    );
+    consoleErrorSpy.mockRestore();
   });
 });
 

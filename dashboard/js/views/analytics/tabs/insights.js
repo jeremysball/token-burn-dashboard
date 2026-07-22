@@ -8,6 +8,11 @@ import { getGitBlameCache } from './shared.js';
 let insightsCache = null;
 let insightsCacheTime = 0;
 
+// Slightly above the server's INSIGHTS_REQUEST_TIMEOUT (lib/config.js, 220s),
+// so the server's own gateway timeout fires first and returns a proper JSON
+// error rather than this abort racing it.
+const LLM_ANALYSIS_TIMEOUT_MS = 225000;
+
 export const renderDeepInsightsTab = () => {
     const container = document.getElementById('deep-insights-container');
     if (!container) return;
@@ -366,11 +371,14 @@ export const generateLLMInsights = async () => {
     };
 
     // Try to get insights from API - DO NOT silently fallback
+    const abortController = new AbortController();
+    const abortTimer = setTimeout(() => abortController.abort(), LLM_ANALYSIS_TIMEOUT_MS);
     try {
         const response = await fetch('/api/insights/analyze', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(summary)
+            body: JSON.stringify(summary),
+            signal: abortController.signal
         });
 
         if (!response.ok) {
@@ -402,14 +410,19 @@ export const generateLLMInsights = async () => {
             statusEl.textContent = '✗ Failed';
             statusEl.className = 'analysis-status error';
         }
+        const message = err.name === 'AbortError'
+            ? 'Analysis timed out waiting for a response.'
+            : (err.message || 'Unable to connect to analysis service');
         container.innerHTML = `
             <div class="llm-error">
                 <p><strong>AI Analysis Failed</strong></p>
-                <p>${escapeHtml(err.message || 'Unable to connect to analysis service')}</p>
+                <p>${escapeHtml(message)}</p>
                 <p class="error-help">The AI analysis service may be temporarily unavailable. Try again later.</p>
                 <button onclick="generateLLMInsights()" class="retry-btn">↻ Retry</button>
             </div>
         `;
+    } finally {
+        clearTimeout(abortTimer);
     }
 
     btn.disabled = false;
