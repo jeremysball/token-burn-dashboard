@@ -12,7 +12,10 @@
     "test:watch": "jest --watch",
     "test:e2e": "npx playwright test tests/playwright/overflow.spec.js --reporter=list",
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run lint && npm run typecheck",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
   "keywords": [
     "dashboard",

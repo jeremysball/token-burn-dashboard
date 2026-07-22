@@ -1,0 +1,24 @@
+#!/bin/sh
+# Fast local quality gate: parse + lint (staged files only) + typecheck (whole project).
+# Errors block the commit; lint warnings do not. Full tests run in CI, not here.
+# Bypass with: git commit --no-verify
+
+staged_js=$(git diff --cached --name-only --diff-filter=ACM -- '*.js')
+
+if [ -n "$staged_js" ]; then
+    echo "Checking JS syntax..."
+    for f in $staged_js; do
+        node --check "$f" || exit 1
+    done
+
+    echo "Running eslint on staged files..."
+    npx eslint $staged_js || {
+        echo "eslint found blocking errors."
+        exit 1
+    }
+fi
+
+echo "Running typecheck..."
+npx tsc --noEmit || exit 1
+
+exit 0
