@@ -1,13 +1,19 @@
 import { fmtNum, historyData, fileHistoricalData, isCompactViewport, getPlotlyLayout, bindPlotlyClick, notify } from './shared.js';
 
+/**
+ * @param {HTMLElement|null|undefined} container
+ */
 export function renderCalendarTab(container) {
     if (!container) container = document.getElementById('calendar-container');
-    if (!container || typeof Plotly === 'undefined') return;
+    /** @type {any} */
+    const Plotly = /** @type {any} */ (globalThis)['Plotly'];
+    if (!container || !Plotly) return;
 
     // Use ALL available data
     const sourceData = fileHistoricalData.length > 0 ? fileHistoricalData : historyData;
 
     // Group by day
+    /** @type {Record<string, number>} */
     const byDay = {};
     sourceData.forEach(d => {
         const day = new Date(d.time).toISOString().split('T')[0];
@@ -84,7 +90,7 @@ export function renderCalendarTab(container) {
 
     // Bind one click handler so repeated renders don't stack notifications.
     const chartEl = document.getElementById('calendar-container');
-    bindPlotlyClick(chartEl, (event) => {
+    bindPlotlyClick(chartEl, /** @param {any} event */ (event) => {
         const dayIndex = event.points[0].pointNumber;
         const [fullDate, tokens] = days[dayIndex];
         const date = new Date(fullDate);
