@@ -320,33 +320,49 @@ export const generateLLMInsights = async () => {
         </div>
     `;
 
-    // Build summary for LLM
+    // Build summary for LLM — send the full dataset (every model, full token/cost/pricing
+    // breakdown, and the full historical time series) rather than a lossy top-N snapshot,
+    // so the model reasons from real numbers instead of inventing them.
     const { tokens_by_model, costs_by_model, pricing_by_model, total_tokens, total_cost } = currentData;
-    const models = Object.entries(tokens_by_model)
-        .sort((a, b) => b[1].total - a[1].total)
-        .slice(0, 8);
+    const models = Object.entries(tokens_by_model).sort((a, b) => b[1].total - a[1].total);
+    const sourceData = fileHistoricalData.length > 0 ? fileHistoricalData : historyData;
 
     const summary = {
-        totalTokens: total_tokens,
-        totalCost: total_cost?.total || 0,
-        modelCount: Object.keys(tokens_by_model).length,
-        topModels: models.map(([name, stats]) => {
+        totals: {
+            tokens: total_tokens,
+            input: currentData.total_input || 0,
+            output: currentData.total_output || 0,
+            cacheRead: currentData.total_cache_read || 0,
+            cacheWrite: currentData.total_cache_write || 0,
+            reasoning: currentData.total_reasoning || 0,
+            cost: total_cost
+        },
+        modelCount: models.length,
+        cacheRate: currentData.total_cache_read / (currentData.total_input + currentData.total_cache_read || 1),
+        inputOutputRatio: currentData.total_input / (currentData.total_output || 1),
+        models: models.map(([name, stats]) => {
             const pricing = pricing_by_model?.[name];
+            const cost = costs_by_model?.[name];
             return {
                 name: name.split('/').pop(),
-                tokens: stats.total,
-                inputTokens: stats.input,
-                outputTokens: stats.output,
-                cacheReadTokens: stats.cache_read,
-                cost: costs_by_model?.[name]?.total || 0,
+                tokens: {
+                    input: stats.input,
+                    output: stats.output,
+                    cacheRead: stats.cache_read,
+                    cacheWrite: stats.cache_write,
+                    reasoning: stats.reasoning,
+                    total: stats.total
+                },
+                cost: cost
+                    ? { input: cost.input, output: cost.output, cacheRead: cost.cache_read, cacheWrite: cost.cache_write, reasoning: cost.reasoning, total: cost.total }
+                    : null,
                 cacheRate: stats.cache_read / (stats.input + stats.cache_read || 1),
                 pricePerMillion: pricing
-                    ? { input: pricing.input, output: pricing.output, cacheRead: pricing.cacheRead }
+                    ? { input: pricing.input, output: pricing.output, cacheRead: pricing.cacheRead, cacheWrite: pricing.cacheWrite, source: pricing.source }
                     : null
             };
         }),
-        cacheRate: currentData.total_cache_read / (currentData.total_input + currentData.total_cache_read || 1),
-        inputOutputRatio: currentData.total_input / (currentData.total_output || 1)
+        history: sourceData
     };
 
     // Try to get insights from API - DO NOT silently fallback

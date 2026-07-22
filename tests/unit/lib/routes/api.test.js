@@ -88,21 +88,26 @@ describe('handleInsightsAnalyzeRoute body size limit', () => {
 
 describe('handleInsightsAnalyzeRoute taskferry analysis', () => {
   const validSummary = {
-    topModels: [{
-      name: 'gpt-5',
-      tokens: 1_000_000,
-      inputTokens: 700_000,
-      outputTokens: 200_000,
-      cacheReadTokens: 100_000,
-      cost: 1.23,
-      cacheRate: 0.5,
-      pricePerMillion: { input: 2.5, output: 10, cacheRead: 1.25 }
-    }],
-    totalTokens: 2_000_000_000,
-    totalCost: 12.34,
+    totals: {
+      tokens: 2_000_000_000,
+      input: 1_200_000_000,
+      output: 500_000_000,
+      cacheRead: 250_000_000,
+      cacheWrite: 40_000_000,
+      reasoning: 10_000_000,
+      cost: { input: 5, output: 4, cache_read: 2, cache_write: 1, reasoning: 0.34, total: 12.34 }
+    },
     modelCount: 3,
     cacheRate: 0.4,
-    inputOutputRatio: 2.1
+    inputOutputRatio: 2.1,
+    models: [{
+      name: 'gpt-5',
+      tokens: { input: 700_000, output: 200_000, cacheRead: 100_000, cacheWrite: 0, reasoning: 0, total: 1_000_000 },
+      cost: { input: 0.5, output: 0.5, cache_read: 0.2, cache_write: 0, reasoning: 0.03, total: 1.23 },
+      cacheRate: 0.5,
+      pricePerMillion: { input: 2.5, output: 10, cacheRead: 1.25, cacheWrite: 0, source: 'local' }
+    }],
+    history: [{ time: 1772949600000, tokens_by_model: { 'gpt-5': 1_000_000 }, total: 1_000_000, input: 700_000, output: 200_000, cache_read: 100_000, cache_write: 0, reasoning: 0 }]
   };
 
   afterEach(() => {
