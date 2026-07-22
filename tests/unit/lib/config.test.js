@@ -43,4 +43,47 @@ describe('Server Config', () => {
     expect(config.MIME_TYPES['.js']).toBe('application/javascript');
     expect(config.MIME_TYPES['.json']).toBe('application/json');
   });
+
+  describe('security defaults', () => {
+    it('defaults HOST to loopback', () => {
+      const originalHost = process.env.HOST;
+      delete process.env.HOST;
+      jest.resetModules();
+      const cfg = require('../../../lib/config');
+      expect(cfg.HOST).toBe('127.0.0.1');
+      if (originalHost !== undefined) process.env.HOST = originalHost;
+      jest.resetModules();
+    });
+
+    it('parses ALLOWED_ORIGINS from a comma-separated env var', () => {
+      const original = process.env.ALLOWED_ORIGINS;
+      process.env.ALLOWED_ORIGINS = 'https://a.example, https://b.example';
+      jest.resetModules();
+      const cfg = require('../../../lib/config');
+      expect(cfg.ALLOWED_ORIGINS).toEqual(['https://a.example', 'https://b.example']);
+      if (original === undefined) delete process.env.ALLOWED_ORIGINS;
+      else process.env.ALLOWED_ORIGINS = original;
+      jest.resetModules();
+    });
+
+    it('defaults ALLOWED_ORIGINS to an empty array', () => {
+      const original = process.env.ALLOWED_ORIGINS;
+      delete process.env.ALLOWED_ORIGINS;
+      jest.resetModules();
+      const cfg = require('../../../lib/config');
+      expect(cfg.ALLOWED_ORIGINS).toEqual([]);
+      if (original !== undefined) process.env.ALLOWED_ORIGINS = original;
+      jest.resetModules();
+    });
+
+    it('defaults AUTH_TOKEN to null', () => {
+      const original = process.env.DASHBOARD_AUTH_TOKEN;
+      delete process.env.DASHBOARD_AUTH_TOKEN;
+      jest.resetModules();
+      const cfg = require('../../../lib/config');
+      expect(cfg.AUTH_TOKEN).toBeNull();
+      if (original !== undefined) process.env.DASHBOARD_AUTH_TOKEN = original;
+      jest.resetModules();
+    });
+  });
 });

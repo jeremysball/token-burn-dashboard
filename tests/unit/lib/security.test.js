@@ -127,3 +127,45 @@ describe('Security: opencode-discovery spawnSync', () => {
     expect(typeof queryJsonSafe).toBe('function');
   });
 });
+
+const { resolveCorsOrigin, isAuthorized } = require('../../../lib/security');
+
+describe('resolveCorsOrigin', () => {
+  it('returns null when no allowlist is configured', () => {
+    expect(resolveCorsOrigin('https://example.com', [])).toBeNull();
+  });
+
+  it('returns null when the request has no Origin header', () => {
+    expect(resolveCorsOrigin(undefined, ['https://example.com'])).toBeNull();
+  });
+
+  it('returns the origin when it is in the allowlist', () => {
+    expect(resolveCorsOrigin('https://example.com', ['https://example.com'])).toBe('https://example.com');
+  });
+
+  it('returns null when the origin is not in the allowlist', () => {
+    expect(resolveCorsOrigin('https://evil.com', ['https://example.com'])).toBeNull();
+  });
+});
+
+describe('isAuthorized', () => {
+  it('allows any request when no auth token is configured', () => {
+    expect(isAuthorized({ headers: {} }, null)).toBe(true);
+  });
+
+  it('rejects a request with no Authorization header when a token is configured', () => {
+    expect(isAuthorized({ headers: {} }, 'secret')).toBe(false);
+  });
+
+  it('rejects a request with a mismatched bearer token', () => {
+    expect(isAuthorized({ headers: { authorization: 'Bearer wrong' } }, 'secret')).toBe(false);
+  });
+
+  it('accepts a request with the matching bearer token', () => {
+    expect(isAuthorized({ headers: { authorization: 'Bearer secret' } }, 'secret')).toBe(true);
+  });
+
+  it('accepts a case-insensitive Bearer prefix', () => {
+    expect(isAuthorized({ headers: { authorization: 'bearer secret' } }, 'secret')).toBe(true);
+  });
+});

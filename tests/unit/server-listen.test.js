@@ -8,6 +8,6 @@ describe('server listener', () => {
       'utf8'
     );
 
-    expect(serverSource).toMatch(/server\.listen\(currentPort, '0\.0\.0\.0'\)/);
+    expect(serverSource).toMatch(/server\.listen\(currentPort, HOST\)/);
   });
 });

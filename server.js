@@ -8,7 +8,8 @@
 const http = require('http');
 
 // Configuration
-const { PORT, REQUEST_TIMEOUT } = require('./lib/config');
+const { PORT, HOST, ALLOWED_ORIGINS, AUTH_TOKEN, REQUEST_TIMEOUT } = require('./lib/config');
+const { resolveCorsOrigin, isAuthorized } = require('./lib/security');
 
 // Components
 const { startBackgroundUpdater } = require('./lib/cache');
@@ -27,13 +28,23 @@ const server = http.createServer(async (req, res) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${url.pathname}`);
   
   // CORS Headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const corsOrigin = resolveCorsOrigin(req.headers.origin, ALLOWED_ORIGINS);
+  if (corsOrigin) {
+    res.setHeader('Access-Control-Allow-Origin', corsOrigin);
+    res.setHeader('Vary', 'Origin');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
     res.end();
+    return;
+  }
+  
+  if (url.pathname.startsWith('/api/') && !isAuthorized(req, AUTH_TOKEN)) {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Unauthorized' }));
     return;
   }
   
@@ -131,7 +142,7 @@ server.on('error', (e) => {
     console.log(`Port ${currentPort} in use, trying ${nextPort}...`);
     currentPort = nextPort;
     server.close();
-    server.listen(currentPort, '0.0.0.0');
+    server.listen(currentPort, HOST);
   } else {
     console.error(e);
     process.exit(1);
@@ -144,7 +155,7 @@ server.on('listening', () => {
 ║                                                            ║
 ║   🔥 Token Burn Dashboard                                  ║
 ║                                                            ║
-║   ${`http://localhost:${currentPort}`.padEnd(57)}║
+║   ${`http://${HOST}:${currentPort}`.padEnd(57)}║
 ║                                                            ║
 ║   Endpoints:                                               ║
 ║   • /api/tokens           - Current totals                 ║
@@ -156,7 +167,7 @@ server.on('listening', () => {
 `);
 });
 
-server.listen(currentPort, '0.0.0.0');
+server.listen(currentPort, HOST);
 
 // Graceful shutdown - prevent duplicate handlers
 let isShuttingDown = false;
