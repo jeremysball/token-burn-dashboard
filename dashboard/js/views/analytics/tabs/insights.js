@@ -355,10 +355,10 @@ export const generateLLMInsights = async () => {
 
         const data = await response.json();
         
-        if (data.source === 'kimi') {
+        if (data.source === 'taskferry') {
             if (statusEl) {
-                statusEl.textContent = '✓ Kimi K2.5';
-                statusEl.className = 'analysis-status kimi';
+                statusEl.textContent = '✓ AI Analysis';
+                statusEl.className = 'analysis-status taskferry';
             }
             renderLLMInsights(data.insights);
         } else if (data.source === 'local') {
@@ -381,7 +381,7 @@ export const generateLLMInsights = async () => {
             <div class="llm-error">
                 <p><strong>AI Analysis Failed</strong></p>
                 <p>${escapeHtml(err.message || 'Unable to connect to analysis service')}</p>
-                <p class="error-help">Check your KIMI_API_KEY configuration or try again later.</p>
+                <p class="error-help">The AI analysis service may be temporarily unavailable. Try again later.</p>
                 <button onclick="generateLLMInsights()" class="retry-btn">↻ Retry</button>
             </div>
         `;

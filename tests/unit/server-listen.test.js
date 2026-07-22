@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 describe('server listener', () => {
-  it('binds to all IPv4 interfaces', () => {
+  it('binds to the configured HOST', () => {
     const serverSource = fs.readFileSync(
       path.resolve(process.cwd(), 'server.js'),
       'utf8'

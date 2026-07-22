@@ -85,5 +85,17 @@ describe('Server Config', () => {
       if (original !== undefined) process.env.DASHBOARD_AUTH_TOKEN = original;
       jest.resetModules();
     });
+
+    it('defaults PROJECT_ROOT to HOME or cwd', () => {
+      const original = process.env.DASHBOARD_PROJECT_ROOT;
+      delete process.env.DASHBOARD_PROJECT_ROOT;
+      jest.resetModules();
+      const cfg = require('../../../lib/config');
+      const expected = process.env.HOME || process.cwd();
+      expect(cfg.PROJECT_ROOT).toBe(expected);
+      if (original === undefined) delete process.env.DASHBOARD_PROJECT_ROOT;
+      else process.env.DASHBOARD_PROJECT_ROOT = original;
+      jest.resetModules();
+    });
   });
 });

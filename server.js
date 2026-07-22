@@ -8,7 +8,7 @@
 const http = require('http');
 
 // Configuration
-const { PORT, HOST, ALLOWED_ORIGINS, AUTH_TOKEN, REQUEST_TIMEOUT } = require('./lib/config');
+const { PORT, HOST, ALLOWED_ORIGINS, AUTH_TOKEN, REQUEST_TIMEOUT, INSIGHTS_REQUEST_TIMEOUT } = require('./lib/config');
 const { resolveCorsOrigin, isAuthorized } = require('./lib/security');
 
 // Components
@@ -48,15 +48,17 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   
-  // Gateway timeout configuration (not for SSE)
+  // Gateway timeout configuration (not for SSE). /api/insights/analyze gets a
+  // longer budget since it dispatches an agentic taskferry worker.
   let requestTimeout;
   if (url.pathname !== '/api/tokens/stream') {
+    const isInsightsAnalyze = url.pathname === '/api/insights/analyze' && req.method === 'POST';
     requestTimeout = setTimeout(() => {
       if (!res.writableEnded) {
         res.writeHead(504, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Gateway timeout' }));
       }
-    }, REQUEST_TIMEOUT);
+    }, isInsightsAnalyze ? INSIGHTS_REQUEST_TIMEOUT : REQUEST_TIMEOUT);
   }
   
   // Helper to log response
