@@ -5,13 +5,14 @@ node_modules/
 *.png
 *.jpg
 *.gif
-dist/*.png
-dist/*.jpg
+dist/
 coverage/
 test-results/
 nohup.out
 test-*.js
-fix_ports.js.worktrees/
+fix_ports.js
+.worktrees/
+.lavish/
 
 .superpowers/*
 !.superpowers/plans/
