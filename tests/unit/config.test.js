@@ -15,29 +15,29 @@ import {
 
 describe('Config Module', () => {
   describe('getEmoji', () => {
-    it('returns correct emoji for kimi models', () => {
-      expect(getEmoji('kimi-coding/k2p5')).toBe('🌙');
-      expect(getEmoji('KIMI-PRO')).toBe('🌙');
+    it('returns correct badge for kimi models', () => {
+      expect(getEmoji('kimi-coding/k2p5')).toBe('K');
+      expect(getEmoji('KIMI-PRO')).toBe('K');
     });
 
-    it('returns correct emoji for claude models', () => {
-      expect(getEmoji('claude-3.5-sonnet')).toBe('🧠');
-      expect(getEmoji('anthropic/claude')).toBe('🧠');
+    it('returns correct badge for claude models', () => {
+      expect(getEmoji('claude-3.5-sonnet')).toBe('C');
+      expect(getEmoji('anthropic/claude')).toBe('C');
     });
 
-    it('returns correct emoji for gpt models', () => {
-      expect(getEmoji('gpt-4o')).toBe('🤖');
-      expect(getEmoji('openai/gpt-4')).toBe('🤖');
+    it('returns correct badge for gpt models', () => {
+      expect(getEmoji('gpt-4o')).toBe('O');
+      expect(getEmoji('openai/gpt-4')).toBe('O');
     });
 
-    it('returns correct emoji for gemini models', () => {
-      expect(getEmoji('gemini-1.5-pro')).toBe('💎');
-      expect(getEmoji('google/gemini')).toBe('💎');
+    it('returns correct badge for gemini models', () => {
+      expect(getEmoji('gemini-1.5-pro')).toBe('G');
+      expect(getEmoji('google/gemini')).toBe('G');
     });
 
-    it('returns default emoji for unknown models', () => {
-      expect(getEmoji('unknown-model')).toBe('🤖');
-      expect(getEmoji('')).toBe('🤖');
+    it('returns default badge for unknown models', () => {
+      expect(getEmoji('unknown-model')).toBe('?');
+      expect(getEmoji('')).toBe('?');
     });
   });
 

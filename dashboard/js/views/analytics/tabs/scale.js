@@ -1,16 +1,16 @@
 import { fmtNum, fmtInt, fmtMultiple, currentData } from './shared.js';
 
 const SCALE_COMPARISONS = [
-    { name: 'Tweet', tokens: 280, icon: '🐦', desc: 'A single tweet' },
-    { name: 'Paragraph', tokens: 200, icon: '📄', desc: 'Average paragraph' },
-    { name: 'Page', tokens: 500, icon: '📃', desc: 'Single typed page' },
-    { name: 'Short Story', tokens: 7500, icon: '📖', desc: 'Short story (15 pages)' },
-    { name: 'Novel Chapter', tokens: 25000, icon: '📚', desc: 'One book chapter' },
-    { name: 'Novel', tokens: 100000, icon: '📕', desc: 'Full novel (200 pages)' },
-    { name: 'Shakespeare Play', tokens: 300000, icon: '🎭', desc: 'Complete Shakespeare play' },
-    { name: 'Bible', tokens: 4000000, icon: '✝️', desc: 'The entire Bible' },
-    { name: 'Encyclopedia', tokens: 40000000, icon: '📚', desc: 'Full encyclopedia set' },
-    { name: 'Codebase', tokens: 100000000, icon: '💻', desc: 'Large software codebase' }
+    { name: 'Tweet', tokens: 280, desc: 'A single tweet' },
+    { name: 'Paragraph', tokens: 200, desc: 'Average paragraph' },
+    { name: 'Page', tokens: 500, desc: 'Single typed page' },
+    { name: 'Short Story', tokens: 7500, desc: 'Short story (15 pages)' },
+    { name: 'Novel Chapter', tokens: 25000, desc: 'One book chapter' },
+    { name: 'Novel', tokens: 100000, desc: 'Full novel (200 pages)' },
+    { name: 'Shakespeare Play', tokens: 300000, desc: 'Complete Shakespeare play' },
+    { name: 'Bible', tokens: 4000000, desc: 'The entire Bible' },
+    { name: 'Encyclopedia', tokens: 40000000, desc: 'Full encyclopedia set' },
+    { name: 'Codebase', tokens: 100000000, desc: 'Large software codebase' }
 ];
 
 export function renderScaleTab(container) {
@@ -45,14 +45,13 @@ export function renderScaleTab(container) {
                     </div>
                     <span class="scale-next-remaining">${fmtInt(nextMilestone.tokens - totalTokens)} tokens to go</span>
                 </div>
-            ` : '<div class="scale-achieved">🎉 All milestones achieved!</div>'}
+            ` : '<div class="scale-achieved">All milestones achieved!</div>'}
         </div>
         <div class="scale-grid">
             ${SCALE_COMPARISONS.map(comp => {
                 const achieved = totalTokens >= comp.tokens;
                 return `
                     <div class="scale-card ${achieved ? 'achieved' : ''}">
-                        <div class="scale-icon">${comp.icon}</div>
                         <div class="scale-name">${comp.name}</div>
                         <div class="scale-desc">${comp.desc}</div>
                         <div class="scale-tokens">${fmtInt(comp.tokens)} tokens</div>

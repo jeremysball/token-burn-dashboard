@@ -186,3 +186,31 @@ export const getPlotlyConfig = () => ({
     displayModeBar: false,
     responsive: true
 });
+
+// ===== PLOTLY RESIZE =====
+const LIVE_PLOT_CONTAINER_IDS = [
+    'dashboard-live-chart',
+    'compare-chart-container',
+    'timeline-chart-container',
+    'calendar-container',
+    'distribution-chart-container'
+];
+
+export const resizeVisiblePlots = () => {
+    if (typeof Plotly === 'undefined' || !Plotly.Plots) return;
+    LIVE_PLOT_CONTAINER_IDS.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el && el.data) Plotly.Plots.resize(el);
+    });
+};
+
+// ===== NOTIFICATION POSITIONING =====
+export const positionNotifications = () => {
+    const header = document.querySelector('.dashboard-header');
+    const container = document.getElementById('notifications');
+    if (!header || !container) return;
+
+    const bottom = header.getBoundingClientRect().bottom;
+    container.style.top = `${Math.round(bottom) + 12}px`;
+    container.style.bottom = '';
+};

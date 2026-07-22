@@ -50,14 +50,14 @@ export const loadGitBlame = async () => {
     } catch (err) {
         document.getElementById('git-commits-list').innerHTML = `
             <div class="git-blame-empty">
-                <div class="git-blame-empty-icon">⚠️</div>
+                <div class="git-blame-empty-icon">!</div>
                 <h4>Unable to load git data</h4>
                 <p>${err.message}</p>
             </div>
         `;
         document.getElementById('git-files-list').innerHTML = `
             <div class="git-blame-empty">
-                <div class="git-blame-empty-icon">📁</div>
+                <div class="git-blame-empty-icon">∅</div>
                 <h4>No project data</h4>
                 <p>Could not load project cost analysis</p>
             </div>
@@ -72,7 +72,7 @@ const updateDirectorySelector = (directories, selectedCwd) => {
     const currentValue = selector.value || selectedCwd || '';
     
     selector.innerHTML = directories.map(dir => {
-        const icon = dir.isGitRepo ? '📁' : '📂';
+        const icon = dir.isGitRepo ? '▪' : '▫';
         const selected = dir.path === currentValue ? 'selected' : '';
         return `<option value="${dir.path}" ${selected}>${icon} ${dir.name}</option>`;
     }).join('');

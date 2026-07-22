@@ -332,7 +332,7 @@ const generateInsights = (fullRender = true) => {
         const top = models.sort((a, b) => b[1].total - a[1].total)[0];
         const pct = ((top[1].total / total_tokens) * 100).toFixed(1);
         insights.push({
-            icon: '🏆',
+            icon: '#',
             title: 'Top Model',
             value: `${top[0].split('/').pop()}`,
             detail: `${pct}% of total usage`
@@ -342,7 +342,7 @@ const generateInsights = (fullRender = true) => {
     // Cache efficiency
     const cacheRate = currentData.total_cache_read / (currentData.total_input + currentData.total_cache_read || 1);
     insights.push({
-        icon: cacheRate > 0.5 ? '⚡' : '💾',
+        icon: cacheRate > 0.5 ? '▲' : '▽',
         title: 'Cache Efficiency',
         value: `${(cacheRate * 100).toFixed(1)}%`,
         detail: cacheRate > 0.5 ? 'Great cache hit rate!' : 'Consider more caching'
@@ -352,7 +352,7 @@ const generateInsights = (fullRender = true) => {
     const cost = total_cost?.total || 0;
     if (cost > 0) {
         insights.push({
-            icon: '💰',
+            icon: '$',
             title: 'Lifetime Cost',
             value: `$${cost.toFixed(2)}`,
             detail: `${(cost / (total_tokens / 1e6)).toFixed(2)} per 1M tokens`
@@ -364,7 +364,7 @@ const generateInsights = (fullRender = true) => {
         const recent = historyData.slice(-5);
         const avg = recent.reduce((s, h) => s + (h.total || 0), 0) / recent.length;
         insights.push({
-            icon: '📈',
+            icon: 'Δ',
             title: 'Current Velocity',
             value: `${fmtNum(avg)}/hr`,
             detail: 'Average over last 5 data points'

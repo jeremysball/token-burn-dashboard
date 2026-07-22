@@ -1,6 +1,6 @@
 import { CHART_COLORS, getPricing } from '../../../config.js';
 import { fmtNum, fmtInt, fmtCur, fmtMultiple, getPlotlyLayout, notify, splitModelKey, displayModel } from '../../../utils.js';
-import { currentData, historyData, fileHistoricalData, analyticsRange, searchTerm, sortCol, sortAsc } from '../../../state.js';
+import { currentData, historyData, fileHistoricalData, analyticsRange, setAnalyticsRange, searchTerm, sortCol, sortAsc } from '../../../state.js';
 
 const isCompactViewport = () => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
 
@@ -87,16 +87,30 @@ export const cacheDiscountRatioFromPricing = (pricing) => {
     return pricing.input > 0 ? pricing.cacheRead / pricing.input : 0;
 };
 
-const getCutoffTime = () => {
+const RANGE_ORDER = ['1h', '24h', '7d', '30d', 'all'];
+const RANGE_DURATIONS = {
+    '1h': 60 * 60 * 1000,
+    '24h': 24 * 60 * 60 * 1000,
+    '7d': 7 * 24 * 60 * 60 * 1000,
+    '30d': 30 * 24 * 60 * 60 * 1000,
+    'all': Infinity
+};
+
+const getCutoffTime = (range = analyticsRange) => {
     const now = Date.now();
-    const ranges = {
-        '1h': 60 * 60 * 1000,
-        '24h': 24 * 60 * 60 * 1000,
-        '7d': 7 * 24 * 60 * 60 * 1000,
-        '30d': 30 * 24 * 60 * 60 * 1000,
-        'all': Infinity
-    };
-    return now - (ranges[analyticsRange] || ranges['24h']);
+    return now - (RANGE_DURATIONS[range] || RANGE_DURATIONS['24h']);
+};
+
+export const resolveAvailableRange = (sourceData, requestedRange) => {
+    const startIndex = RANGE_ORDER.indexOf(requestedRange);
+    const candidates = startIndex === -1 ? RANGE_ORDER : RANGE_ORDER.slice(startIndex);
+
+    for (const range of candidates) {
+        const cutoff = getCutoffTime(range);
+        const count = sourceData.filter((h) => h.time > cutoff).length;
+        if (count >= 2) return range;
+    }
+    return 'all';
 };
 
 const createSparkline = (data, width, height) => {
@@ -153,6 +167,7 @@ export {
     historyData,
     fileHistoricalData,
     analyticsRange,
+    setAnalyticsRange,
     searchTerm,
     sortCol,
     sortAsc,

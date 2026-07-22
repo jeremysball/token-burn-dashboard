@@ -9,17 +9,17 @@ export const VERSION_KEY = 'tokenBurnCacheVersion';
 export const CACHE_DURATION = 5 * 60 * 1000;
 export const MAX_HISTORY_POINTS = 1000;
 
-// ===== EMOJIS =====
+// ===== PROVIDER BADGES =====
 export const emojis = {
-    kimi: '🌙', claude: '🧠', gpt: '🤖', openai: '🤖',
-    gemini: '💎', glm: '⚡', zai: '⚡', llama: '🦙', deepseek: '🔮'
+    kimi: 'K', claude: 'C', gpt: 'O', openai: 'O',
+    gemini: 'G', glm: 'Z', zai: 'Z', llama: 'L', deepseek: 'D'
 };
 
 export const getEmoji = name => {
     for (const [k, v] of Object.entries(emojis)) {
         if (name.toLowerCase().includes(k)) return v;
     }
-    return '🤖';
+    return '?';
 };
 
 // ===== COLORS =====
