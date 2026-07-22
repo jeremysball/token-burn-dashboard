@@ -128,7 +128,7 @@ describe('Security: opencode-discovery spawnSync', () => {
   });
 });
 
-const { resolveCorsOrigin, isAuthorized } = require('../../../lib/security');
+const { resolveCorsOrigin, isAuthorized, isPathWithinRoot } = require('../../../lib/security');
 
 describe('resolveCorsOrigin', () => {
   it('returns null when no allowlist is configured', () => {
@@ -167,5 +167,33 @@ describe('isAuthorized', () => {
 
   it('accepts a case-insensitive Bearer prefix', () => {
     expect(isAuthorized({ headers: { authorization: 'bearer secret' } }, 'secret')).toBe(true);
+  });
+});
+
+describe('isPathWithinRoot', () => {
+  const { isPathWithinRoot } = require('../../../lib/security');
+
+  it('accepts the root itself', () => {
+    expect(isPathWithinRoot('/home/user/projects', '/home/user/projects')).toBe(true);
+  });
+
+  it('accepts a subdirectory of the root', () => {
+    expect(isPathWithinRoot('/home/user/projects/foo', '/home/user/projects')).toBe(true);
+  });
+
+  it('accepts a relative subdirectory resolved against the root', () => {
+    expect(isPathWithinRoot('foo/bar', '/home/user/projects')).toBe(true);
+  });
+
+  it('rejects an absolute path outside the root', () => {
+    expect(isPathWithinRoot('/etc', '/home/user/projects')).toBe(false);
+  });
+
+  it('rejects a relative traversal that escapes the root', () => {
+    expect(isPathWithinRoot('../../etc', '/home/user/projects')).toBe(false);
+  });
+
+  it('rejects a sibling directory that merely shares a name prefix', () => {
+    expect(isPathWithinRoot('/home/user/projects-evil', '/home/user/projects')).toBe(false);
   });
 });
