@@ -9,6 +9,11 @@ import { getGitBlameCache } from './shared.js';
 let insightsCache = null;
 let insightsCacheTime = 0;
 
+// Slightly above the server's INSIGHTS_REQUEST_TIMEOUT (lib/config.js, 220s),
+// so the server's own gateway timeout fires first and returns a proper JSON
+// error rather than this abort racing it.
+const LLM_ANALYSIS_TIMEOUT_MS = 225000;
+
 export const renderDeepInsightsTab = () => {
     const container = document.getElementById('deep-insights-container');
     if (!container) return;
@@ -313,7 +318,7 @@ export const generateLLMInsights = async () => {
     const btn = /** @type {HTMLButtonElement|null} */ (document.querySelector('.llm-analyze-btn'));
     const statusEl = document.getElementById('analysis-status');
 
-    if (!container || !btn) return;
+    if (!container || !btn || !currentData) return;
 
     btn.disabled = true;
     if (statusEl) {
@@ -327,34 +332,60 @@ export const generateLLMInsights = async () => {
         </div>
     `;
 
-    // Build summary for LLM
-    const cData = currentData;
-    if (!cData) return;
-    const { tokens_by_model, costs_by_model, total_tokens, total_cost } = cData;
-    const models = Object.entries(tokens_by_model)
-        .sort((a, b) => b[1].total - a[1].total)
-        .slice(0, 5);
+    // Build summary for LLM — send the full dataset (every model, full token/cost/pricing
+    // breakdown, and the full historical time series) rather than a lossy top-N snapshot,
+    // so the model reasons from real numbers instead of inventing them.
+    const { tokens_by_model, costs_by_model, pricing_by_model, total_tokens, total_cost } = currentData;
+    const models = Object.entries(tokens_by_model).sort((a, b) => b[1].total - a[1].total);
+    const sourceData = fileHistoricalData.length > 0 ? fileHistoricalData : historyData;
 
     const summary = {
-        totalTokens: total_tokens,
-        totalCost: total_cost?.total || 0,
-        modelCount: Object.keys(tokens_by_model).length,
-        topModels: models.map(([name, stats]) => ({
-            name: name.split('/').pop(),
-            tokens: stats.total,
-            cost: costs_by_model?.[name]?.total || 0,
-            cacheRate: stats.cache_read / (stats.input + stats.cache_read || 1)
-        })),
-        cacheRate: cData.total_cache_read / (cData.total_input + cData.total_cache_read || 1),
-        inputOutputRatio: cData.total_input / (cData.total_output || 1)
+        totals: {
+            tokens: total_tokens,
+            input: currentData.total_input || 0,
+            output: currentData.total_output || 0,
+            cacheRead: currentData.total_cache_read || 0,
+            cacheWrite: currentData.total_cache_write || 0,
+            reasoning: currentData.total_reasoning || 0,
+            cost: total_cost
+        },
+        modelCount: models.length,
+        cacheRate: currentData.total_cache_read / (currentData.total_input + currentData.total_cache_read || 1),
+        inputOutputRatio: currentData.total_input / (currentData.total_output || 1),
+        models: models.map(([name, stats]) => {
+            const pricing = pricing_by_model?.[name];
+            const cost = costs_by_model?.[name];
+            return {
+                name: name.split('/').pop(),
+                tokens: {
+                    input: stats.input,
+                    output: stats.output,
+                    cacheRead: stats.cache_read,
+                    cacheWrite: stats.cache_write,
+                    reasoning: stats.reasoning,
+                    total: stats.total
+                },
+                cost: cost
+                    ? { input: cost.input, output: cost.output, cacheRead: cost.cache_read, cacheWrite: cost.cache_write, reasoning: cost.reasoning, total: cost.total }
+                    : null,
+                cacheRate: stats.cache_read / (stats.input + stats.cache_read || 1),
+                pricePerMillion: pricing
+                    ? { input: pricing.input, output: pricing.output, cacheRead: pricing.cacheRead, cacheWrite: pricing.cacheWrite, source: pricing.source }
+                    : null
+            };
+        }),
+        history: sourceData
     };
 
     // Try to get insights from API - DO NOT silently fallback
+    const abortController = new AbortController();
+    const abortTimer = setTimeout(() => abortController.abort(), LLM_ANALYSIS_TIMEOUT_MS);
     try {
         const response = await fetch('/api/insights/analyze', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(summary)
+            body: JSON.stringify(summary),
+            signal: abortController.signal
         });
 
         if (!response.ok) {
@@ -386,14 +417,19 @@ export const generateLLMInsights = async () => {
             statusEl.textContent = '✗ Failed';
             statusEl.className = 'analysis-status error';
         }
+        const message = err instanceof Error
+            ? (err.name === 'AbortError' ? 'Analysis timed out waiting for a response.' : (err.message || 'Unable to connect to analysis service'))
+            : 'Unable to connect to analysis service';
         container.innerHTML = `
             <div class="llm-error">
                 <p><strong>AI Analysis Failed</strong></p>
-                <p>${escapeHtml(err instanceof Error ? err.message || 'Unable to connect to analysis service' : 'Unable to connect to analysis service')}</p>
+                <p>${escapeHtml(message)}</p>
                 <p class="error-help">The AI analysis service may be temporarily unavailable. Try again later.</p>
                 <button onclick="generateLLMInsights()" class="retry-btn">↻ Retry</button>
             </div>
         `;
+    } finally {
+        clearTimeout(abortTimer);
     }
 
     btn.disabled = false;

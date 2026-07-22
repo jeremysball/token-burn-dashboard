@@ -11,7 +11,17 @@ if [ -n "$staged_js" ]; then
     IFS='
 '
     for f in $staged_js; do
-        node --check "$f" || exit 1
+        case "$f" in
+            dashboard/js/*)
+                # Browser-side ES modules — root package.json declares
+                # "type": "commonjs" for the Node backend, so node --check
+                # would otherwise reject their top-level import statements.
+                node --input-type=module --check < "$f" || exit 1
+                ;;
+            *)
+                node --check "$f" || exit 1
+                ;;
+        esac
     done
     IFS=$old_ifs
 
