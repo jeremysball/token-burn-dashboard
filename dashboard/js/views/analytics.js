@@ -134,7 +134,10 @@ export const sortBy = (col) => {
         setSortCol(col);
         setSortAsc(false);
     }
-    renderAnalytics();
+    document.querySelectorAll('.sort-controls button').forEach((el) => {
+        el.classList.toggle('active', el.dataset.col === col);
+    });
+    renderAnalytics(true);
 };
 
 export const updateHeatmap = () => renderHeatmapsTab();

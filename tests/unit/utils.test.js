@@ -19,7 +19,9 @@ import {
   parseModelKey,
   getPricingForModel,
   formatModelPrice,
-  escapeHtml
+  escapeHtml,
+  resizeVisiblePlots,
+  positionNotifications
 } from '../../dashboard/js/utils.js';
 
 describe('Utils Module', () => {
@@ -345,6 +347,64 @@ describe('Utils Module', () => {
       document.body.innerHTML = `<div data-key="${escaped}"></div>`;
       const el = document.querySelector('div');
       expect(el.getAttribute('onmouseover')).toBeNull();
+    });
+  });
+
+  describe('resizeVisiblePlots', () => {
+    beforeEach(() => {
+      document.body.innerHTML = `
+        <div id="dashboard-live-chart"></div>
+        <div id="timeline-chart-container"></div>
+        <div id="compare-chart-container"></div>
+        <div id="calendar-container"></div>
+        <div id="distribution-chart-container"></div>
+      `;
+      global.Plotly.Plots = { resize: jest.fn() };
+    });
+
+    it('resizes only containers that have already been plotted', () => {
+      document.getElementById('dashboard-live-chart').data = [{}];
+      document.getElementById('timeline-chart-container').data = [{}];
+
+      resizeVisiblePlots();
+
+      expect(global.Plotly.Plots.resize).toHaveBeenCalledTimes(2);
+      expect(global.Plotly.Plots.resize).toHaveBeenCalledWith(document.getElementById('dashboard-live-chart'));
+      expect(global.Plotly.Plots.resize).toHaveBeenCalledWith(document.getElementById('timeline-chart-container'));
+    });
+
+    it('does nothing for containers that were never plotted', () => {
+      resizeVisiblePlots();
+      expect(global.Plotly.Plots.resize).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when Plotly is unavailable', () => {
+      const original = global.Plotly;
+      global.Plotly = undefined;
+      expect(() => resizeVisiblePlots()).not.toThrow();
+      global.Plotly = original;
+    });
+  });
+
+  describe('positionNotifications', () => {
+    it('positions the container below the header', () => {
+      document.body.innerHTML = `
+        <header class="dashboard-header"></header>
+        <div class="notification-container" id="notifications"></div>
+      `;
+      const header = document.querySelector('.dashboard-header');
+      header.getBoundingClientRect = () => ({ bottom: 88 });
+
+      positionNotifications();
+
+      const container = document.getElementById('notifications');
+      expect(container.style.top).toBe('100px');
+      expect(container.style.bottom).toBe('');
+    });
+
+    it('does nothing when the header or container is missing', () => {
+      document.body.innerHTML = '';
+      expect(() => positionNotifications()).not.toThrow();
     });
   });
 });
