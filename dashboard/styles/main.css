@@ -2666,11 +2666,6 @@
             background: var(--mono-accent-dim);
         }
 
-        .scale-icon {
-            font-size: 2rem;
-            margin-bottom: 8px;
-        }
-
         .scale-name {
             font-weight: 600;
             color: var(--mono-text);
@@ -2719,11 +2714,6 @@
         .code-stat-card.primary {
             border-color: var(--mono-accent);
             background: var(--mono-accent-dim);
-        }
-
-        .code-stat-icon {
-            font-size: 2rem;
-            margin-bottom: 8px;
         }
 
         .code-stat-value {
