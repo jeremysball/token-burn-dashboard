@@ -25,7 +25,7 @@ export const loadSpikes = async () => {
         spikesCache = data.spikes;
         renderSpikesList(spikesCache);
     } catch (err) {
-        listEl.innerHTML = `<div class="loading-placeholder">Error: ${err.message}</div>`;
+        listEl.innerHTML = `<div class="loading-placeholder">Error: ${escapeHtml(err.message)}</div>`;
     }
 };
 
@@ -144,7 +144,7 @@ export const investigateSpike = async (timestamp) => {
         const data = await response.json();
         renderInvestigation(data);
     } catch (err) {
-        detailsEl.innerHTML = `<div class="loading-placeholder">Error: ${err.message}</div>`;
+        detailsEl.innerHTML = `<div class="loading-placeholder">Error: ${escapeHtml(err.message)}</div>`;
     }
 };
 

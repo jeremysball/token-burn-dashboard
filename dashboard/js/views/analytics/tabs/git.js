@@ -52,7 +52,7 @@ export const loadGitBlame = async () => {
             <div class="git-blame-empty">
                 <div class="git-blame-empty-icon">!</div>
                 <h4>Unable to load git data</h4>
-                <p>${err.message}</p>
+                <p>${escapeHtml(err.message)}</p>
             </div>
         `;
         document.getElementById('git-files-list').innerHTML = `
@@ -168,7 +168,7 @@ export const showCommitDetails = async (commitHash) => {
         const data = await response.json();
         renderCommitDetails(content, data);
     } catch (err) {
-        content.innerHTML = `<div class="commit-details-error">Error: ${err.message}</div>`;
+        content.innerHTML = `<div class="commit-details-error">Error: ${escapeHtml(err.message)}</div>`;
     }
 };
 
