@@ -1,8 +1,11 @@
 import { fmtNum, CHART_COLORS, currentData, isCompactViewport, getPlotlyLayout } from './shared.js';
 
+/** @param {HTMLElement|null} [container] */
 export function renderCompareTab(container) {
     if (!container) container = document.getElementById('compare-chart-container');
-    if (!container || typeof Plotly === 'undefined') return;
+    if (!container || typeof (/** @type {any} */ (globalThis).Plotly) === 'undefined') return;
+
+    if (!currentData) return;
 
     const { tokens_by_model } = currentData;
     const models = Object.entries(tokens_by_model)
@@ -36,7 +39,7 @@ export function renderCompareTab(container) {
         textfont: { color: mobile ? '#ffffff' : undefined, size: mobile ? 10 : 11 }
     }];
 
-    Plotly.newPlot('compare-chart-container', data, {
+    (/** @type {any} */ (globalThis)).Plotly.newPlot('compare-chart-container', data, {
         ...getPlotlyLayout(),
         margin: mobile ? { t: 12, r: 28, b: 40, l: 112 } : { t: 20, r: 96, b: 40, l: 220 },
         xaxis: {

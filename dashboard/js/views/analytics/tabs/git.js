@@ -14,18 +14,20 @@ export const renderGitBlameTab = () => {
 };
 
 export const loadGitBlame = async () => {
-    const days = document.getElementById('git-days-selector')?.value || 30;
-    const cwd = document.getElementById('git-directory-selector')?.value || '';
+    const days = String(/** @type {HTMLInputElement} */ (document.getElementById('git-days-selector'))?.value || 30);
+    const cwd = /** @type {HTMLInputElement} */ (document.getElementById('git-directory-selector'))?.value || '';
     setGitBlameCwd(cwd);
     
     // Show loading state with skeleton
-    document.getElementById('git-commits-list').innerHTML = `
+    const commitsEl = document.getElementById('git-commits-list');
+    if (commitsEl) commitsEl.innerHTML = `
         <div class="git-blame-loading">
             <div class="loading-spinner"></div>
             <p>Analyzing git history...</p>
         </div>
     `;
-    document.getElementById('git-files-list').innerHTML = `
+    const filesEl = document.getElementById('git-files-list');
+    if (filesEl) filesEl.innerHTML = `
         <div class="git-blame-loading">
             <div class="loading-spinner"></div>
             <p>Loading project costs...</p>
@@ -48,14 +50,16 @@ export const loadGitBlame = async () => {
             updateDirectorySelector(data.directories, cwd);
         }
     } catch (err) {
-        document.getElementById('git-commits-list').innerHTML = `
+        const ce = document.getElementById('git-commits-list');
+        if (ce) ce.innerHTML = `
             <div class="git-blame-empty">
                 <div class="git-blame-empty-icon">!</div>
                 <h4>Unable to load git data</h4>
-                <p>${escapeHtml(err.message)}</p>
+                <p>${escapeHtml(err instanceof Error ? err.message : String(err))}</p>
             </div>
         `;
-        document.getElementById('git-files-list').innerHTML = `
+        const fe = document.getElementById('git-files-list');
+        if (fe) fe.innerHTML = `
             <div class="git-blame-empty">
                 <div class="git-blame-empty-icon">∅</div>
                 <h4>No project data</h4>
@@ -65,13 +69,19 @@ export const loadGitBlame = async () => {
     }
 };
 
+/**
+ * @param {Array<{path: string, name: string, isGitRepo: boolean}>} directories
+ * @param {string} selectedCwd
+ */
 const updateDirectorySelector = (directories, selectedCwd) => {
-    const selector = document.getElementById('git-directory-selector');
+    const selector = /** @type {HTMLSelectElement|null} */ (document.getElementById('git-directory-selector'));
     if (!selector || !directories) return;
     
     const currentValue = selector.value || selectedCwd || '';
     
-    selector.innerHTML = directories.map(dir => {
+    selector.innerHTML = directories.map(
+        /** @param {*} dir */
+        (dir) => {
         const icon = dir.isGitRepo ? '▪' : '▫';
         const selected = dir.path === currentValue ? 'selected' : '';
         return `<option value="${dir.path}" ${selected}>${icon} ${dir.name}</option>`;
@@ -83,22 +93,30 @@ const updateDirectorySelector = (directories, selectedCwd) => {
     }
 };
 
+/**
+ * @param {*} data
+ */
 export const renderGitBlameData = (data) => {
     // Summary stats
     const totalCommits = data.commits.length;
-    const totalCost = data.commits.reduce((sum, c) => sum + c.cost, 0);
-    const totalSessions = data.commits.reduce((sum, c) => sum + c.sessions, 0);
+    const totalCost = data.commits.reduce(/** @param {number} sum @param {{cost: number}} c */ (sum, c) => sum + c.cost, 0);
+    const totalSessions = data.commits.reduce(/** @param {number} sum @param {{sessions: number}} c */ (sum, c) => sum + c.sessions, 0);
     
-    document.getElementById('git-total-commits').textContent = fmtInt(totalCommits);
-    document.getElementById('git-total-cost').textContent = `$${totalCost.toFixed(2)}`;
-    document.getElementById('git-total-sessions').textContent = fmtInt(totalSessions);
+    const tcEl = document.getElementById('git-total-commits');
+    if (tcEl) tcEl.textContent = fmtInt(totalCommits);
+    const tcostEl = document.getElementById('git-total-cost');
+    if (tcostEl) tcostEl.textContent = `$${totalCost.toFixed(2)}`;
+    const tsEl = document.getElementById('git-total-sessions');
+    if (tsEl) tsEl.textContent = fmtInt(totalSessions);
     
     // Commits list - now with files
     const commitsList = document.getElementById('git-commits-list');
     const visibleCommits = data.commits.slice(0, 10);
-    commitsList.innerHTML = visibleCommits.map((commit, idx) => {
+    if (commitsList) commitsList.innerHTML = visibleCommits.map(
+        /** @param {*} commit @param {number} idx */
+        (commit, idx) => {
         const files = commit.files || [];
-        const fileList = files.slice(0, 3).map(f => `<span class="commit-file">${escapeHtml(f.split('/').pop())}</span>`).join('');
+        const fileList = files.slice(0, 3).map(/** @param {string} f */ f => `<span class="commit-file">${escapeHtml(f.split('/').pop())}</span>`).join('');
         const moreFiles = files.length > 3 ? `<span class="commit-file-more">+${files.length - 3} more</span>` : '';
         
         return `
@@ -118,12 +136,13 @@ export const renderGitBlameData = (data) => {
         </div>
     `}).join('');
 
-    commitsList.querySelectorAll('.git-commit-item').forEach(item => {
-        const commit = visibleCommits[Number(item.dataset.commitIndex)];
+    if (commitsList) commitsList.querySelectorAll('.git-commit-item').forEach(item => {
+        const el = /** @type {HTMLElement} */ (item);
+        const commit = visibleCommits[Number(el.dataset.commitIndex)];
         if (!commit) return;
         const open = () => showCommitDetails(commit.hash);
-        item.addEventListener('click', open);
-        item.addEventListener('keydown', (e) => {
+        el.addEventListener('click', open);
+        el.addEventListener('keydown', (/** @type {KeyboardEvent} */ e) => {
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
                 open();
@@ -134,15 +153,20 @@ export const renderGitBlameData = (data) => {
     // Project list
     const projects = data.projects || data.files || [];
     const filesList = document.getElementById('git-files-list');
-    filesList.innerHTML = projects.slice(0, 10).map(project => `
+    if (filesList) filesList.innerHTML = projects.slice(0, 10).map(
+        /** @param {*} project */
+        (project) => `
         <div class="git-file-item">
             <div class="file-name">${escapeHtml(project.project || project.file)}</div>
             <div class="file-cost">$${project.cost.toFixed(2)} across ${fmtInt(project.commits)} commits</div>
-            ${project.files?.length ? `<div class="commit-click-hint">${project.files.map(f => escapeHtml(f.split('/').pop())).join(' · ')}</div>` : ''}
+            ${project.files?.length ? `<div class="commit-click-hint">${project.files.map(/** @param {string} f */ f => escapeHtml(f.split('/').pop())).join(' · ')}</div>` : ''}
         </div>
     `).join('');
 };
 
+/**
+ * @param {string} commitHash
+ */
 export const showCommitDetails = async (commitHash) => {
     const modal = document.getElementById('commit-details-modal');
     const content = document.getElementById('commit-details-content');
@@ -158,7 +182,7 @@ export const showCommitDetails = async (commitHash) => {
     `;
     
     try {
-        const days = document.getElementById('git-days-selector')?.value || 30;
+        const days = String(/** @type {HTMLInputElement} */ (document.getElementById('git-days-selector'))?.value || 30);
         const params = new URLSearchParams({ days, commit: commitHash });
         if (getGitBlameCwd()) params.append('cwd', getGitBlameCwd());
         
@@ -168,10 +192,14 @@ export const showCommitDetails = async (commitHash) => {
         const data = await response.json();
         renderCommitDetails(content, data);
     } catch (err) {
-        content.innerHTML = `<div class="commit-details-error">Error: ${escapeHtml(err.message)}</div>`;
+        content.innerHTML = `<div class="commit-details-error">Error: ${escapeHtml(err instanceof Error ? err.message : String(err))}</div>`;
     }
 };
 
+/**
+ * @param {HTMLElement} container
+ * @param {*} data
+ */
 export const renderCommitDetails = (container, data) => {
     const { commit, sessions, summary } = data;
     
@@ -199,7 +227,11 @@ export const renderCommitDetails = (container, data) => {
         
         <div class="commit-sessions-list">
             <h4>Sessions (${sessions.length})</h4>
-            ${sessions.map((session, idx) => `
+            ${sessions.map(/**
+                * @param {*} session
+                * @param {number} idx
+                */
+                (session, idx) => `
                 <div class="session-card">
                     <div class="session-header" data-session-toggle="${idx}" role="button" tabindex="0" style="cursor: pointer;">
                         <span class="session-id">${escapeHtml(session.id)}</span>
@@ -215,7 +247,10 @@ export const renderCommitDetails = (container, data) => {
                         `).join('')}
                     </div>
                     <div class="session-messages" id="session-messages-${idx}" style="display: none;">
-                        ${session.messages.slice(0, 5).map(msg => `
+                        ${session.messages.slice(0, 5).map(/**
+                            * @param {*} msg
+                            */
+                            (msg) => `
                             <div class="message-item">
                                 <div class="message-meta">
                                     <span class="message-model">${escapeHtml(msg.model.split('/').pop())}</span>
@@ -232,11 +267,14 @@ export const renderCommitDetails = (container, data) => {
         </div>
     `;
 
-    container.querySelectorAll('.session-header[data-session-toggle]').forEach(header => {
+    container.querySelectorAll('.session-header[data-session-toggle]').forEach(
+        /** @param {Element} el */
+        (el) => {
+        const header = /** @type {HTMLElement} */ (el);
         const idx = Number(header.dataset.sessionToggle);
         const toggle = () => toggleSessionMessages(idx);
         header.addEventListener('click', toggle);
-        header.addEventListener('keydown', (e) => {
+        header.addEventListener('keydown', (/** @type {KeyboardEvent} */ e) => {
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
                 toggle();
@@ -245,6 +283,9 @@ export const renderCommitDetails = (container, data) => {
     });
 };
 
+/**
+ * @param {number} idx
+ */
 export const toggleSessionMessages = (idx) => {
     const messagesEl = document.getElementById(`session-messages-${idx}`);
     const toggleEl = messagesEl?.previousElementSibling?.previousElementSibling?.querySelector('.session-toggle');

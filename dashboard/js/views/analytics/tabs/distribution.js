@@ -1,8 +1,12 @@
 import { CHART_COLORS, currentData, isCompactViewport, getPlotlyLayout } from './shared.js';
 
+/**
+ * @param {HTMLElement} [container]
+ */
 export function renderDistributionTab(container) {
-    if (!container) container = document.getElementById('distribution-chart-container');
-    if (!container || typeof Plotly === 'undefined') return;
+    if (!container) container = /** @type {HTMLElement} */ (document.getElementById('distribution-chart-container'));
+    if (!container || typeof (/** @type {any} */ (globalThis).Plotly) === 'undefined') return;
+    if (!currentData) return;
 
     const { tokens_by_model } = currentData;
     const models = Object.entries(tokens_by_model)
@@ -23,7 +27,7 @@ export function renderDistributionTab(container) {
         insidetextorientation: 'radial'
     }];
 
-    Plotly.newPlot('distribution-chart-container', data, {
+    /** @type {any} */ (globalThis).Plotly.newPlot('distribution-chart-container', data, {
         ...getPlotlyLayout({ showlegend: false }),
         margin: mobile ? { t: 20, r: 16, b: 40, l: 16 } : { t: 40, r: 40, b: 80, l: 40 }
     }, {

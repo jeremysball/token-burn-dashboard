@@ -15,6 +15,7 @@ export const emojis = {
     gemini: 'G', glm: 'Z', zai: 'Z', llama: 'L', deepseek: 'D'
 };
 
+/** @param {string} name */
 export const getEmoji = name => {
     for (const [k, v] of Object.entries(emojis)) {
         if (name.toLowerCase().includes(k)) return v;
@@ -62,6 +63,7 @@ export const MODEL_PRICING = [
     { pattern: /.*/, input: 2.5, output: 10, cacheRead: 1.25, cacheWrite: 0 },
 ];
 
+/** @param {string} modelName */
 export const getPricing = (modelName) => {
     const name = String(modelName || '').toLowerCase();
     const { model } = splitModelKey(name);
@@ -73,6 +75,7 @@ export const getPricing = (modelName) => {
     return MODEL_PRICING[MODEL_PRICING.length - 1];
 };
 
+/** @param {string} name @param {Record<string, *>|undefined} pricing_by_model */
 export const getPricingForModel = (name, pricing_by_model) => {
     if (pricing_by_model && pricing_by_model[name]) return pricing_by_model[name];
     return getPricing(name);
@@ -81,6 +84,7 @@ export const getPricingForModel = (name, pricing_by_model) => {
 export const getPricingForModelWrapper = getPricingForModel;
 export const formatModelPrice = formatModelPriceFromUtils;
 
+/** @param {Record<string, number>} tokens @param {string} modelName @returns {{input: number, output: number, cache_read: number, cache_write: number, total: number}} */
 export const calculateCost = (tokens, modelName) => {
     const p = getPricing(modelName);
     

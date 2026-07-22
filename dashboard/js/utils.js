@@ -1,4 +1,8 @@
 // ===== FORMATTERS =====
+/**
+ * @param {number|string} n
+ * @returns {string}
+ */
 export const fmtNum = n => {
     const num = Number(n) || 0;
     if (num >= 1_000_000_000) return (num / 1_000_000_000).toFixed(2) + 'B';
@@ -7,18 +11,34 @@ export const fmtNum = n => {
     return Math.round(num).toString();
 };
 
+/**
+ * @param {number|string} n
+ * @returns {string}
+ */
 export const fmtInt = n => Number(n || 0).toLocaleString();
 
+/**
+ * @param {number} n
+ * @returns {string}
+ */
 export const fmtCur = n => {
     if (n >= 1) return '$' + n.toFixed(2);
     if (n >= 0.01) return '$' + n.toFixed(3);
     return '$' + n.toFixed(4);
 };
 
+/**
+ * @param {string|number|Date} date
+ * @returns {string}
+ */
 export const fmtDate = (date) => {
     return new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
 };
 
+/**
+ * @param {number|string} n
+ * @returns {string}
+ */
 export const fmtMultiple = n => {
     const num = Number(n) || 0;
     if (num < 10) return num.toFixed(1) + '×';
@@ -26,6 +46,10 @@ export const fmtMultiple = n => {
 };
 
 // ===== MODEL KEY PARSING =====
+/**
+ * @param {string} key
+ * @returns {{provider: string, model: string}}
+ */
 export const splitModelKey = (key) => {
     const str = String(key || '');
     const idx = str.indexOf('/');
@@ -33,11 +57,27 @@ export const splitModelKey = (key) => {
     return { provider: str.slice(0, idx), model: str.slice(idx + 1) };
 };
 
+/**
+ * @param {string} key
+ * @returns {string}
+ */
 export const displayModel = (key) => {
     const { provider, model } = splitModelKey(key);
     return provider ? `${provider}/${model}` : model;
 };
 
+/**
+ * @param {string} key
+ * @returns {{
+ *   routingProvider: string|null,
+ *   vendor: string,
+ *   modelId: string,
+ *   canonical: string,
+ *   originalKey: string,
+ *   provider: string,
+ *   model: string
+ * }}
+ */
 export const parseModelKey = (key) => {
     const routers = new Set(['openrouter', 'openpipe']);
     const { provider, model } = splitModelKey(key);
@@ -85,11 +125,20 @@ export const parseModelKey = (key) => {
 };
 
 // ===== PRICING HELPERS (centralized) =====
+/**
+ * @param {string} name
+ * @param {Record<string, {input: number, output: number}>|null|undefined} pricing_by_model
+ * @returns {{input: number, output: number}|null}
+ */
 export const getPricingForModel = (name, pricing_by_model) => {
     if (pricing_by_model && pricing_by_model[name]) return pricing_by_model[name];
     return null;
 };
 
+/**
+ * @param {{input?: number, output?: number}|null} pricing
+ * @returns {string}
+ */
 export const formatModelPrice = (pricing) => {
     if (!pricing) return 'Price unavailable';
     const input = pricing.input || 0;
@@ -97,6 +146,10 @@ export const formatModelPrice = (pricing) => {
     return `${input.toFixed(2)} in / ${output.toFixed(2)} out`;
 };
 
+/**
+ * @param {string} text
+ * @returns {string}
+ */
 export const escapeHtml = (text) => {
     if (!text) return '';
     return String(text)
@@ -108,6 +161,13 @@ export const escapeHtml = (text) => {
 };
 
 // ===== SPARKLINE (unified DRY) =====
+/**
+ * @param {number[]} data
+ * @param {number} [width=100]
+ * @param {number} [height=30]
+ * @param {{gradient?: boolean}} [opts]
+ * @returns {string}
+ */
 export const createSparkline = (data, width = 100, height = 30, opts = { gradient: true }) => {
     if (!data || data.length < 2) return '';
     const max = Math.max(...data, 1);
@@ -125,6 +185,10 @@ export const createSparkline = (data, width = 100, height = 30, opts = { gradien
 };
 
 // ===== NOTIFICATIONS =====
+/**
+ * @param {string} msg
+ * @param {string} [type='info']
+ */
 export const notify = (msg, type = 'info') => {
     const container = document.getElementById('notifications');
     if (!container) return;
@@ -139,14 +203,25 @@ export const notify = (msg, type = 'info') => {
 };
 
 // ===== DOM HELPERS =====
+/**
+ * @param {HTMLElement|null} el
+ * @param {string} text
+ */
 export const setText = (el, text) => {
     if (el) el.textContent = text;
 };
 
+/**
+ * @param {HTMLElement|null} el
+ */
 export const hide = (el) => {
     if (el) el.style.display = 'none';
 };
 
+/**
+ * @param {HTMLElement|null} el
+ * @param {string} [display='block']
+ */
 export const show = (el, display = 'block') => {
     if (el) el.style.display = display;
 };
@@ -197,10 +272,11 @@ const LIVE_PLOT_CONTAINER_IDS = [
 ];
 
 export const resizeVisiblePlots = () => {
-    if (typeof Plotly === 'undefined' || !Plotly.Plots) return;
+    const P = /** @type {any} */ (globalThis).Plotly;
+    if (!P || !P.Plots) return;
     LIVE_PLOT_CONTAINER_IDS.forEach((id) => {
-        const el = document.getElementById(id);
-        if (el && el.data) Plotly.Plots.resize(el);
+        const el = /** @type {HTMLElement & {data: unknown}} */ (document.getElementById(id));
+        if (el && el.data) P.Plots.resize(el);
     });
 };
 

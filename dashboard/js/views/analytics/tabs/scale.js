@@ -13,11 +13,14 @@ const SCALE_COMPARISONS = [
     { name: 'Codebase', tokens: 100000000, desc: 'Large software codebase' }
 ];
 
+/**
+ * @param {HTMLElement|null} [container]
+ */
 export function renderScaleTab(container) {
     if (!container) container = document.getElementById('scale-comparisons');
     if (!container || !currentData) return;
 
-    const totalTokens = currentData.total_tokens || 0;
+    const totalTokens = (/** @type {{total_tokens: number}} */ (currentData)).total_tokens || 0;
 
     // Find the largest comparison we exceed
     const exceeded = SCALE_COMPARISONS.filter(c => totalTokens >= c.tokens);

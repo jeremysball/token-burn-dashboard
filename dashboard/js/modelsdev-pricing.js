@@ -11,12 +11,17 @@ export const MODELS_DEV_API = 'https://models.dev/api.json';
 
 // Catalog load status so callers can tell a permanent failure apart from an
 // in-flight load. Values: 'idle' | 'loading' | 'ready' | 'failed'.
+/** @type {'idle'|'loading'|'ready'|'failed'} */
 let catalogStatus = 'idle';
+/** @type {string|null} */
 let catalogError = null;
 
+/** @type {Record<string, *>|null} */
 let catalogCache = null;
+/** @type {Promise<Record<string, *>>|null} */
 let catalogPromise = null;
 
+/** @param {Record<string, *>|null} catalog */
 export const setCatalog = (catalog) => {
     catalogCache = catalog || null;
     catalogStatus = catalog ? 'ready' : 'idle';
@@ -42,12 +47,14 @@ export const clearCatalogCache = () => {
 // Convert a Models.dev cost object (USD per 1M tokens) into our pricing shape.
 // Returns null when no usable numeric rate is present so callers can surface
 // an explicit "price unavailable" state instead of inventing a cost.
+/** @param {*} cost @returns {Record<string, *>|null} */
 export const normalizeModelsDevCost = (cost) => {
     if (!cost || typeof cost !== 'object') return null;
 
     // Only accept finite numeric fields from the catalog. Number(null) and
     // Number('') both coerce to 0, which would wrongly count a missing field as
     // a valid (free) rate; an explicit numeric 0 is preserved as present.
+    /** @param {*} v */
     const read = (v) => {
         const n = typeof v === 'number' ? v : Number(v);
         const present = typeof v === 'number' && Number.isFinite(v);
@@ -93,6 +100,7 @@ export const normalizeModelsDevCost = (cost) => {
 //   - direct provider/model: "anthropic/claude-opus-4-8" -> provider "anthropic", modelId "claude-opus-4-8"
 //   - bare model id: "claude-3.5-sonnet" -> search every provider for a matching modelId
 // Returns normalized pricing or null if not found / catalog missing.
+/** @param {string} key @param {Record<string, *>|null} [catalog] */
 export const lookupModelsDevPrice = (key, catalog = catalogCache) => {
     if (!catalog || !key) return null;
 
@@ -128,9 +136,11 @@ export const lookupModelsDevPrice = (key, catalog = catalogCache) => {
 // (total tokens) or an object with input/output/cache_read/cache_write/reasoning.
 // Returns { total, priced } where priced is false when the rate could not be
 // determined so callers can mark the cell as price-unavailable.
+/** @param {number|Record<string, number>} tokens @param {Record<string, *>|null} pricing @returns {{total: number, priced: boolean}} */
 export const calculateCostWithPricing = (tokens, pricing) => {
     if (!pricing) return { total: 0, priced: false };
 
+    /** @param {*} v */
     const toNum = (v) => (typeof v === 'number' ? v : 0);
 
     if (typeof tokens === 'object' && tokens !== null) {
@@ -145,7 +155,9 @@ export const calculateCostWithPricing = (tokens, pricing) => {
         // contributes $0; a dimension with tokens but no published rate (flag
         // false) means we would silently fabricate zero cost, so mark unpriced.
         // Dimensionless zero-token records (all dims 0) stay priced at $0.00.
+        /** @param {*} flag @param {number} value */
         const flagOf = (flag, value) => (flag !== undefined ? !!flag : value > 0);
+        /** @param {number} tok @param {*} flag @param {number} value */
         const requireRate = (tok, flag, value) => tok === 0 || flagOf(flag, value);
 
         const priced =
@@ -212,7 +224,7 @@ export const fetchModelsDevCatalog = async (fetchFn = fetch) => {
             return json;
         } catch (err) {
             catalogStatus = 'failed';
-            catalogError = err?.message || String(err);
+            catalogError = err instanceof Error ? err.message : String(err);
             catalogPromise = null;
             throw err;
         }

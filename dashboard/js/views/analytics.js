@@ -47,7 +47,7 @@ import {
 export const renderAnalytics = (fullRender = true) => {
     if (!currentData) return;
 
-    const tab = document.querySelector('.subnav-btn.active')?.dataset.tab || 'models';
+    const tab = /** @type {HTMLElement} */ (document.querySelector('.subnav-btn.active'))?.dataset.tab || 'models';
 
     // Ambient (SSE-driven) refreshes rebuild the same markup as a fresh render, but
     // shouldn't replay the tab's entrance animations every few seconds like a fresh load does.
@@ -55,31 +55,31 @@ export const renderAnalytics = (fullRender = true) => {
 
     switch (tab) {
         case 'models':
-            renderModelsTab(document.getElementById('models-tbody'));
+            renderModelsTab(document.getElementById('models-tbody') || undefined);
             break;
         case 'compare':
-            renderCompareTab(document.getElementById('compare-chart-container'));
+            renderCompareTab(document.getElementById('compare-chart-container') || undefined);
             break;
         case 'timeline':
-            renderTimelineTab(document.getElementById('timeline-chart-container'));
+            renderTimelineTab(document.getElementById('timeline-chart-container') || undefined);
             break;
         case 'calendar':
-            renderCalendarTab(document.getElementById('calendar-container'));
+            renderCalendarTab(document.getElementById('calendar-container') || undefined);
             break;
         case 'distribution':
-            renderDistributionTab(document.getElementById('distribution-chart-container'));
+            renderDistributionTab(document.getElementById('distribution-chart-container') || undefined);
             break;
         case 'insights':
             renderDeepInsightsTab();
             break;
         case 'scale':
-            renderScaleTab(document.getElementById('scale-comparisons'));
+            renderScaleTab(document.getElementById('scale-comparisons') || undefined);
             break;
         case 'code':
             renderCodeStatsTab();
             break;
         case 'heatmaps':
-            renderHeatmapsTab(document.getElementById('heatmaps-container'));
+            renderHeatmapsTab(document.getElementById('heatmaps-container') || undefined);
             break;
         case 'git':
             renderGitBlameTab();
@@ -90,6 +90,9 @@ export const renderAnalytics = (fullRender = true) => {
     }
 };
 
+/**
+ * @param {string} tab
+ */
 export const setAnalyticsTabHandler = (tab) => {
     setAnalyticsTab(tab);
 
@@ -99,7 +102,7 @@ export const setAnalyticsTabHandler = (tab) => {
 
     // Update buttons
     document.querySelectorAll('.subnav-btn').forEach(el => {
-        el.classList.toggle('active', el.dataset.tab === tab);
+        el.classList.toggle('active', /** @type {HTMLElement} */ (el).dataset.tab === tab);
     });
 
     // Show/hide content
@@ -111,6 +114,9 @@ export const setAnalyticsTabHandler = (tab) => {
     renderAnalytics();
 };
 
+/**
+ * @param {string} range
+ */
 export const setAnalyticsRangeHandler = (range) => {
     setAnalyticsRange(range);
 
@@ -122,11 +128,17 @@ export const setAnalyticsRangeHandler = (range) => {
     renderAnalytics();
 };
 
+/**
+ * @param {string} val
+ */
 export const handleSearch = (val) => {
     setSearchTerm(val);
     renderAnalytics();
 };
 
+/**
+ * @param {string} col
+ */
 export const sortBy = (col) => {
     if (sortCol === col) {
         setSortAsc(!sortAsc);
@@ -135,7 +147,7 @@ export const sortBy = (col) => {
         setSortAsc(false);
     }
     document.querySelectorAll('.sort-controls button').forEach((el) => {
-        el.classList.toggle('active', el.dataset.col === col);
+        el.classList.toggle('active', /** @type {HTMLElement} */ (el).dataset.col === col);
     });
     renderAnalytics(true);
 };

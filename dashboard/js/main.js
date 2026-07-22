@@ -6,21 +6,32 @@ import { renderAnalytics, setAnalyticsTabHandler, setAnalyticsRangeHandler, load
 
 // ===== ANIMATED NUMBER COUNTER =====
 
+/**
+ * @param {HTMLElement} element
+ * @param {string|number} startValue
+ * @param {string|number} endValue
+ * @param {number} [duration=800]
+ * @param {string} [prefix='']
+ * @param {string} [suffix='']
+ */
 export const animateNumber = (element, startValue, endValue, duration = 800, prefix = '', suffix = '') => {
     const startTime = performance.now();
     const startNum = typeof startValue === 'string' ? parseFloat(startValue.replace(/[^0-9.-]/g, '')) : startValue;
     const endNum = typeof endValue === 'string' ? parseFloat(endValue.replace(/[^0-9.-]/g, '')) : endValue;
     const decimalMatch = typeof endValue === 'string' ? endValue.match(/\.(\d+)/) : null;
     const decimalPlaces = decimalMatch ? decimalMatch[1].length : null;
-    
+
     if (isNaN(startNum) || isNaN(endNum)) {
         element.textContent = prefix + endValue + suffix;
         return;
     }
-    
+
     // Add ticking animation class
     element.classList.add('ticking');
-    
+
+    /**
+     * @param {DOMHighResTimeStamp} currentTime
+     */
     const animate = (currentTime) => {
         const elapsed = currentTime - startTime;
         const progress = Math.min(elapsed / duration, 1);
@@ -73,6 +84,9 @@ const getShownAchievements = () => {
     }
 };
 
+/**
+ * @param {Set<string>} achievements
+ */
 const saveShownAchievements = (achievements) => {
     try {
         localStorage.setItem('tokenBurnAchievements', JSON.stringify([...achievements]));
@@ -83,6 +97,10 @@ const saveShownAchievements = (achievements) => {
 
 const shownAchievements = getShownAchievements();
 
+/**
+ * @param {number} totalTokens
+ * @param {number} totalCost
+ */
 const checkThresholds = (totalTokens, totalCost) => {
     let newAchievement = false;
     
@@ -113,37 +131,40 @@ const checkThresholds = (totalTokens, totalCost) => {
 };
 
 // ===== VIEW SWITCHING =====
+/**
+ * @param {string} view
+ */
 const setView = (view) => {
     setCurrentView(view);
 
     // Close any open overlays when leaving analytics/dashboard views
     if (view !== 'analytics') {
-        window.closeCommitDetails?.();
-        window.closeInvestigation?.();
+        /** @type {any} */ (window).closeCommitDetails?.();
+        /** @type {any} */ (window).closeInvestigation?.();
     }
 
     // Update nav
     document.querySelectorAll('.nav-btn').forEach(el => {
-        el.classList.toggle('active', el.dataset.view === view);
+        /** @type {HTMLElement} */ (el).classList.toggle('active', /** @type {HTMLElement} */ (el).dataset.view === view);
     });
 
     // Smooth transition between views
     const dashboard = document.getElementById('view-dashboard');
     const analytics = document.getElementById('view-analytics');
-    
+
     if (view === 'dashboard') {
-        analytics.classList.remove('active');
+        if (analytics) analytics.classList.remove('active');
         setTimeout(() => {
-            analytics.style.display = 'none';
-            dashboard.style.display = 'block';
-            requestAnimationFrame(() => dashboard.classList.add('active'));
+            if (analytics) analytics.style.display = 'none';
+            if (dashboard) dashboard.style.display = 'block';
+            if (dashboard) requestAnimationFrame(() => dashboard.classList.add('active'));
         }, 300);
     } else {
-        dashboard.classList.remove('active');
+        if (dashboard) dashboard.classList.remove('active');
         setTimeout(() => {
-            dashboard.style.display = 'none';
-            analytics.style.display = 'block';
-            requestAnimationFrame(() => analytics.classList.add('active'));
+            if (dashboard) dashboard.style.display = 'none';
+            if (analytics) analytics.style.display = 'block';
+            if (analytics) requestAnimationFrame(() => analytics.classList.add('active'));
         }, 300);
     }
 
@@ -155,9 +176,12 @@ const setView = (view) => {
 // ===== THEME =====
 const THEME_GLYPHS = { dark: '☾', light: '☀' };
 
+/**
+ * @param {string} theme
+ */
 const updateThemeToggleGlyph = (theme) => {
     const toggle = document.querySelector('.theme-toggle');
-    if (toggle) toggle.textContent = THEME_GLYPHS[theme] || THEME_GLYPHS.dark;
+    if (toggle) toggle.textContent = /** @type {Record<string, string>} */ (THEME_GLYPHS)[theme] || THEME_GLYPHS.dark;
 };
 
 const toggleTheme = () => {
@@ -172,7 +196,7 @@ const toggleTheme = () => {
 // ===== RENDER ALL (for data updates) =====
 const renderAll = () => {
     const activeBtn = document.querySelector('.nav-btn.active');
-    const view = activeBtn?.dataset.view || 'dashboard';
+    const view = /** @type {HTMLElement} */ (activeBtn)?.dataset.view || 'dashboard';
 
     if (view === 'dashboard') {
         renderDashboard(false);
@@ -181,55 +205,58 @@ const renderAll = () => {
     if (view === 'analytics') renderAnalytics(false);
 };
 
-window.renderAll = renderAll;
-window.animateNumber = animateNumber;
-window.checkThresholds = checkThresholds;
+/** @type {any} */ (window).renderAll = renderAll;
+/** @type {any} */ (window).animateNumber = animateNumber;
+/** @type {any} */ (window).checkThresholds = checkThresholds;
 
 // ===== EXPORTS FOR INLINE HANDLERS =====
-window.setView = setView;
-window.toggleTheme = toggleTheme;
-window.setAnalyticsTab = setAnalyticsTabHandler;
-window.setAnalyticsRange = setAnalyticsRangeHandler;
-window.handleSearch = (val) => {
+/** @type {any} */ (window).setView = setView;
+/** @type {any} */ (window).toggleTheme = toggleTheme;
+/** @type {any} */ (window).setAnalyticsTab = setAnalyticsTabHandler;
+/** @type {any} */ (window).setAnalyticsRange = setAnalyticsRangeHandler;
+/** @type {any} */ (window).handleSearch = (/** @type {string} */ val) => {
     import('./views/analytics.js').then(m => m.handleSearch(val));
 };
-window.sortBy = (col) => {
+/** @type {any} */ (window).sortBy = (/** @type {string} */ col) => {
     import('./views/analytics.js').then(m => m.sortBy(col));
 };
-window.generateDeepInsights = () => {
+/** @type {any} */ (window).generateDeepInsights = () => {
     import('./views/analytics.js').then(m => m.generateDeepInsights());
 };
-window.generateLLMInsights = () => {
+/** @type {any} */ (window).generateLLMInsights = () => {
     import('./views/analytics.js').then(m => m.generateLLMInsights());
 };
-window.loadGitBlame = () => {
+/** @type {any} */ (window).loadGitBlame = () => {
     import('./views/analytics.js').then(m => m.loadGitBlame());
 };
-window.investigateSpike = (timestamp) => {
+/** @type {any} */ (window).investigateSpike = (/** @type {number} */ timestamp) => {
     import('./views/analytics.js').then(m => m.investigateSpike(timestamp));
 };
-window.closeInvestigation = () => {
+/** @type {any} */ (window).closeInvestigation = () => {
     import('./views/analytics.js').then(m => m.closeInvestigation());
 };
-window.updateHeatmap = () => {
-    import('./views/analytics.js').then(m => m.updateHeatmap?.() || console.log('Heatmap update not available'));
+/** @type {any} */ (window).updateHeatmap = () => {
+    import('./views/analytics.js').then(m => {
+        if (m.updateHeatmap) m.updateHeatmap();
+        else console.log('Heatmap update not available');
+    });
 };
-window.setHeatmapMetric = (metric) => {
+/** @type {any} */ (window).setHeatmapMetric = (/** @type {string} */ metric) => {
     import('./views/analytics.js').then(m => m.setHeatmapMetric?.(metric));
 };
-window.retryModelsDevPricing = () => {
+/** @type {any} */ (window).retryModelsDevPricing = () => {
     import('./views/analytics.js').then(m => m.retryModelsDevPricing?.());
 };
-window.showCommitDetails = (hash) => {
+/** @type {any} */ (window).showCommitDetails = (/** @type {string} */ hash) => {
     import('./views/analytics.js').then(m => m.showCommitDetails(hash));
 };
-window.toggleSessionMessages = (idx) => {
+/** @type {any} */ (window).toggleSessionMessages = (/** @type {number} */ idx) => {
     import('./views/analytics.js').then(m => m.toggleSessionMessages(idx));
 };
-window.closeCommitDetails = () => {
+/** @type {any} */ (window).closeCommitDetails = () => {
     import('./views/analytics.js').then(m => m.closeCommitDetails());
 };
-window.toggleSpikeSession = (idx) => {
+/** @type {any} */ (window).toggleSpikeSession = (/** @type {number} */ idx) => {
     import('./views/analytics.js').then(m => m.toggleSpikeSession(idx));
 };
 
@@ -262,11 +289,12 @@ const init = () => {
 
     // Setup nav
     document.querySelectorAll('.nav-btn').forEach(el => {
-        el.addEventListener('click', () => setView(el.dataset.view));
+        el.addEventListener('click', () => setView(/** @type {HTMLElement} */ (el).dataset.view ?? 'dashboard'));
     });
 
     // Initial render with animation
-    document.getElementById('view-dashboard').classList.add('active');
+    const viewDashboard = document.getElementById('view-dashboard');
+    if (viewDashboard) viewDashboard.classList.add('active');
     setView('dashboard');
 
     // Fetch fresh data (includes historical for charts)

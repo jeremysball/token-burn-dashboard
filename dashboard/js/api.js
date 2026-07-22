@@ -5,6 +5,21 @@ import { notify } from './utils.js';
 // ===== API =====
 const API_BASE = '/api';
 
+/**
+ * @typedef {Object} TokenData
+ * @property {number} total_tokens
+ * @property {number} total_input
+ * @property {number} total_output
+ * @property {number} total_cache_read
+ * @property {number} total_cache_write
+ * @property {Object<string, {total: number}>} tokens_by_model
+ * @property {Object<string, *>} costs_by_model
+ * @property {Object<string, *>} pricing_by_model
+ * @property {{total: number}} total_cost
+ * @property {number} files_processed
+ * @property {number} total_lines
+ */
+
 export const fetchTokens = async () => {
     const res = await fetch(`${API_BASE}/tokens`);
     if (!res.ok) throw new Error('Failed to fetch tokens');
@@ -19,6 +34,19 @@ export const fetchHistorical = async () => {
     return data;
 };
 
+/**
+ * @param {*} h
+ * @returns {*}
+ */
+const toChartItem = (h) => ({
+    time: h.time,
+    total: h.total || 0,
+    total_input: h.input || 0,
+    total_output: h.output || 0,
+    total_cache_read: h.cache_read || 0,
+    models: h.tokens_by_model || {}
+});
+
 export const refreshData = async () => {
     let tokens;
 
@@ -26,7 +54,7 @@ export const refreshData = async () => {
         tokens = await fetchTokens();
         updateData(tokens);
     } catch (err) {
-        notify('Refresh failed: ' + err.message, 'error');
+        notify('Refresh failed: ' + (err instanceof Error ? err.message : String(err)), 'error');
         return;
     }
 
@@ -37,26 +65,22 @@ export const refreshData = async () => {
         if (historical && historical.length > 0) {
             setFileHistoricalData(historical);
             // Convert to historyData format for live chart
-            const chartData = historical.map(h => ({
-                time: h.time,
-                total: h.total || 0,
-                total_input: h.input || 0,
-                total_output: h.output || 0,
-                total_cache_read: h.cache_read || 0,
-                models: h.tokens_by_model || {}
-            }));
+            const chartData = historical.map(toChartItem);
             setHistoryData(chartData);
             saveCache(tokens);
 
-            if (typeof window !== 'undefined' && window.renderAll) {
-                window.renderAll();
+            if (typeof window !== 'undefined' && /** @type {any} */ (window).renderAll) {
+                /** @type {any} */ (window).renderAll();
             }
         }
     } catch (err) {
-        console.warn('Historical refresh failed:', err.message);
+        console.warn('Historical refresh failed:', err instanceof Error ? err.message : String(err));
     }
 };
 
+/**
+ * @param {*} data
+ */
 export const updateData = (data) => {
     const safeData = {
         ...data,
@@ -80,16 +104,18 @@ export const updateData = (data) => {
     setLastDataSignature(newSignature);
     
     // Generate delta if we have previous data
-    if (currentData) {
-        const dTotal = Math.max(0, safeData.total_tokens - currentData.total_tokens);
-        const dInput = Math.max(0, safeData.total_input - currentData.total_input);
-        const dOutput = Math.max(0, safeData.total_output - currentData.total_output);
-        const dCache = Math.max(0, safeData.total_cache_read - currentData.total_cache_read);
+    const prev = /** @type {TokenData|null} */ (currentData);
+    if (prev) {
+        const dTotal = Math.max(0, safeData.total_tokens - prev.total_tokens);
+        const dInput = Math.max(0, safeData.total_input - prev.total_input);
+        const dOutput = Math.max(0, safeData.total_output - prev.total_output);
+        const dCache = Math.max(0, safeData.total_cache_read - prev.total_cache_read);
         
+        /** @type {Record<string, number>} */
         const dModels = {};
         Object.entries(safeData.tokens_by_model).forEach(([k, v]) => {
-            const prev = currentData.tokens_by_model?.[k] ? currentData.tokens_by_model[k].total : 0;
-            const diff = Math.max(0, v.total - prev);
+            const prevTotal = prev.tokens_by_model?.[k] ? prev.tokens_by_model[k].total : 0;
+            const diff = Math.max(0, v.total - prevTotal);
             if (diff > 0) dModels[k] = diff;
         });
         
@@ -145,14 +171,15 @@ export const updateData = (data) => {
     saveCache(safeData);
     
     // Trigger render
-    if (typeof window !== 'undefined' && window.renderAll) {
-        window.renderAll();
+    if (typeof window !== 'undefined' && /** @type {any} */ (window).renderAll) {
+        /** @type {any} */ (window).renderAll();
     }
 };
 
 // ===== SSE =====
 export const connectSSE = () => {
-    if (eventSource) eventSource.close();
+    const prevEs = /** @type {EventSource|null} */ (eventSource);
+    if (prevEs) prevEs.close();
     
     const es = new EventSource(`${API_BASE}/tokens/stream`);
     
@@ -173,8 +200,9 @@ export const connectSSE = () => {
 };
 
 export const disconnectSSE = () => {
-    if (eventSource) {
-        eventSource.close();
+    const prevEs = /** @type {EventSource|null} */ (eventSource);
+    if (prevEs) {
+        prevEs.close();
         setEventSource(null);
     }
 };

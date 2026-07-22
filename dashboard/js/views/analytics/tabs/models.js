@@ -1,11 +1,18 @@
 import { fmtNum, CHART_COLORS, currentData, historyData, searchTerm, sortCol, sortAsc, getPricingForModel, formatModelPrice, formatModelPriceDetails, getPricingSourceMeta, createSparkline, escapeHtml } from './shared.js';
 
+/**
+ * @param {HTMLElement} [tbody]
+ */
 export function renderModelsTab(tbody) {
-    if (!tbody) tbody = document.getElementById('models-tbody');
+    if (!tbody) tbody = /** @type {HTMLElement} */ (document.getElementById('models-tbody'));
     if (!tbody) return;
+    if (!currentData) return;
 
-    const { tokens_by_model, costs_by_model } = currentData;
+    /** @type {any} */
+    const data = currentData;
+    const { tokens_by_model, costs_by_model } = data;
 
+    /** @type {any[]} */
     let models = Object.entries(tokens_by_model);
 
     // Filter

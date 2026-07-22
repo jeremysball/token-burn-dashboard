@@ -3,6 +3,7 @@ import {
 } from './shared.js';
 
 // ===== SPIKE DETECTIVE TAB =====
+/** @type {any|null} */
 let spikesCache = null;
 
 export const renderSpikeDetectiveTab = () => {
@@ -15,6 +16,7 @@ export const renderSpikeDetectiveTab = () => {
 
 export const loadSpikes = async () => {
     const listEl = document.getElementById('spikes-list');
+    if (!listEl) return;
     listEl.innerHTML = '<div class="loading-placeholder">Analyzing for spikes...</div>';
     
     try {
@@ -25,12 +27,16 @@ export const loadSpikes = async () => {
         spikesCache = data.spikes;
         renderSpikesList(spikesCache);
     } catch (err) {
-        listEl.innerHTML = `<div class="loading-placeholder">Error: ${escapeHtml(err.message)}</div>`;
+        listEl.innerHTML = `<div class="loading-placeholder">Error: ${escapeHtml(/** @type {Error} */ (err).message)}</div>`;
     }
 };
 
 const RATIO_THRESHOLDS = { high: 5, medium: 3 };
 
+/**
+ * @param {number|string} ratio
+ * @returns {string}
+ */
 export const spikeRatioLevel = (ratio) => {
     const r = typeof ratio === 'string' ? parseFloat(ratio) : ratio;
     if (!isFinite(r)) return 'low';
@@ -39,26 +45,43 @@ export const spikeRatioLevel = (ratio) => {
     return 'low';
 };
 
+/**
+ * @param {any[]} series
+ * @returns {{mean: number, std: number, count: number}}
+ */
 export const computeSeriesStats = (series) => {
     const values = (series || [])
-        .map(p => (p && typeof p.total === 'number' ? p.total : null))
-        .filter(v => v !== null);
+        .map(/** @param {any} p */ p => (p && typeof p.total === 'number' ? p.total : null))
+        .filter(/** @param {any} v */ v => v !== null);
     const n = values.length;
     if (n === 0) return { mean: 0, std: 0, count: 0 };
-    const mean = values.reduce((s, v) => s + v, 0) / n;
-    const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / n;
+    const mean = values.reduce(/** @param {number} s @param {number} v */(s, v) => s + v, 0) / n;
+    const variance = values.reduce(/** @param {number} s @param {number} v */(s, v) => s + (v - mean) ** 2, 0) / n;
     return { mean, std: Math.sqrt(variance), count: n };
 };
 
+/**
+ * @param {number} value
+ * @param {{mean: number, std: number}} stats
+ * @returns {number}
+ */
 export const computeZScore = (value, stats) => {
     if (!stats || stats.std === 0 || !isFinite(stats.std)) return 0;
     return (value - stats.mean) / stats.std;
 };
 
+/**
+ * @param {*} time
+ * @returns {boolean}
+ */
 const isValidSpikeTime = (time) => typeof time === 'number' && isFinite(time) && time > 0;
 
+/**
+ * @param {any[]} spikes
+ */
 export const renderSpikesList = (spikes) => {
     const listEl = document.getElementById('spikes-list');
+    if (!listEl) return;
 
     if (spikes.length === 0) {
         listEl.innerHTML = '<div class="loading-placeholder">No significant spikes detected</div>';
@@ -73,7 +96,7 @@ export const renderSpikesList = (spikes) => {
         return;
     }
 
-    listEl.innerHTML = validSpikes.map((spike, idx) => {
+    listEl.innerHTML = validSpikes.map(/** @param {any} spike @param {number} idx */(spike, idx) => {
         const date = new Date(spike.time);
         const timeStr = date.toLocaleString('en-US', {
             month: 'short',
@@ -112,12 +135,14 @@ export const renderSpikesList = (spikes) => {
         `;
     }).join('');
 
-    const trigger = (spike) => { if (isValidSpikeTime(spike.time)) investigateSpike(spike.time); };
+    /** @param {any} spike */ const trigger = (spike) => { if (isValidSpikeTime(spike.time)) investigateSpike(spike.time); };
     listEl.querySelectorAll('.spike-card').forEach(card => {
-        const spike = validSpikes[Number(card.dataset.spikeIndex)];
+        const el = /** @type {HTMLElement} */ (card);
+        const spike = validSpikes[Number(el.dataset.spikeIndex)];
         card.addEventListener('click', () => trigger(spike));
-        card.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
+        card.addEventListener('keydown', /** @param {Event} e */(e) => {
+            const ke = /** @type {KeyboardEvent} */ (e);
+            if (ke.key === 'Enter' || ke.key === ' ') {
                 e.preventDefault();
                 trigger(spike);
             }
@@ -125,10 +150,15 @@ export const renderSpikesList = (spikes) => {
     });
 };
 
+/**
+ * @param {number} timestamp
+ */
 export const investigateSpike = async (timestamp) => {
     const investigationEl = document.getElementById('spike-investigation');
     const detailsEl = document.getElementById('spike-details');
     const sessionsEl = document.getElementById('spike-sessions');
+
+    if (!investigationEl || !detailsEl || !sessionsEl) return;
 
     investigationEl.style.display = 'block';
     detailsEl.innerHTML = '<div class="loading-placeholder">Investigating...</div>';
@@ -144,13 +174,17 @@ export const investigateSpike = async (timestamp) => {
         const data = await response.json();
         renderInvestigation(data);
     } catch (err) {
-        detailsEl.innerHTML = `<div class="loading-placeholder">Error: ${escapeHtml(err.message)}</div>`;
+        detailsEl.innerHTML = `<div class="loading-placeholder">Error: ${escapeHtml(/** @type {Error} */ (err).message)}</div>`;
     }
 };
 
+/**
+ * @param {*} data
+ */
 export const renderInvestigation = (data) => {
     const detailsEl = document.getElementById('spike-details');
     const sessionsEl = document.getElementById('spike-sessions');
+    if (!detailsEl || !sessionsEl) return;
 
     const sources = (data.summary.topModel && data.summary.topModel !== 'unknown')
         ? [data.summary.topModel]
@@ -185,12 +219,12 @@ export const renderInvestigation = (data) => {
 
     sessionsEl.innerHTML = `
         <h5>Top Contributing Sessions</h5>
-        ${data.sessions.map((session, idx) => `
+        ${data.sessions.map(/** @param {any} session @param {number} idx */(session, idx) => `
             <div class="session-accordion">
                 <div class="session-accordion-header" data-session-index="${idx}" role="button" tabindex="0" aria-expanded="false">
                     <div class="session-accordion-title">
                         <span class="session-id">${escapeHtml(session.id)}</span>
-                        ${session.models && session.models.length ? `<span class="session-models-inline">${session.models.map(m => `<span class="session-model-tag">${escapeHtml(displayModel(m))}</span>`).join('')}</span>` : ''}
+                        ${session.models && session.models.length ? `<span class="session-models-inline">${session.models.map(/** @param {any} m */ m => `<span class="session-model-tag">${escapeHtml(displayModel(m))}</span>`).join('')}</span>` : ''}
                     </div>
                     <div class="session-accordion-meta">
                         <span class="session-cost">$${session.cost.toFixed(2)}</span>
@@ -201,7 +235,7 @@ export const renderInvestigation = (data) => {
                 <div class="session-accordion-body" id="spike-session-body-${idx}" style="display:none;">
                     ${session.previews && session.previews.length ? `
                         <div class="preview-cards">
-                            ${session.previews.map((preview, i) => `
+                            ${session.previews.map(/** @param {any} preview @param {number} i */(preview, i) => `
                                 <div class="preview-card">
                                     <div class="preview-label">Message ${i + 1}</div>
                                     <div class="preview-text">${escapeHtml(preview)}</div>
@@ -215,16 +249,21 @@ export const renderInvestigation = (data) => {
     `;
 
     sessionsEl.querySelectorAll('.session-accordion-header').forEach(header => {
-        header.addEventListener('click', () => toggleSpikeSession(Number(header.dataset.sessionIndex)));
-        header.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
+        const el = /** @type {HTMLElement} */ (header);
+        header.addEventListener('click', () => toggleSpikeSession(Number(el.dataset.sessionIndex)));
+        header.addEventListener('keydown', /** @param {Event} e */(e) => {
+            const ke = /** @type {KeyboardEvent} */ (e);
+            if (ke.key === 'Enter' || ke.key === ' ') {
                 e.preventDefault();
-                toggleSpikeSession(Number(header.dataset.sessionIndex));
+                toggleSpikeSession(Number(el.dataset.sessionIndex));
             }
         });
     });
 };
 
+/**
+ * @param {number} idx
+ */
 export const toggleSpikeSession = (idx) => {
     const body = document.getElementById(`spike-session-body-${idx}`);
     const header = body?.previousElementSibling;
@@ -239,6 +278,7 @@ export const toggleSpikeSession = (idx) => {
 };
 
 export const closeInvestigation = () => {
-    document.getElementById('spike-investigation').style.display = 'none';
+    /** @type {HTMLElement|null} */ const el = document.getElementById('spike-investigation');
+    if (el) el.style.display = 'none';
 };
 
