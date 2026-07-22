@@ -1,8 +1,13 @@
 import { CHART_COLORS, historyData, fileHistoricalData, isCompactViewport, getPlotlyLayout, getCutoffTime, analyticsRange, setAnalyticsRange, resolveAvailableRange } from './shared.js';
 
+/**
+ * @param {HTMLElement|null|undefined} container
+ */
 export function renderTimelineTab(container) {
     if (!container) container = document.getElementById('timeline-chart-container');
-    if (!container || typeof Plotly === 'undefined') return;
+    /** @type {any} */
+    const Plotly = /** @type {any} */ (globalThis)['Plotly'];
+    if (!container || !Plotly) return;
 
     const sourceData = fileHistoricalData.length > 0 ? fileHistoricalData : historyData;
     const resolvedRange = resolveAvailableRange(sourceData, analyticsRange);
@@ -18,6 +23,7 @@ export function renderTimelineTab(container) {
 
     // If even "all" has insufficient data, show the empty state.
     if (filtered.length < 2) {
+        /** @type {Record<string, string>} */
         const rangeLabels = { '1h': '1 hour', '24h': '24 hours', '7d': '7 days', '30d': '30 days', 'all': 'all time' };
         const currentRange = rangeLabels[analyticsRange] || analyticsRange;
         container.innerHTML = `

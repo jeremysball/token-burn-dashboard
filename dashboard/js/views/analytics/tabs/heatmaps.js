@@ -11,6 +11,10 @@ import {
 // cache/reasoning totals. We never fall back to local hardcoded pricing or a
 // constant rate; if a model has no Models.dev price we mark it unpriced so the
 // UI can surface an explicit "price unavailable" state.
+/**
+ * @param {*} d
+ * @returns {{total: number, unpriced: boolean}}
+ */
 const computeBucketCost = (d) => {
     let total = 0;
     let unpriced = false;
@@ -50,6 +54,11 @@ const computeBucketCost = (d) => {
     return { total: 0, unpriced: true };
 };
 
+/**
+ * @param {boolean} isCost
+ * @param {boolean} unpriced
+ * @returns {string}
+ */
 const renderMetricBanner = (isCost, unpriced) => {
     if (!isCost) return '';
     if (isCatalogFailed()) {
@@ -81,11 +90,14 @@ export const retryModelsDevPricing = () => {
 
 let heatmapMetric = 'tokens';
 
+/**
+ * @param {string} m
+ */
 export const setHeatmapMetric = (m) => {
     if (m !== 'tokens' && m !== 'cost') return;
     heatmapMetric = m;
     document.querySelectorAll('#heatmap-metric-toggle button').forEach(b => {
-        b.classList.toggle('active', b.dataset.metric === m);
+        b.classList.toggle('active', /** @type {HTMLElement} */ (b).dataset.metric === m);
     });
     if (m === 'cost' && !getCatalog()) {
         // Kick off catalog load; re-render safely when it settles.
@@ -100,11 +112,14 @@ export const setHeatmapMetric = (m) => {
     renderHeatmapsTab();
 };
 
+/**
+ * @param {HTMLElement} [container]
+ */
 export function renderHeatmapsTab(container) {
-    if (!container) container = document.getElementById('heatmaps-container');
+    if (!container) container = /** @type {HTMLElement} */ (document.getElementById('heatmaps-container'));
     if (!container) return;
 
-    const heatmapType = document.getElementById('heatmap-type')?.value || 'hourly';
+    const heatmapType = /** @type {HTMLSelectElement} */ (document.getElementById('heatmap-type'))?.value || 'hourly';
     const sourceData = fileHistoricalData.length > 0 ? fileHistoricalData : historyData;
 
     if (sourceData.length === 0) {
@@ -128,13 +143,18 @@ export function renderHeatmapsTab(container) {
     }
 }
 
+/**
+ * @param {HTMLElement} container
+ * @param {Array<*>} data
+ * @param {string} [metric]
+ */
 export function renderHourlyHeatmap(container, data, metric = 'tokens') {
     // Create 7 days x 24 hours matrix
     const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const matrix = Array(7).fill(null).map(() => Array(24).fill(0));
     let unpriced = false;
 
-    data.forEach(d => {
+    data.forEach(/** @param {*} d */ d => {
         const date = new Date(d.time);
         // UTC accessors keep grouping independent of the viewer's timezone and
         // consistent with the historical labels elsewhere in this view.
@@ -201,11 +221,17 @@ export function renderHourlyHeatmap(container, data, metric = 'tokens') {
     bindHeatmapInteractions(container);
 }
 
+/**
+ * @param {HTMLElement} container
+ * @param {Array<*>} data
+ * @param {string} [metric]
+ */
 export function renderDailyHeatmap(container, data, metric = 'tokens') {
     // Group by date
+    /** @type {Record<string, number>} */
     const byDate = {};
     let unpriced = false;
-    data.forEach(d => {
+    data.forEach(/** @param {*} d */ d => {
         const date = new Date(d.time).toISOString().split('T')[0];
         if (!byDate[date]) byDate[date] = 0;
         let value = d.total || 0;
@@ -272,13 +298,20 @@ export function renderDailyHeatmap(container, data, metric = 'tokens') {
     bindHeatmapInteractions(container);
 }
 
+/**
+ * @param {HTMLElement} container
+ * @param {Array<*>} data
+ * @param {string} [metric]
+ */
 export function renderModelHeatmap(container, data, metric = 'tokens') {
     // Get model usage over time
+    /** @type {Record<string, Record<string, number>>} */
     const modelUsage = {};
+    /** @type {string[]} */
     const timeSlots = [];
     let unpriced = false;
 
-    data.forEach(d => {
+    data.forEach(/** @param {*} d */ d => {
         const timeKey = new Date(d.time).toISOString().slice(0, 13); // Hourly buckets
         if (!timeSlots.includes(timeKey)) timeSlots.push(timeKey);
 
@@ -324,7 +357,7 @@ export function renderModelHeatmap(container, data, metric = 'tokens') {
                             day: 'numeric',
                             timeZone: 'UTC'
                         });
-                        const label = isNaN(dt)
+                        const label = isNaN(/** @type {number} */ (/** @type {*} */ (dt)))
                             ? t.slice(11, 16)
                             : `${dateLabel} ${String(dt.getUTCHours()).padStart(2, '0')}:00`;
                         return `<div class="heatmap-x-label">${label}</div>`;

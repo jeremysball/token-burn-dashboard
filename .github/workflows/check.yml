@@ -1,0 +1,36 @@
+name: check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    name: check / ${{ matrix.leg }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        leg: [lint, typecheck, unit]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: lint
+        if: matrix.leg == 'lint'
+        run: npm run lint
+
+      - name: typecheck
+        if: matrix.leg == 'typecheck'
+        run: npm run typecheck
+
+      - name: unit
+        if: matrix.leg == 'unit'
+        run: npm test

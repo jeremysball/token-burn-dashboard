@@ -5,6 +5,7 @@ import {
 import { getGitBlameCache } from './shared.js';
 
 // ===== DEEP INSIGHTS TAB =====
+/** @type {any[]|null} */
 let insightsCache = null;
 let insightsCacheTime = 0;
 
@@ -45,7 +46,10 @@ export const generateDeepInsights = () => {
 };
 
 export const calculateDeepInsights = () => {
-    const { tokens_by_model, costs_by_model, total_tokens, total_cost, files_processed, total_lines } = currentData;
+    const data = currentData;
+    if (!data) return [];
+
+    const { tokens_by_model, costs_by_model, total_tokens, total_cost, files_processed, total_lines } = data;
     const sourceData = fileHistoricalData.length > 0 ? fileHistoricalData : historyData;
     const models = Object.entries(tokens_by_model);
 
@@ -74,8 +78,8 @@ export const calculateDeepInsights = () => {
     }
 
     // 2. Cache Efficiency - Calculate real savings from model pricing
-    const totalCacheRead = currentData.total_cache_read || 0;
-    const totalInput = currentData.total_input || 0;
+    const totalCacheRead = data.total_cache_read || 0;
+    const totalInput = data.total_input || 0;
     const cacheRate = totalCacheRead / (totalInput + totalCacheRead || 1);
 
     // Use each model's own cache discount. Applying the top model's pricing to
@@ -107,7 +111,7 @@ export const calculateDeepInsights = () => {
         ? models.slice().sort((a, b) =>
             (costs_by_model?.[b[0]]?.total || 0) - (costs_by_model?.[a[0]]?.total || 0))[0][0]
         : null;
-    const pricing = getPricingForModel(topModel) || { input: 3, output: 15, cacheRead: 0.3 };
+    const pricing = getPricingForModel(topModel || '') || { input: 3, output: 15, cacheRead: 0.3 };
 
     // Real cache discount ratio derived from model pricing (cacheRead/input),
     // preferring the blended per-model ratio so the displayed discount
@@ -238,8 +242,8 @@ export const calculateDeepInsights = () => {
     }
 
     // 7. Input/Output with actionable insight
-    const inputRatio = currentData.total_input / (total_tokens || 1);
-    const outputRatio = currentData.total_output / (total_tokens || 1);
+    const inputRatio = data.total_input / (total_tokens || 1);
+    const outputRatio = data.total_output / (total_tokens || 1);
     const ratio = outputRatio > 0 ? inputRatio / outputRatio : 0;
 
     insights.push({
@@ -260,23 +264,25 @@ export const calculateDeepInsights = () => {
     });
 
     // 8. Engineering Efficiency - tokens per LOC changed (heuristic)
-    if (currentData.total_tokens && getGitBlameCache() && getGitBlameCache().commits) {
-        const totalLOC = getGitBlameCache().commits.reduce((s, c) => s + (c.loc?.loc || 0), 0)
-            || currentData.total_lines || 0;
-        const tokPerLOC = totalLOC ? currentData.total_tokens / totalLOC : 0;
+    if (data.total_tokens && getGitBlameCache() && getGitBlameCache().commits) {
+        const totalLOC = getGitBlameCache().commits.reduce(
+            /** @param {number} s @param {{loc?: {loc?: number}}} c */ (s, c) => s + (c.loc?.loc || 0), 0
+        )
+            || data.total_lines || 0;
+        const tokPerLOC = totalLOC ? data.total_tokens / totalLOC : 0;
         insights.push({
             icon: '·',
             title: 'Eng Efficiency',
             value: tokPerLOC ? `${fmtNum(tokPerLOC)} tok/LOC` : 'n/a',
             description: 'Tokens per line changed - lower is more efficient. Heuristic.',
-            detail: `${fmtNum(currentData.total_tokens)} tokens / ${fmtNum(totalLOC)} LOC (git shortstat)`,
+            detail: `${fmtNum(data.total_tokens)} tokens / ${fmtNum(totalLOC)} LOC (git shortstat)`,
             type: 'info'
         });
     }
 
     // 9. Cost per commit (heuristic)
-    if (getGitBlameCache()?.commits?.length && currentData.total_cost?.total) {
-        const avg = currentData.total_cost.total / getGitBlameCache().commits.length;
+    if (getGitBlameCache()?.commits?.length && data.total_cost?.total) {
+        const avg = data.total_cost.total / getGitBlameCache().commits.length;
         insights.push({
             icon: '$',
             title: 'Cost / Commit',
@@ -290,6 +296,7 @@ export const calculateDeepInsights = () => {
     return insights;
 };
 
+/** @param {HTMLElement} container @param {any[]} insights */
 export const renderInsightsCards = (container, insights) => {
     container.innerHTML = insights.map((insight, i) => `
         <div class="insight-card--deep" style="animation-delay: ${i * 0.1}s">
@@ -308,10 +315,10 @@ export const renderInsightsCards = (container, insights) => {
 
 export const generateLLMInsights = async () => {
     const container = document.getElementById('llm-insights-content');
-    const btn = document.querySelector('.llm-analyze-btn');
+    const btn = /** @type {HTMLButtonElement|null} */ (document.querySelector('.llm-analyze-btn'));
     const statusEl = document.getElementById('analysis-status');
 
-    if (!container || !btn) return;
+    if (!container || !btn || !currentData) return;
 
     btn.disabled = true;
     if (statusEl) {
@@ -410,9 +417,9 @@ export const generateLLMInsights = async () => {
             statusEl.textContent = '✗ Failed';
             statusEl.className = 'analysis-status error';
         }
-        const message = err.name === 'AbortError'
-            ? 'Analysis timed out waiting for a response.'
-            : (err.message || 'Unable to connect to analysis service');
+        const message = err instanceof Error
+            ? (err.name === 'AbortError' ? 'Analysis timed out waiting for a response.' : (err.message || 'Unable to connect to analysis service'))
+            : 'Unable to connect to analysis service';
         container.innerHTML = `
             <div class="llm-error">
                 <p><strong>AI Analysis Failed</strong></p>
@@ -428,6 +435,7 @@ export const generateLLMInsights = async () => {
     btn.disabled = false;
 };
 
+/** @param {string} text @param {string|null} [warningMessage] */
 export const renderLLMInsights = (text, warningMessage = null) => {
     const container = document.getElementById('llm-insights-content');
     if (!container) return;
