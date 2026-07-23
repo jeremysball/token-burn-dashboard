@@ -59,6 +59,6 @@ export default [
     }
   },
   {
-    ignores: ['node_modules/**', 'dist/**', 'coverage/**', 'test-results/**']
+    ignores: ['node_modules/**', 'dist/**', 'dist-dashboard/**', 'coverage/**', 'test-results/**']
   }
 ];

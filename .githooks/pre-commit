@@ -11,17 +11,16 @@ if [ -n "$staged_js" ]; then
     IFS='
 '
     for f in $staged_js; do
-        case "$f" in
-            dashboard/js/*)
-                # Browser-side ES modules — root package.json declares
-                # "type": "commonjs" for the Node backend, so node --check
-                # would otherwise reject their top-level import statements.
-                node --input-type=module --check < "$f" || exit 1
-                ;;
-            *)
-                node --check "$f" || exit 1
-                ;;
-        esac
+        # Detect ES modules by content rather than path: root package.json
+        # declares "type": "commonjs" for the Node backend, so node --check
+        # would otherwise reject top-level import/export statements used by
+        # browser-side dashboard code, config files (e.g. vite.config.js),
+        # and test files transformed by Jest/Babel.
+        if git show ":$f" | rg -q '^\s*(import|export)\s'; then
+            node --input-type=module --check < "$f" || exit 1
+        else
+            node --check "$f" || exit 1
+        fi
     done
     IFS=$old_ifs
 

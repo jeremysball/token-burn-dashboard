@@ -1,0 +1,20 @@
+services:
+  dashboard:
+    image: ghcr.io/jeremysball/token-burn-dashboard:latest
+    ports:
+      - "7071:7071"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 7071
+      DASHBOARD_PROJECT_ROOT: /home/app/projects
+      # Uncomment to require a bearer token on API requests.
+      # DASHBOARD_AUTH_TOKEN: change-me
+      # Uncomment and set to restrict CORS to specific origins.
+      # ALLOWED_ORIGINS: https://dashboard.example.com
+    volumes:
+      # Session data the dashboard reads usage from (read-only).
+      - ${HOME}/.claude/projects:/home/app/.claude/projects:ro
+      - ${HOME}/.pi:/home/app/.pi:ro
+      # Git repos the "Git Blame for AI" tab shells out to `git` against.
+      - ${DASHBOARD_PROJECT_ROOT:-${HOME}}:/home/app/projects:ro
+    restart: unless-stopped
