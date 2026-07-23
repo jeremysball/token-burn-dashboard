@@ -90,6 +90,59 @@ describe('extractHistoricalData ISO timestamp regression', () => {
     expect(data[0].total).toBe(2);
   });
 
+  it('handles a mix of numeric epoch-ms and ISO-string timestamps', async () => {
+    const t1 = new Date('2026-07-10T05:00:00Z');
+    const t2 = new Date('2026-07-10T05:30:00Z'); // same UTC hour bucket
+    const otherHour = new Date('2026-07-10T07:00:00Z'); // different bucket
+
+    const file = writeTemp([
+      JSON.stringify({
+        type: 'message',
+        message: {
+          model: 'claude',
+          provider: 'anthropic',
+          timestamp: t1.getTime(),
+          usage: { input: 100, output: 100, totalTokens: 200 }
+        }
+      }),
+      JSON.stringify({
+        type: 'message',
+        message: {
+          model: 'gpt-4',
+          provider: 'openai',
+          timestamp: t2.toISOString(),
+          usage: { input: 50, output: 50, totalTokens: 100 }
+        }
+      }),
+      JSON.stringify({
+        type: 'message',
+        message: {
+          model: 'gemini',
+          provider: 'google',
+          timestamp: otherHour.getTime(),
+          usage: { input: 10, output: 10, totalTokens: 20 }
+        }
+      })
+    ]);
+    tempFiles.push(file);
+    findAllSessionFiles.mockReturnValue([{ path: file, source: 'pi' }]);
+
+    const data = await extractHistoricalData();
+
+    expect(data.length).toBe(2);
+
+    const bucket1 = Math.floor(t1.getTime() / (3600 * 1000)) * (3600 * 1000);
+    const bucket2 = Math.floor(otherHour.getTime() / (3600 * 1000)) * (3600 * 1000);
+
+    const b1 = data.find(b => b.time === bucket1);
+    const b2 = data.find(b => b.time === bucket2);
+
+    expect(b1).toBeDefined();
+    expect(b2).toBeDefined();
+    expect(b1.total).toBe(300);
+    expect(b2.total).toBe(20);
+  });
+
   it('ignores events with invalid timestamps', async () => {
     const file = writeTemp([
       JSON.stringify({
