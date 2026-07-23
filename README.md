@@ -66,6 +66,43 @@ npm run dev
 open http://localhost:7071
 ```
 
+## Docker
+
+A pre-built image is published to GHCR on every push to `main` via
+[`.github/workflows/build.yml`](.github/workflows/build.yml), tagged both
+`:latest` and `:sha-<short-commit>`:
+
+```
+ghcr.io/jeremysball/token-burn-dashboard:latest
+```
+
+### docker-compose
+
+```bash
+docker compose up -d
+```
+
+See [`docker-compose.yml`](docker-compose.yml). It mounts `~/.claude/projects`
+and `~/.pi` (read-only) so the dashboard can find session data, and binds
+`HOST=0.0.0.0` so the container is reachable from outside itself. Set
+`DASHBOARD_PROJECT_ROOT` (or just rely on the `${HOME}` default) to point the
+"Git Blame for AI" tab at the directory containing the git repos you want it
+to shell out against. Uncomment `DASHBOARD_AUTH_TOKEN`/`ALLOWED_ORIGINS` in the
+compose file to lock down access before exposing this beyond localhost.
+
+### Plain `docker run`
+
+```bash
+docker run -d \
+  -p 7071:7071 \
+  -e HOST=0.0.0.0 \
+  -v ~/.claude/projects:/home/app/.claude/projects:ro \
+  -v ~/.pi:/home/app/.pi:ro \
+  -v ~/workspace:/home/app/projects:ro \
+  -e DASHBOARD_PROJECT_ROOT=/home/app/projects \
+  ghcr.io/jeremysball/token-burn-dashboard:latest
+```
+
 ## Development
 
 ### Testing

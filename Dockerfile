@@ -1,12 +1,23 @@
 # syntax=docker/dockerfile:1
 
-# Builder stage: install production dependencies with cache-friendly layering.
-FROM node:22-bookworm-slim AS builder
+# Deps stage: install production dependencies with cache-friendly layering.
+FROM node:22-bookworm-slim AS deps
 
 WORKDIR /app
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
+
+# Build stage: full install (incl. Vite) to produce the dist-dashboard/ bundle.
+FROM node:22-bookworm-slim AS build
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY vite.config.js ./vite.config.js
+COPY dashboard ./dashboard
+RUN npm run build:ui
 
 # Runtime stage: minimal Node.js image with only the tools this app actually needs.
 FROM node:22-bookworm-slim AS runtime
@@ -24,10 +35,10 @@ RUN apt-get update && \
     groupadd --gid 10001 app && \
     useradd --create-home --gid 10001 --home-dir /home/app --shell /usr/sbin/nologin --uid 10001 app
 
-COPY --from=builder --chown=app:app /app/node_modules ./node_modules
+COPY --from=deps --chown=app:app /app/node_modules ./node_modules
+COPY --from=build --chown=app:app /app/dist-dashboard ./dist-dashboard
 COPY --chown=app:app server.js ./server.js
 COPY --chown=app:app lib ./lib
-COPY --chown=app:app dashboard ./dashboard
 COPY --chown=app:app src ./src
 
 USER app
