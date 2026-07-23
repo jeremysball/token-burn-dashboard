@@ -3,6 +3,7 @@ import { setCurrentView, loadCache, loadHistoryFromCache } from './state.js';
 import { connectSSE, updateData, refreshData } from './api.js';
 import { renderDashboard, updateDashboardCharts } from './views/dashboard.js';
 import { renderAnalytics, setAnalyticsTabHandler, setAnalyticsRangeHandler, loadGitBlame, loadSpikes } from './views/analytics.js';
+import { loadPricing } from './config.js';
 
 // ===== ANIMATED NUMBER COUNTER =====
 
@@ -269,7 +270,7 @@ export const getSavedTheme = () => {
     }
 };
 
-const init = () => {
+const init = async () => {
     // Load theme
     const savedTheme = getSavedTheme();
     document.documentElement.setAttribute('data-theme', savedTheme);
@@ -291,6 +292,10 @@ const init = () => {
     document.querySelectorAll('.nav-btn').forEach(el => {
         el.addEventListener('click', () => setView(/** @type {HTMLElement} */ (el).dataset.view ?? 'dashboard'));
     });
+
+    // Load pricing table before the first render so the dashboard doesn't
+    // flash default pricing while the fetch is in flight.
+    await loadPricing();
 
     // Initial render with animation
     const viewDashboard = document.getElementById('view-dashboard');
