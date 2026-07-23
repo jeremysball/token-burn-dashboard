@@ -3,6 +3,7 @@ import { setCurrentView, loadCache, loadHistoryFromCache } from './state.js';
 import { connectSSE, updateData, refreshData } from './api.js';
 import { renderDashboard, updateDashboardCharts } from './views/dashboard.js';
 import { renderAnalytics, setAnalyticsTabHandler, setAnalyticsRangeHandler, loadGitBlame, loadSpikes } from './views/analytics.js';
+import { loadPricing } from './config.js';
 
 // ===== ANIMATED NUMBER COUNTER =====
 
@@ -296,6 +297,9 @@ const init = () => {
     const viewDashboard = document.getElementById('view-dashboard');
     if (viewDashboard) viewDashboard.classList.add('active');
     setView('dashboard');
+
+    // Load pricing table from server (non-blocking; getPricing falls back to defaults)
+    loadPricing();
 
     // Fetch fresh data (includes historical for charts)
     refreshData();
