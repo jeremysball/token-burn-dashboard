@@ -401,13 +401,6 @@ export const generateLLMInsights = async () => {
                 statusEl.className = 'analysis-status taskferry';
             }
             renderLLMInsights(data.insights);
-        } else if (data.source === 'local') {
-            // Server fell back to local - show warning that AI wasn't available
-            if (statusEl) {
-                statusEl.textContent = '⚠ AI Unavailable';
-                statusEl.className = 'analysis-status warning';
-            }
-            renderLLMInsights(data.insights, 'AI analysis service unavailable. Showing local analysis instead.');
         } else {
             renderLLMInsights(data.insights);
         }
