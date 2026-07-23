@@ -7,6 +7,7 @@
  */
 Element.prototype.scrollIntoView = jest.fn();
 
+import { setPricing } from '../../dashboard/js/config.js';
 import {
     renderInsightsCards,
     renderGitBlameData,
@@ -21,6 +22,20 @@ import * as state from '../../dashboard/js/state';
 
 const XSS = '<img src=x onerror=alert(1)>';
 const QUOTE_PAYLOAD = 'x" onmouseover=alert(1)';
+
+/** @type {Array<{pattern: RegExp, input: number, output: number, cacheRead: number, cacheWrite: number}>} */
+const TEST_PRICING = [
+  { pattern: /^gpt-4o$/i, input: 2.5, output: 10, cacheRead: 1.25, cacheWrite: 0 },
+  { pattern: /gpt-4o-mini/i, input: 0.15, output: 0.6, cacheRead: 0.075, cacheWrite: 0 },
+  { pattern: /claude-3-5-sonnet/i, input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+  { pattern: /claude/i, input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+  { pattern: /deepseek-chat/i, input: 0.27, output: 1.1, cacheRead: 0.07, cacheWrite: 0 },
+  { pattern: /.*/, input: 2.5, output: 10, cacheRead: 1.25, cacheWrite: 0 },
+];
+
+beforeAll(() => {
+  setPricing(TEST_PRICING);
+});
 
 describe('renderLLMInsights XSS safety', () => {
     beforeEach(() => {
