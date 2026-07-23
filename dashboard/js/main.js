@@ -270,7 +270,7 @@ export const getSavedTheme = () => {
     }
 };
 
-const init = () => {
+const init = async () => {
     // Load theme
     const savedTheme = getSavedTheme();
     document.documentElement.setAttribute('data-theme', savedTheme);
@@ -293,13 +293,14 @@ const init = () => {
         el.addEventListener('click', () => setView(/** @type {HTMLElement} */ (el).dataset.view ?? 'dashboard'));
     });
 
+    // Load pricing table before the first render so the dashboard doesn't
+    // flash default pricing while the fetch is in flight.
+    await loadPricing();
+
     // Initial render with animation
     const viewDashboard = document.getElementById('view-dashboard');
     if (viewDashboard) viewDashboard.classList.add('active');
     setView('dashboard');
-
-    // Load pricing table from server (non-blocking; getPricing falls back to defaults)
-    loadPricing();
 
     // Fetch fresh data (includes historical for charts)
     refreshData();
