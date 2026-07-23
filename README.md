@@ -66,6 +66,43 @@ npm run dev
 open http://localhost:7071
 ```
 
+## Docker
+
+A pre-built image is published to GHCR on every push to `main` via
+[`.github/workflows/build.yml`](.github/workflows/build.yml), tagged both
+`:latest` and `:sha-<short-commit>`:
+
+```
+ghcr.io/jeremysball/token-burn-dashboard:latest
+```
+
+### docker-compose
+
+```bash
+docker compose up -d
+```
+
+See [`docker-compose.yml`](docker-compose.yml). It mounts `~/.claude/projects`
+and `~/.pi` (read-only) so the dashboard can find session data, and binds
+`HOST=0.0.0.0` so the container is reachable from outside itself. Set
+`DASHBOARD_PROJECT_ROOT` (or just rely on the `${HOME}` default) to point the
+"Git Blame for AI" tab at the directory containing the git repos you want it
+to shell out against. Uncomment `DASHBOARD_AUTH_TOKEN`/`ALLOWED_ORIGINS` in the
+compose file to lock down access before exposing this beyond localhost.
+
+### Plain `docker run`
+
+```bash
+docker run -d \
+  -p 7071:7071 \
+  -e HOST=0.0.0.0 \
+  -v ~/.claude/projects:/home/app/.claude/projects:ro \
+  -v ~/.pi:/home/app/.pi:ro \
+  -v ~/workspace:/home/app/projects:ro \
+  -e DASHBOARD_PROJECT_ROOT=/home/app/projects \
+  ghcr.io/jeremysball/token-burn-dashboard:latest
+```
+
 ## Development
 
 ### Testing
@@ -82,6 +119,32 @@ npm run lint
 # Fix linting issues
 npm run lint:fix
 ```
+
+### Frontend dev server (HMR)
+
+The dashboard frontend can also be served through Vite for hot module
+reloading during UI work:
+
+```bash
+# Terminal 1: backend API
+npm run dev
+
+# Terminal 2: Vite dev server with HMR, proxying /api to the backend
+npm run dev:ui
+```
+
+Vite serves the dashboard on its own port and proxies `/api` requests to the
+backend (`http://127.0.0.1:7071` by default, override with `BACKEND_URL`).
+
+### Building the frontend for production
+
+```bash
+npm run build:ui
+```
+
+This bundles `dashboard/` into `dist-dashboard/`. When `server.js` is started
+with `NODE_ENV=production`, it serves `dist-dashboard/` instead of the raw
+`dashboard/` source (talking to Vite at all only happens in dev mode above).
 
 ### Testing Stack
 - **Jest** - Test runner with coverage
