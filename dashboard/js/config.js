@@ -35,44 +35,74 @@ export const CHART_COLORS = [
     '#c084fc', // purple
 ];
 
-// ===== MODEL PRICING =====
-// Keep in sync with lib/pricing.js on server
-export const MODEL_PRICING = [
-    // OpenAI
-    { pattern: /^gpt-4o$/i, input: 2.5, output: 10, cacheRead: 1.25, cacheWrite: 0 },
-    { pattern: /gpt-4o-mini/i, input: 0.15, output: 0.6, cacheRead: 0.075, cacheWrite: 0 },
-    { pattern: /o1$/i, input: 15, output: 60, cacheRead: 7.5, cacheWrite: 0 },
-    { pattern: /o3-mini/i, input: 1.1, output: 4.4, cacheRead: 0.55, cacheWrite: 0 },
-    // Claude
-    { pattern: /claude-3-5-sonnet/i, input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
-    { pattern: /claude-3-opus/i, input: 15, output: 75, cacheRead: 1.5, cacheWrite: 18.75 },
-    { pattern: /claude-3-haiku/i, input: 0.25, output: 1.25, cacheRead: 0.03, cacheWrite: 0.3 },
-    { pattern: /claude/i, input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
-    // DeepSeek
-    { pattern: /deepseek-chat/i, input: 0.27, output: 1.1, cacheRead: 0.07, cacheWrite: 0 },
-    { pattern: /deepseek-reasoner/i, input: 0.55, output: 2.19, cacheRead: 0.14, cacheWrite: 0 },
-    // Gemini
-    { pattern: /gemini-1\.5-pro/i, input: 1.25, output: 5, cacheRead: 0, cacheWrite: 0 },
-    { pattern: /gemini-1\.5-flash/i, input: 0.075, output: 0.3, cacheRead: 0, cacheWrite: 0 },
-    { pattern: /gemini/i, input: 0.5, output: 1.5, cacheRead: 0, cacheWrite: 0 },
-    // Kimi
-    { pattern: /k2p5|kimi-k2/i, input: 1.5, output: 6, cacheRead: 0.375, cacheWrite: 1.875 },
-    // GLM
-    { pattern: /glm/i, input: 1, output: 3, cacheRead: 0, cacheWrite: 0 },
-    // Default fallback
-    { pattern: /.*/, input: 2.5, output: 10, cacheRead: 1.25, cacheWrite: 0 },
-];
+// ===== MODEL PRICING (fetched from server) =====
+// Single source of truth: lib/pricing.js on the server.
+// This module caches the pricing table fetched from GET /api/pricing.
+
+/** @type {Array<{pattern: RegExp, input: number, output: number, cacheRead: number, cacheWrite: number}>} */
+let _pricing = [];
+
+const DEFAULT_PRICING = { input: 2.5, output: 10, cacheRead: 1.25, cacheWrite: 0 };
+
+/**
+ * Parse a regex string returned by the server (e.g. "/^gpt-4o$/i") back into a RegExp.
+ * @param {string} str
+ * @returns {RegExp}
+ */
+function _parsePattern(str) {
+    const m = str.match(/^\/(.*)\/([gimsuys]*)$/);
+    if (m) return new RegExp(m[1], m[2]);
+    return /.*/;
+}
+
+/**
+ * Fetch the pricing table from the server.
+ * Safe to call multiple times; updates replace the in-memory cache.
+ */
+export async function loadPricing() {
+    try {
+        const res = await fetch('/api/pricing');
+        if (!res.ok) throw new Error(`Failed to load pricing: ${res.status}`);
+        const data = /** @type {Array<{pattern: string, input: number, output: number, cacheRead: number, cacheWrite: number}>} */ (await res.json());
+        _pricing = data.map(p => ({
+            pattern: _parsePattern(p.pattern),
+            input: p.input,
+            output: p.output,
+            cacheRead: p.cacheRead,
+            cacheWrite: p.cacheWrite
+        }));
+    } catch (err) {
+        console.warn('Could not fetch pricing from server, using defaults:', err instanceof Error ? err.message : String(err));
+        _pricing = [{ pattern: /.*/, ...DEFAULT_PRICING }];
+    }
+}
+
+/**
+ * Set pricing data directly (for testing).
+ * @param {Array<{pattern: RegExp, input: number, output: number, cacheRead: number, cacheWrite: number}>} data
+ */
+export function setPricing(data) {
+    _pricing = data;
+}
+
+/** @returns {Array<{pattern: RegExp, input: number, output: number, cacheRead: number, cacheWrite: number}>} */
+export function getModelPricing() {
+    return _pricing;
+}
 
 /** @param {string} modelName */
 export const getPricing = (modelName) => {
+    const arr = _pricing;
+    if (arr.length === 0) return { ...DEFAULT_PRICING, source: 'local' };
+
     const name = String(modelName || '').toLowerCase();
     const { model } = splitModelKey(name);
     const modelOnly = model || name;
 
-    for (const p of MODEL_PRICING) {
+    for (const p of arr) {
         if (p.pattern.test(modelOnly)) return p;
     }
-    return MODEL_PRICING[MODEL_PRICING.length - 1];
+    return arr[arr.length - 1];
 };
 
 /** @param {string} name @param {Record<string, *>|undefined} pricing_by_model */
