@@ -16,7 +16,7 @@ Real-time token usage analytics dashboard with cost tracking, built with a Monke
 
 ### 💰 Cost Analysis
 - Per-model cost estimation
-- Configurable pricing per 1M tokens for 10+ providers
+- Configurable pricing per 1M tokens for 6 providers
 - Total cost breakdown (input, output, cache read, cache write)
 - Cache efficiency metrics and savings calculation
 
