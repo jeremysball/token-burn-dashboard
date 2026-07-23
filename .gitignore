@@ -6,6 +6,7 @@ node_modules/
 *.jpg
 *.gif
 dist/
+dist-dashboard/
 coverage/
 test-results/
 nohup.out
@@ -13,6 +14,8 @@ test-*.js
 fix_ports.js
 .worktrees/
 .lavish/
+
+_run.sh
 
 .superpowers/*
 !.superpowers/plans/

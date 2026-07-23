@@ -83,6 +83,32 @@ npm run lint
 npm run lint:fix
 ```
 
+### Frontend dev server (HMR)
+
+The dashboard frontend can also be served through Vite for hot module
+reloading during UI work:
+
+```bash
+# Terminal 1: backend API
+npm run dev
+
+# Terminal 2: Vite dev server with HMR, proxying /api to the backend
+npm run dev:ui
+```
+
+Vite serves the dashboard on its own port and proxies `/api` requests to the
+backend (`http://127.0.0.1:7071` by default, override with `BACKEND_URL`).
+
+### Building the frontend for production
+
+```bash
+npm run build:ui
+```
+
+This bundles `dashboard/` into `dist-dashboard/`. When `server.js` is started
+with `NODE_ENV=production`, it serves `dist-dashboard/` instead of the raw
+`dashboard/` source (talking to Vite at all only happens in dev mode above).
+
 ### Testing Stack
 - **Jest** - Test runner with coverage
 - **jsdom** - Browser environment for unit tests
