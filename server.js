@@ -13,7 +13,7 @@ const { resolveCorsOrigin, isAuthorized } = require('./lib/security');
 
 // Components
 const { startBackgroundUpdater } = require('./lib/cache');
-const { handleTokensRoute, handleHistoricalRoute, handleHealthRoute, handleInsightsAnalyzeRoute, handleGitBlameRoute, handleSpikeDetectiveRoute, handleSpikesListRoute } = require('./lib/routes/api');
+const { handleTokensRoute, handleHistoricalRoute, handleHealthRoute, handleInsightsAnalyzeRoute, handleGitBlameRoute, handleSpikeDetectiveRoute, handleSpikesListRoute, handlePricingRoute } = require('./lib/routes/api');
 const { handleSseRoute } = require('./lib/routes/sse');
 const { handleStaticRoutes } = require('./lib/routes/static');
 
@@ -85,6 +85,12 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === '/api/health') {
     const result = await handleHealthRoute(req, res, requestTimeout);
+    logResponse(res.statusCode);
+    return result;
+  }
+
+  if (url.pathname === '/api/pricing') {
+    const result = handlePricingRoute(req, res, requestTimeout);
     logResponse(res.statusCode);
     return result;
   }
