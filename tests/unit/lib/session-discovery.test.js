@@ -95,6 +95,42 @@ describe('createSessionDiscovery', () => {
     expect(files.map(file => path.basename(file.path))).toEqual(['small.jsonl']);
   });
 
+  test('deduplicates Pi symlink aliases by realpath', () => {
+    const realDir = path.join(tmpBase, 'pi-dedup', 'real');
+    const aliasDir = path.join(tmpBase, 'pi-dedup', 'alias');
+    const realPath = path.join(realDir, 'session.jsonl');
+    writeFile(realPath);
+    fs.mkdirSync(aliasDir, { recursive: true });
+    fs.symlinkSync(realPath, path.join(aliasDir, 'session-alias.jsonl'));
+
+    const discovery = createDiscovery({
+      homeDir: path.join(tmpBase, 'unused-home'),
+      env: { EXTRA_SESSION_DIRS: `${realDir}:${aliasDir}` },
+      config: { MAX_FILE_BYTES: 128, CLAUDE_MAX_DEPTH: 4 },
+      visiblePaths: [realDir, aliasDir]
+    });
+    const files = discovery.findPiJsonlFiles();
+
+    expect(files).toHaveLength(1);
+    expect(fs.realpathSync(files[0].path)).toBe(realPath);
+  });
+
+  test('rejects Pi jsonl symlinks that target directories', () => {
+    const base = path.join(tmpBase, 'pi-directory-symlink');
+    const target = path.join(base, 'target');
+    fs.mkdirSync(target, { recursive: true });
+    fs.symlinkSync(target, path.join(base, 'not-a-session.jsonl'));
+
+    const discovery = createDiscovery({
+      homeDir: path.join(tmpBase, 'unused-home'),
+      env: { EXTRA_SESSION_DIRS: base },
+      config: { MAX_FILE_BYTES: 128, CLAUDE_MAX_DEPTH: 4 },
+      visiblePaths: [base]
+    });
+
+    expect(discovery.findPiJsonlFiles()).toEqual([]);
+  });
+
   test('uses injected Claude root and maximum depth when finding Claude files', () => {
     const root = path.join(tmpBase, 'claude-files');
     writeFile(path.join(root, '-project', 'session.jsonl'));
@@ -109,6 +145,23 @@ describe('createSessionDiscovery', () => {
     const files = discovery.findClaudeJsonlFiles();
 
     expect(files.map(file => path.basename(file.path))).toEqual(['session.jsonl']);
+  });
+
+  test('rejects Claude jsonl symlinks that target directories', () => {
+    const root = path.join(tmpBase, 'claude-directory-symlink');
+    const project = path.join(root, '-project');
+    const target = path.join(project, 'target');
+    fs.mkdirSync(target, { recursive: true });
+    fs.symlinkSync(target, path.join(project, 'not-a-session.jsonl'));
+
+    const discovery = createDiscovery({
+      homeDir: path.join(tmpBase, 'unused-home'),
+      env: { CLAUDE_PROJECTS_DIR: root },
+      config: { MAX_FILE_BYTES: 128, CLAUDE_MAX_DEPTH: 4 },
+      visiblePaths: [root]
+    });
+
+    expect(discovery.findClaudeJsonlFiles()).toEqual([]);
   });
 
   test('keeps production exports available alongside the factory', () => {

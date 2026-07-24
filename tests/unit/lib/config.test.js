@@ -13,12 +13,18 @@ describe('loadConfig', () => {
       ALLOWED_ORIGINS: [],
       AUTH_TOKEN: null,
       PROJECT_ROOT: '/projects/dashboard',
+      SSE_UPDATE_INTERVAL: 5000,
       MAX_REQUEST_BODY_BYTES: 1024 * 1024,
       MAX_FILE_BYTES: 100 * 1024 * 1024,
       CLAUDE_MAX_DEPTH: 4
     });
     expect(config.TOKEN_BURN_SCRIPT).toEndWith('/lib/token-burn.js');
-    expect(config.MIME_TYPES['.json']).toBe('application/json');
+    expect(config.MIME_TYPES).toMatchObject({
+      '.html': 'text/html',
+      '.css': 'text/css',
+      '.js': 'application/javascript',
+      '.json': 'application/json'
+    });
   });
 
   test('derives port, origins, auth token, and explicit project root from its environment', () => {
