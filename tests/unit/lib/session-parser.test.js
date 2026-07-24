@@ -8,6 +8,8 @@ const os = require('os');
 const path = require('path');
 const { parseJsonlFile } = require('../../../lib/session-parser');
 
+import { describe, expect, it } from 'bun:test';
+
 describe('parsePiUsage', () => {
   it('preserves explicit totalTokens of 0 (not truthy fallback)', () => {
     const u = parsePiUsage({ input: 1, output: 1, reasoning: 5, totalTokens: 0 });

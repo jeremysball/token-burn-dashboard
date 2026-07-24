@@ -14,6 +14,8 @@ const writeTemp = (lines) => {
     return file;
 };
 
+import { afterEach, describe, expect, it } from 'bun:test';
+
 describe('parseJsonlFile totalTokens handling', () => {
     it('preserves an explicit totalTokens of 0 (not truthy fallback)', () => {
         const file = writeTemp([
@@ -71,10 +73,13 @@ describe('parseJsonlFile totalTokens handling', () => {
 
 describe('runTokenBurn API wiring', () => {
     const origEnv = process.env.EXTRA_SESSION_DIRS;
+    const origClaudeProjectsDir = process.env.CLAUDE_PROJECTS_DIR;
 
     afterEach(() => {
         if (origEnv === undefined) delete process.env.EXTRA_SESSION_DIRS;
         else process.env.EXTRA_SESSION_DIRS = origEnv;
+        if (origClaudeProjectsDir === undefined) delete process.env.CLAUDE_PROJECTS_DIR;
+        else process.env.CLAUDE_PROJECTS_DIR = origClaudeProjectsDir;
     });
 
     it('honors EXTRA_SESSION_DIRS by including sessions from the configured directory', async () => {
@@ -92,7 +97,9 @@ describe('runTokenBurn API wiring', () => {
         fs.renameSync(file, path.join(tmpDir, 'extra.jsonl'));
 
         process.env.EXTRA_SESSION_DIRS = tmpDir;
-        jest.resetModules();
+        process.env.CLAUDE_PROJECTS_DIR = tmpDir;
+        delete require.cache[require.resolve('../../../lib/session-discovery')];
+        delete require.cache[require.resolve('../../../lib/token-burn')];
         const { runTokenBurn } = require('../../../lib/token-burn');
         const result = await runTokenBurn();
 
