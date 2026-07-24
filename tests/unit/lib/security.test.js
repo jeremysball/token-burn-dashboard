@@ -5,10 +5,11 @@
 
 const path = require('path');
 
+import { beforeAll, describe, expect, it, mock, test } from 'bun:test';
+
 describe('Security: isValidCommitHash', () => {
   let gitBlame;
   beforeAll(() => {
-    jest.resetModules();
     gitBlame = require('../../../lib/git-blame');
   });
 
@@ -61,7 +62,6 @@ describe('Security: isValidCommitHash', () => {
 describe('Security: safeStaticPath traversal guard', () => {
   let staticRoute;
   beforeAll(() => {
-    jest.resetModules();
     staticRoute = require('../../../lib/routes/static');
   });
 
@@ -84,7 +84,7 @@ describe('Security: safeStaticPath traversal guard', () => {
 
   test('dashboard routes are resolved against dashboard/ directory, not repo root', () => {
     const repoRoot = path.resolve(__dirname, '../../../..');
-    const res = { writeHead: jest.fn(), end: jest.fn() };
+    const res = { writeHead: mock(), end: mock() };
     const url = new URL('/dashboard/%2e%2e%2fpackage.json', 'http://localhost');
     const result = staticRoute.handleStaticRoutes(url, res, null, repoRoot);
     expect(result).toBe(true);

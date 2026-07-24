@@ -1,18 +1,17 @@
-/**
- * @jest-environment jsdom
- */
 process.env.TZ = 'America/Los_Angeles';
 
 import { renderCalendarTab } from '../../dashboard/js/views/analytics/tabs/calendar.js';
 import { calculateDeepInsights } from '../../dashboard/js/views/analytics/tabs/insights.js';
 import { setCurrentData, setHistoryData, setFileHistoricalData } from '../../dashboard/js/state.js';
 
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+
 describe('UTC presentation', () => {
     beforeEach(() => {
         document.body.innerHTML = '';
         global.Plotly = {
-            newPlot: jest.fn(() => Promise.resolve()),
-            react: jest.fn(() => Promise.resolve())
+            newPlot: mock(() => Promise.resolve()),
+            react: mock(() => Promise.resolve())
         };
         setCurrentData({
             total_tokens: 0,

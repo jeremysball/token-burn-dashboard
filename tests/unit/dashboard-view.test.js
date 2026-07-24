@@ -1,6 +1,3 @@
-/**
- * @jest-environment jsdom
- */
 
 import { renderDashboard } from '../../dashboard/js/views/dashboard.js';
 import { setCurrentData, setHistoryData } from '../../dashboard/js/state.js';
@@ -23,10 +20,12 @@ const dataForModelWithPricing = (model, pricing) => ({
   pricing_by_model: { [model]: pricing }
 });
 
+import { beforeEach, describe, expect, it, mock } from 'bun:test';
+
 describe('dashboard model cards', () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="top-models-grid"></div>';
-    window.animateNumber = jest.fn();
+    window.animateNumber = mock();
     setHistoryData([]);
   });
 

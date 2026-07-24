@@ -1,13 +1,5 @@
-/**
- * @jest-environment jsdom
- *
- * Task 10 review-fix regressions: model/commit-derived text rendered into the
- * analytics views must be HTML-escaped, and commit rows must not emit inline
- * JavaScript carrying attacker-controlled commit hashes.
- */
-Element.prototype.scrollIntoView = jest.fn();
+Element.prototype.scrollIntoView = mock();
 
-import { setPricing } from '../../dashboard/js/config.js';
 import {
     renderInsightsCards,
     renderGitBlameData,
@@ -19,23 +11,22 @@ import {
 } from '../../dashboard/js/views/analytics';
 import { renderDashboard } from '../../dashboard/js/views/dashboard.js';
 import * as state from '../../dashboard/js/state';
+import { setPricing } from '../../dashboard/js/config.js';
+const { MODEL_PRICING } = require('../../lib/pricing');
+
+// Seed frontend pricing from backend data
+setPricing(MODEL_PRICING.map(p => ({
+    pattern: new RegExp(p.pattern),
+    input: p.input,
+    output: p.output,
+    cacheRead: p.cacheRead,
+    cacheWrite: p.cacheWrite
+})));
 
 const XSS = '<img src=x onerror=alert(1)>';
 const QUOTE_PAYLOAD = 'x" onmouseover=alert(1)';
 
-/** @type {Array<{pattern: RegExp, input: number, output: number, cacheRead: number, cacheWrite: number}>} */
-const TEST_PRICING = [
-  { pattern: /^gpt-4o$/i, input: 2.5, output: 10, cacheRead: 1.25, cacheWrite: 0 },
-  { pattern: /gpt-4o-mini/i, input: 0.15, output: 0.6, cacheRead: 0.075, cacheWrite: 0 },
-  { pattern: /claude-3-5-sonnet/i, input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
-  { pattern: /claude/i, input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
-  { pattern: /deepseek-chat/i, input: 0.27, output: 1.1, cacheRead: 0.07, cacheWrite: 0 },
-  { pattern: /.*/, input: 2.5, output: 10, cacheRead: 1.25, cacheWrite: 0 },
-];
-
-beforeAll(() => {
-  setPricing(TEST_PRICING);
-});
+import { beforeEach, describe, expect, it, mock } from 'bun:test';
 
 describe('renderLLMInsights XSS safety', () => {
     beforeEach(() => {
@@ -128,7 +119,7 @@ describe('renderGitBlameData commit-list safety', () => {
     it('click still opens commit details for the correct hash', () => {
         mountGitBlameDom();
         document.body.innerHTML += '<div id="commit-details-modal"></div><div id="commit-details-content"></div>';
-        global.fetch = jest.fn(() => Promise.resolve({
+        global.fetch = mock(() => Promise.resolve({
             ok: true,
             json: () => Promise.resolve({
                 commit: { hash: 'deadbee', message: 'm', date: Date.now() },
@@ -146,7 +137,7 @@ describe('renderGitBlameData commit-list safety', () => {
     it('activates via keyboard (Enter/Space) without inline handlers', () => {
         mountGitBlameDom();
         document.body.innerHTML += '<div id="commit-details-modal"></div><div id="commit-details-content"></div>';
-        global.fetch = jest.fn(() => Promise.resolve({
+        global.fetch = mock(() => Promise.resolve({
             ok: true,
             json: () => Promise.resolve({
                 commit: { hash: 'abc1234', message: 'm', date: Date.now() },
@@ -313,8 +304,8 @@ describe('renderDashboard top-model-card attribute XSS', () => {
             <div id="top-models-grid"></div>
             <div id="insights-grid"></div>
             <div id="notifications"></div>`;
-        window.animateNumber = jest.fn();
-        window.checkThresholds = jest.fn();
+        window.animateNumber = mock();
+        window.checkThresholds = mock();
 
         const modelKey = `provider/${QUOTE_PAYLOAD}`;
         state.setCurrentData({

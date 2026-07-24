@@ -4,20 +4,26 @@
   "description": "Real-time token usage dashboard with cost analysis",
   "main": "server.js",
   "type": "commonjs",
+  "packageManager": "bun@1.3.11",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js",
-    "build": "node build.js",
-    "test": "jest --coverage",
-    "test:watch": "jest --watch",
-    "test:e2e": "npx playwright test tests/playwright/overflow.spec.js --reporter=list",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
-    "typecheck": "tsc --noEmit",
-    "check": "npm run lint && npm run typecheck",
-    "prepare": "git config core.hooksPath .githooks || true",
-    "dev:ui": "vite",
-    "build:ui": "vite build"
+    "start": "bun server.js",
+    "dev": "bun server.js",
+    "build": "bun build.js",
+    "test": "bun test tests/unit --coverage",
+    "coverage": "bun test tests/unit --coverage --coverage-reporter=lcov",
+    "coverage:check": "bun scripts/check-coverage.mjs",
+    "test:watch": "bun test tests/unit --watch",
+    "test:e2e": "bunx playwright test tests/playwright/overflow.spec.js --reporter=list",
+    "lint": "bunx eslint .",
+    "lint:fix": "bunx eslint . --fix",
+    "lint:json": "bunx eslint . --format json --output-file .lint-report.json",
+    "lint:baseline": "bun run lint:json && bun scripts/lint-baseline.mjs .lint-report.json",
+    "lint:baseline:update": "bun run lint:json && bun scripts/lint-baseline.mjs --update .lint-report.json",
+    "typecheck": "bunx tsc --noEmit",
+    "check": "bun run lint && bun run typecheck",
+    "prepare": "bun scripts/install-hooks.mjs",
+    "dev:ui": "bunx --bun vite",
+    "build:ui": "bunx --bun vite build"
   },
   "keywords": [
     "dashboard",
@@ -32,14 +38,13 @@
     "@playwright/test": "^1.58.2"
   },
   "devDependencies": {
-    "@babel/core": "^7.29.0",
-    "@babel/preset-env": "^7.29.0",
-    "@eslint/js": "^10.0.1",
-    "eslint": "^10.0.2",
-    "globals": "^17.4.0",
-    "jest": "^30.2.0",
-    "jest-environment-jsdom": "^30.2.0",
-    "typescript": "^5.9.3",
-    "vite": "^7.3.6"
+    "@eslint/js": "10.0.1",
+    "@happy-dom/global-registrator": "20.11.1",
+    "eslint": "10.0.2",
+    "eslint-plugin-sonarjs": "4.2.0",
+    "globals": "17.4.0",
+    "happy-dom": "20.11.1",
+    "typescript": "5.9.3",
+    "vite": "7.3.6"
   }
 }

@@ -1,6 +1,8 @@
 const path = require('path');
 const { getCommitLOC, generateGitBlameReport, isValidCommitHash } = require('../../../lib/git-blame');
 
+import { describe, expect, test } from 'bun:test';
+
 describe('lib/git-blame getCommitLOC', () => {
   const cwd = path.resolve(__dirname, '../../'); // repo root, a real git repo
 

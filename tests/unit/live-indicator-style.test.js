@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 
+import { describe, expect, it } from 'bun:test';
+
 describe('live status indicator', () => {
   it('uses an in-flow status dot instead of an absolute overlay', () => {
     const css = fs.readFileSync(
