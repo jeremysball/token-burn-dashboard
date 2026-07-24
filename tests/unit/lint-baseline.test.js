@@ -105,6 +105,7 @@ describe('lint baseline gate', () => {
     const configuration = await eslint.calculateConfigForFile(scriptPath);
 
     expect(configuration.languageOptions.globals.process).toBeFalse();
+    expect(configuration.languageOptions.globals.Bun).toBe('readonly');
   });
 
   test('provides Bun globals to native test files', async () => {
