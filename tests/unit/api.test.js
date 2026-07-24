@@ -146,10 +146,13 @@ describe('API Module', () => {
       const esInstance = EventSource.mock.results[0].value;
       esInstance.onerror();
 
-      // Should set timeout for reconnection
-      await Bun.sleep(5000);
+      // Wait for reconnection (5s timeout) with polling
+      const deadline = Date.now() + 7000;
+      while (EventSource.mock.calls.length < 2 && Date.now() < deadline) {
+        await Bun.sleep(100);
+      }
       expect(EventSource).toHaveBeenCalledTimes(2);
-    });
+    }, { timeout: 10000 });
 
     it('processes incoming messages', () => {
       connectSSE();
