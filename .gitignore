@@ -17,13 +17,13 @@ fix_ports.js
 .worktrees/
 .lavish/
 .claude/
-.claude*
 
 _run.sh
 
 # model experiment dirs
 gpt-*/
 k2*/
+gemini-*/
 examples/
 
 .superpowers/*
