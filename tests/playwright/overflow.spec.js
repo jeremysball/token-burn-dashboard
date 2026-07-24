@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
-const { routeDashboardApis } = require('../playwright-fixtures');
+const { mockData, routeDashboardApis } = require('../playwright-fixtures');
 
-const BASE_URL = `http://localhost:${process.env.PORT || 7071}`;
+const BASE_URL = process.env.E2E_BASE_URL || `http://127.0.0.1:${process.env.PORT || 5173}/dashboard/`;
 
 // Asserts the selector actually matched elements (so an empty match can never
 // pass this check silently) and that none of them overflow their container.
@@ -25,6 +25,7 @@ test.describe('no horizontal overflow on critical selectors', () => {
     await routeDashboardApis(page);
     await page.goto(`${BASE_URL}/`);
     await expect(page.locator('#hero-tokens')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#hero-tokens')).toHaveAttribute('data-value', String(mockData.total_tokens), { timeout: 10000 });
   });
 
   test('main dashboard', async ({ page }) => {
@@ -63,6 +64,7 @@ test.describe('overflow screenshots', () => {
   test('desktop+mobile', async ({ page }) => {
     await page.goto(`${BASE_URL}/`);
     await expect(page.locator('#hero-tokens')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#hero-tokens')).toHaveAttribute('data-value', String(mockData.total_tokens), { timeout: 10000 });
     await page.screenshot({ path: 'test-results/dashboard.png', fullPage: true });
 
     await page.setViewportSize({ width: 375, height: 800 });
