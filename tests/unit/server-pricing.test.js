@@ -5,6 +5,8 @@ const {
 } = require('../../lib/openrouter');
 const { findLocalPricing, getPricing, calculateCost } = require('../../lib/pricing');
 
+import { beforeEach, describe, expect, it } from 'bun:test';
+
 describe('server pricing', () => {
   beforeEach(() => {
     setOpenRouterPricingSnapshot({

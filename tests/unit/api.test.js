@@ -1,13 +1,14 @@
-/**
- * @jest-environment jsdom
- */
-
 import { fetchTokens, fetchHistorical, refreshData, updateData, connectSSE, disconnectSSE } from '../../dashboard/js/api.js';
 import { setCurrentData, setHistoryData, setFileHistoricalData, setEventSource, historyData } from '../../dashboard/js/state.js';
 
+import { beforeEach, describe, expect, it, mock } from 'bun:test';
+
 describe('API Module', () => {
   beforeEach(() => {
-    fetch.mockClear();
+    global.fetch = mock();
+    global.EventSource = mock(function () {
+      return { close: mock(), onmessage: null, onerror: null };
+    });
     setCurrentData(null);
     setHistoryData([]);
     setFileHistoricalData([]);
@@ -132,25 +133,22 @@ describe('API Module', () => {
     });
 
     it('closes existing connection before creating new one', () => {
-      const mockClose = jest.fn();
+      const mockClose = mock();
       setEventSource({ close: mockClose });
 
       connectSSE();
       expect(mockClose).toHaveBeenCalled();
     });
 
-    it('handles connection errors with reconnection', () => {
-      jest.useFakeTimers();
+    it('handles connection errors with reconnection', async () => {
       connectSSE();
 
       const esInstance = EventSource.mock.results[0].value;
       esInstance.onerror();
 
       // Should set timeout for reconnection
-      jest.advanceTimersByTime(5000);
+      await Bun.sleep(5000);
       expect(EventSource).toHaveBeenCalledTimes(2);
-
-      jest.useRealTimers();
     });
 
     it('processes incoming messages', () => {
@@ -166,7 +164,7 @@ describe('API Module', () => {
 
   describe('disconnectSSE', () => {
     it('closes existing connection', () => {
-      const mockClose = jest.fn();
+      const mockClose = mock();
       setEventSource({ close: mockClose });
 
       disconnectSSE();

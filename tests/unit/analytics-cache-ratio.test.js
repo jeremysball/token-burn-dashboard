@@ -1,7 +1,6 @@
-/**
- * @jest-environment jsdom
- */
 import { cacheDiscountRatioFromPricing } from '../../dashboard/js/views/analytics';
+
+import { describe, expect, it } from 'bun:test';
 
 describe('cacheDiscountRatioFromPricing', () => {
     it('uses cacheRead/input when pricing present', () => {

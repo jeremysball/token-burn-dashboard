@@ -16,21 +16,20 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v5
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 22
-          cache: npm
+          bun-version: 1.3.11
 
-      - run: npm ci
+      - run: bun install --frozen-lockfile
 
       - name: lint
         if: matrix.leg == 'lint'
-        run: npm run lint
+        run: bun run lint:baseline
 
       - name: typecheck
         if: matrix.leg == 'typecheck'
-        run: npm run typecheck
+        run: bun run typecheck
 
       - name: unit
         if: matrix.leg == 'unit'
-        run: npm test
+        run: bun test tests/unit --coverage --coverage-reporter=lcov && bun run coverage:check

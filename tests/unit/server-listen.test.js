@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 
+import { describe, expect, it } from 'bun:test';
+
 describe('server listener', () => {
   it('binds to the configured HOST', () => {
     const serverSource = fs.readFileSync(

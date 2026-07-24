@@ -1,10 +1,4 @@
-/**
- * @jest-environment jsdom
- *
- * Task 4 regression tests: every catch-block that renders err.message into
- * innerHTML must escape the message first. 4 sites across git.js and spikes.js.
- */
-Element.prototype.scrollIntoView = jest.fn();
+Element.prototype.scrollIntoView = mock();
 
 import {
     loadGitBlame,
@@ -15,15 +9,9 @@ import {
 
 const XSS_MSG = '<img src=x onerror=alert(1)>';
 
-beforeEach(() => {
-    jest.useFakeTimers();
-});
-
-afterEach(() => {
-    jest.useRealTimers();
-});
-
 // ========== git.js: loadGitBlame catch ==========
+
+import { beforeEach, describe, expect, it, mock } from 'bun:test';
 
 describe('loadGitBlame error escaping', () => {
     beforeEach(() => {
@@ -36,7 +24,7 @@ describe('loadGitBlame error escaping', () => {
     });
 
     it('escapes err.message in git-commits-list so markup is not injected', async () => {
-        global.fetch = jest.fn(() => Promise.reject(new Error(XSS_MSG)));
+        global.fetch = mock(() => Promise.reject(new Error(XSS_MSG)));
 
         await loadGitBlame();
 
@@ -59,7 +47,7 @@ describe('showCommitDetails error escaping', () => {
     });
 
     it('escapes err.message in commit-details-error so markup is not injected', async () => {
-        global.fetch = jest.fn(() => Promise.reject(new Error(XSS_MSG)));
+        global.fetch = mock(() => Promise.reject(new Error(XSS_MSG)));
 
         await showCommitDetails('abc123');
 
@@ -79,7 +67,7 @@ describe('loadSpikes error escaping', () => {
     });
 
     it('escapes err.message in spikes-list so markup is not injected', async () => {
-        global.fetch = jest.fn(() => Promise.reject(new Error(XSS_MSG)));
+        global.fetch = mock(() => Promise.reject(new Error(XSS_MSG)));
 
         await loadSpikes();
 
@@ -103,7 +91,7 @@ describe('investigateSpike error escaping', () => {
     });
 
     it('escapes err.message in spike-details so markup is not injected', async () => {
-        global.fetch = jest.fn(() => Promise.reject(new Error(XSS_MSG)));
+        global.fetch = mock(() => Promise.reject(new Error(XSS_MSG)));
 
         await investigateSpike(1700000000000);
 

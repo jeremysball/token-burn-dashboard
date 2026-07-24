@@ -1,41 +1,22 @@
 #!/bin/sh
-# Fast local quality gate: parse + lint (staged files only) + typecheck (whole project).
+# Fast local quality gate: lint (staged files only) + typecheck (whole project).
 # Errors block the commit; lint warnings do not. Full tests run in CI, not here.
 # Bypass with: git commit --no-verify
 
 staged_js=$(git diff --cached --name-only --diff-filter=ACMR -- '*.js')
 
 if [ -n "$staged_js" ]; then
-    echo "Checking JS syntax..."
-    old_ifs=$IFS
-    IFS='
-'
-    for f in $staged_js; do
-        # Detect ES modules by content rather than path: root package.json
-        # declares "type": "commonjs" for the Node backend, so node --check
-        # would otherwise reject top-level import/export statements used by
-        # browser-side dashboard code, config files (e.g. vite.config.js),
-        # and test files transformed by Jest/Babel.
-        if git show ":$f" | rg -q '^\s*(import|export)\s'; then
-            node --input-type=module --check < "$f" || exit 1
-        else
-            node --check "$f" || exit 1
-        fi
-    done
-    IFS=$old_ifs
-
     echo "Running eslint on staged files..."
-    IFS='
-'
-    npx eslint $staged_js || {
-        IFS=$old_ifs
+    bunx eslint $staged_js || {
         echo "eslint found blocking errors."
         exit 1
     }
-    IFS=$old_ifs
+
+    echo "Running lint baseline..."
+    bun run lint:baseline || exit 1
 fi
 
 echo "Running typecheck..."
-npx tsc --noEmit || exit 1
+bunx tsc --noEmit || exit 1
 
 exit 0
