@@ -141,6 +141,23 @@ describe('handleGitBlameRoute cwd validation', () => {
 });
 
 describe('createInsightsHandler request validation', () => {
+  it('rejects a body larger than MAX_REQUEST_BODY_BYTES with 413 and destroys the request', async () => {
+    const { MAX_REQUEST_BODY_BYTES } = require('../../../../lib/config');
+    const execFileImpl = mock();
+    const handler = createInsightsHandler({ execFileImpl });
+    const req = createMockReq('/api/insights/analyze');
+    const res = createMockRes();
+
+    const promise = handler(req, res, undefined);
+    req.emit('data', Buffer.alloc(MAX_REQUEST_BODY_BYTES + 1, 'a'));
+    await promise;
+
+    expect(res.statusCode).toBe(413);
+    expect(JSON.parse(res.body)).toEqual({ error: 'Request body too large' });
+    expect(req.destroy).toHaveBeenCalledTimes(1);
+    expect(execFileImpl).not.toHaveBeenCalled();
+  });
+
   it('rejects a malformed summary with 400 without invoking the injected dependency', async () => {
     const execFileImpl = mock();
     const handler = createInsightsHandler({ execFileImpl });
