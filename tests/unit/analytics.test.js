@@ -1,11 +1,10 @@
-/**
- * @jest-environment jsdom
- */
 import { resolveAvailableRange } from '../../dashboard/js/views/analytics/tabs/shared.js';
 
 const HOUR = 60 * 60 * 1000;
 const now = Date.now();
 const point = (msAgo) => ({ time: now - msAgo, total: 100 });
+
+import { describe, expect, it } from 'bun:test';
 
 describe('resolveAvailableRange', () => {
   it('keeps the requested range when it already has enough data', () => {

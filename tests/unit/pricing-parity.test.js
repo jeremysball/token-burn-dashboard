@@ -1,9 +1,8 @@
-/**
- * @jest-environment jsdom
- */
 
 import { MODEL_PRICING as FRONTEND_PRICING } from '../../dashboard/js/config.js';
 const { MODEL_PRICING: BACKEND_PRICING } = require('../../lib/pricing');
+
+import { describe, expect, it } from 'bun:test';
 
 describe('frontend/backend pricing parity', () => {
   it('frontend and backend pricing length are within tolerance', () => {

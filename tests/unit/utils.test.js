@@ -1,7 +1,4 @@
-/**
- * @jest-environment jsdom
- */
-
+/* global Bun */
 import {
   fmtNum,
   fmtInt,
@@ -23,6 +20,8 @@ import {
   resizeVisiblePlots,
   positionNotifications
 } from '../../dashboard/js/utils.js';
+
+import { beforeEach, describe, expect, it, mock } from 'bun:test';
 
 describe('Utils Module', () => {
   describe('fmtNum', () => {
@@ -95,16 +94,8 @@ describe('Utils Module', () => {
   });
 
   describe('notify', () => {
-    beforeEach(() => {
-      document.body.innerHTML = '<div id="notifications"></div>';
-      jest.useFakeTimers();
-    });
-
-    afterEach(() => {
-      jest.useRealTimers();
-    });
-
     it('creates notification element', () => {
+      document.body.innerHTML = '<div id="notifications"></div>';
       notify('Test message');
       const notif = document.querySelector('.notification');
       expect(notif).toBeTruthy();
@@ -112,14 +103,16 @@ describe('Utils Module', () => {
     });
 
     it('adds type class', () => {
+      document.body.innerHTML = '<div id="notifications"></div>';
       notify('Error message', 'error');
       const notif = document.querySelector('.notification');
       expect(notif.classList.contains('error')).toBe(true);
     });
 
-    it('removes notification after timeout', () => {
+    it('removes notification after timeout', async () => {
+      document.body.innerHTML = '<div id="notifications"></div>';
       notify('Test message');
-      jest.advanceTimersByTime(3300);
+      await Bun.sleep(3400);
       const notif = document.querySelector('.notification');
       expect(notif).toBeFalsy();
     });
@@ -359,7 +352,7 @@ describe('Utils Module', () => {
         <div id="calendar-container"></div>
         <div id="distribution-chart-container"></div>
       `;
-      global.Plotly.Plots = { resize: jest.fn() };
+      global.Plotly.Plots = { resize: mock() };
     });
 
     it('resizes only containers that have already been plotted', () => {

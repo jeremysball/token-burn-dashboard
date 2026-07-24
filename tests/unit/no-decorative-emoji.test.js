@@ -15,6 +15,8 @@ const expectNoDecorativeEmoji = (relPath) => {
   expect(matches).toEqual([]);
 };
 
+import { describe, expect, it } from 'bun:test';
+
 describe('decorative emoji sweep', () => {
   it('dashboard/index.html has no decorative emoji', () => {
     expectNoDecorativeEmoji('dashboard/index.html');

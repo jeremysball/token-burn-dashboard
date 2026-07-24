@@ -10,6 +10,8 @@
     "dev": "bun server.js",
     "build": "bun build.js",
     "test": "bun test tests/unit --coverage",
+    "coverage": "bun test tests/unit --coverage --coverage-reporter=lcov",
+    "coverage:check": "bun scripts/check-coverage.mjs",
     "test:watch": "bun test tests/unit --watch",
     "test:e2e": "bunx playwright test tests/playwright/overflow.spec.js --reporter=list",
     "lint": "bunx eslint .",

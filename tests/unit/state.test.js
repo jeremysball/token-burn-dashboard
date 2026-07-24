@@ -1,6 +1,3 @@
-/**
- * @jest-environment jsdom
- */
 
 import {
   currentData,
@@ -16,6 +13,8 @@ import {
   getDataSignature,
   getDataForGranularity
 } from '../../dashboard/js/state.js';
+
+import { beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 describe('State Module', () => {
   beforeEach(() => {
@@ -66,7 +65,7 @@ describe('State Module', () => {
       
       loadCache();
       
-      expect(localStorage.removeItem).toHaveBeenCalledWith('tokenBurnCache');
+      expect(localStorage.getItem('tokenBurnCache')).toBeNull();
     });
 
     it('handles malformed JSON gracefully', () => {
@@ -86,18 +85,15 @@ describe('State Module', () => {
       
       saveCache(data);
       
-      expect(localStorage.setItem).toHaveBeenCalledWith(
-        'tokenBurnCache',
-        JSON.stringify(data)
-      );
+      expect(localStorage.getItem('tokenBurnCache')).toBe(JSON.stringify(data));
     });
 
     it('handles localStorage errors gracefully', () => {
-      localStorage.setItem.mockImplementation(() => {
+      const setItem = spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
         throw new Error('Quota exceeded');
       });
-      
       expect(() => saveCache({})).not.toThrow();
+      setItem.mockRestore();
     });
   });
 
@@ -105,9 +101,9 @@ describe('State Module', () => {
     it('removes all cache keys', () => {
       clearCache();
       
-      expect(localStorage.removeItem).toHaveBeenCalledWith('tokenBurnCache');
-      expect(localStorage.removeItem).toHaveBeenCalledWith('tokenBurnHistory');
-      expect(localStorage.removeItem).toHaveBeenCalledWith('tokenBurnWeekly');
+      expect(localStorage.getItem('tokenBurnCache')).toBeNull();
+      expect(localStorage.getItem('tokenBurnHistory')).toBeNull();
+      expect(localStorage.getItem('tokenBurnWeekly')).toBeNull();
     });
   });
 

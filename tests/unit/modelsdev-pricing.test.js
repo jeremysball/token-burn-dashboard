@@ -1,6 +1,3 @@
-/**
- * @jest-environment jsdom
- */
 
 import {
     normalizeModelsDevCost,
@@ -14,6 +11,8 @@ import {
     clearCatalogCache,
     MODELS_DEV_API
 } from '../../dashboard/js/modelsdev-pricing.js';
+
+import { afterEach, describe, expect, it, mock } from 'bun:test';
 
 describe('normalizeModelsDevCost', () => {
     it('normalizes full cost object to pricing shape with reasoning/cache', () => {
@@ -194,7 +193,7 @@ describe('fetchModelsDevCatalog', () => {
 
     it('fetches and caches the catalog via the public API', async () => {
         const fakeCatalog = { openrouter: { models: { 'z-ai/glm-5': { cost: { input: 1, output: 3 } } } } };
-        const fetchFn = jest.fn().mockResolvedValue({ ok: true, status: 200, json: async () => fakeCatalog });
+        const fetchFn = mock().mockResolvedValue({ ok: true, status: 200, json: async () => fakeCatalog });
         const catalog = await fetchModelsDevCatalog(fetchFn);
         expect(fetchFn).toHaveBeenCalledWith(MODELS_DEV_API);
         expect(catalog).toBe(fakeCatalog);
@@ -205,19 +204,19 @@ describe('fetchModelsDevCatalog', () => {
     });
 
     it('rejects without throwing on a failed catalog request and allows a cleared retry', async () => {
-        const fetchFn = jest.fn().mockResolvedValue({ ok: false, status: 503, json: async () => ({}) });
+        const fetchFn = mock().mockResolvedValue({ ok: false, status: 503, json: async () => ({}) });
         await expect(fetchModelsDevCatalog(fetchFn)).rejects.toThrow();
         expect(getCatalog()).toBeNull();
         // A failed request rejects immediately on reuse (no silent retry).
         await expect(fetchModelsDevCatalog(fetchFn)).rejects.toThrow();
         // Clearing the cache resets status so a deliberate retry can succeed.
         clearCatalogCache();
-        const ok = jest.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ openrouter: { models: {} } }) });
+        const ok = mock().mockResolvedValue({ ok: true, status: 200, json: async () => ({ openrouter: { models: {} } }) });
         await expect(fetchModelsDevCatalog(ok)).resolves.toBeDefined();
     });
 
     it('records an explicit failed status (not just a cleared promise) and allows retry after clear', async () => {
-        const fail = jest.fn().mockResolvedValue({ ok: false, status: 503, json: async () => ({}) });
+        const fail = mock().mockResolvedValue({ ok: false, status: 503, json: async () => ({}) });
         await expect(fetchModelsDevCatalog(fail)).rejects.toThrow();
         expect(getCatalogStatus()).toBe('failed');
         expect(isCatalogFailed()).toBe(true);
@@ -227,7 +226,7 @@ describe('fetchModelsDevCatalog', () => {
         clearCatalogCache();
         expect(getCatalogStatus()).toBe('idle');
         expect(isCatalogFailed()).toBe(false);
-        const ok = jest.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ openrouter: { models: {} } }) });
+        const ok = mock().mockResolvedValue({ ok: true, status: 200, json: async () => ({ openrouter: { models: {} } }) });
         await expect(fetchModelsDevCatalog(ok)).resolves.toBeDefined();
         expect(getCatalogStatus()).toBe('ready');
     });

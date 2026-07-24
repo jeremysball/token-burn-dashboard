@@ -1,11 +1,4 @@
-/**
- * @jest-environment jsdom
- *
- * Task 10 review-fix regressions: model/commit-derived text rendered into the
- * analytics views must be HTML-escaped, and commit rows must not emit inline
- * JavaScript carrying attacker-controlled commit hashes.
- */
-Element.prototype.scrollIntoView = jest.fn();
+Element.prototype.scrollIntoView = mock();
 
 import {
     renderInsightsCards,
@@ -21,6 +14,8 @@ import * as state from '../../dashboard/js/state';
 
 const XSS = '<img src=x onerror=alert(1)>';
 const QUOTE_PAYLOAD = 'x" onmouseover=alert(1)';
+
+import { beforeEach, describe, expect, it, mock } from 'bun:test';
 
 describe('renderLLMInsights XSS safety', () => {
     beforeEach(() => {
@@ -113,7 +108,7 @@ describe('renderGitBlameData commit-list safety', () => {
     it('click still opens commit details for the correct hash', () => {
         mountGitBlameDom();
         document.body.innerHTML += '<div id="commit-details-modal"></div><div id="commit-details-content"></div>';
-        global.fetch = jest.fn(() => Promise.resolve({
+        global.fetch = mock(() => Promise.resolve({
             ok: true,
             json: () => Promise.resolve({
                 commit: { hash: 'deadbee', message: 'm', date: Date.now() },
@@ -131,7 +126,7 @@ describe('renderGitBlameData commit-list safety', () => {
     it('activates via keyboard (Enter/Space) without inline handlers', () => {
         mountGitBlameDom();
         document.body.innerHTML += '<div id="commit-details-modal"></div><div id="commit-details-content"></div>';
-        global.fetch = jest.fn(() => Promise.resolve({
+        global.fetch = mock(() => Promise.resolve({
             ok: true,
             json: () => Promise.resolve({
                 commit: { hash: 'abc1234', message: 'm', date: Date.now() },
@@ -298,8 +293,8 @@ describe('renderDashboard top-model-card attribute XSS', () => {
             <div id="top-models-grid"></div>
             <div id="insights-grid"></div>
             <div id="notifications"></div>`;
-        window.animateNumber = jest.fn();
-        window.checkThresholds = jest.fn();
+        window.animateNumber = mock();
+        window.checkThresholds = mock();
 
         const modelKey = `provider/${QUOTE_PAYLOAD}`;
         state.setCurrentData({

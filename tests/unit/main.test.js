@@ -1,6 +1,5 @@
-/**
- * @jest-environment jsdom
- */
+/* global Bun */
+import { beforeAll, describe, expect, it, mock } from 'bun:test';
 
 describe('animateNumber', () => {
   let animateNumber;
@@ -12,32 +11,24 @@ describe('animateNumber', () => {
       <div id="view-analytics"></div>
     `;
     Object.defineProperty(document, 'readyState', { configurable: true, value: 'loading' });
-    global.fetch = jest.fn().mockRejectedValue(new Error('test fetch'));
+    global.fetch = mock().mockRejectedValue(new Error('test fetch'));
     ({ animateNumber, getSavedTheme } = await import('../../dashboard/js/main.js'));
   });
 
-  beforeEach(() => {
-    jest.useFakeTimers();
-  });
-
-  afterEach(() => {
-    jest.useRealTimers();
-  });
-
-  it('preserves decimal string display values', () => {
+  it('preserves decimal string display values', async () => {
     const element = document.createElement('span');
 
     animateNumber(element, '0.00', '2.50', 0, '$');
-    jest.runOnlyPendingTimers();
+    await Bun.sleep(20);
 
     expect(element.textContent).toBe('$2.50');
   });
 
-  it('uses fmtNum for numeric token totals', () => {
+  it('uses fmtNum for numeric token totals', async () => {
     const element = document.createElement('span');
 
     animateNumber(element, 0, 2_500_000_000, 0);
-    jest.runOnlyPendingTimers();
+    await Bun.sleep(20);
 
     expect(element.textContent).toBe('2.50B');
   });

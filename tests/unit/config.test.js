@@ -1,6 +1,3 @@
-/**
- * @jest-environment jsdom
- */
 
 import { 
   emojis, 
@@ -12,6 +9,8 @@ import {
   CACHE_KEY,
   CACHE_VERSION 
 } from '../../dashboard/js/config.js';
+
+import { describe, expect, it } from 'bun:test';
 
 describe('Config Module', () => {
   describe('getEmoji', () => {
