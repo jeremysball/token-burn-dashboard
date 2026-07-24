@@ -1,11 +1,12 @@
 
-import { MODEL_PRICING as FRONTEND_PRICING } from '../../dashboard/js/config.js';
+import { getModelPricing } from '../../dashboard/js/config.js';
 const { MODEL_PRICING: BACKEND_PRICING } = require('../../lib/pricing');
 
 import { describe, expect, it } from 'bun:test';
 
 describe('frontend/backend pricing parity', () => {
   it('frontend and backend pricing length are within tolerance', () => {
+    const FRONTEND_PRICING = getModelPricing();
     expect(FRONTEND_PRICING).toBeInstanceOf(Array);
     expect(BACKEND_PRICING).toBeInstanceOf(Array);
     const diff = Math.abs(BACKEND_PRICING.length - FRONTEND_PRICING.length);
