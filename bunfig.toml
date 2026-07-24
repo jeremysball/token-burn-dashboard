@@ -1,0 +1,3 @@
+[test]
+preload = ["./tests/bun.preload.js", "./tests/bun.setup.js"]
+coverageDir = "./coverage"

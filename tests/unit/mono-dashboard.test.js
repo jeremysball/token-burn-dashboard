@@ -1,8 +1,7 @@
-/**
- * @jest-environment jsdom
- */
 
 import { MonoDashboard } from '../../src/MonoDashboard.js';
+
+import { describe, expect, it } from 'bun:test';
 
 describe('MonoDashboard', () => {
   it('renders a pricing source badge in the detail panel', () => {

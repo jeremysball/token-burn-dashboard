@@ -1,7 +1,4 @@
-/**
- * @jest-environment jsdom
- */
-Element.prototype.scrollIntoView = jest.fn();
+Element.prototype.scrollIntoView = mock();
 
 import {
     spikeRatioLevel,
@@ -14,6 +11,8 @@ import {
     closeInvestigation
 } from '../../dashboard/js/views/analytics';
 import { historyData, setHistoryData } from '../../dashboard/js/state';
+
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 
 describe('spikeRatioLevel', () => {
     it('classes >=5 as high, >=3 as medium, below as low', () => {
@@ -171,7 +170,7 @@ describe('renderSpikesList safety', () => {
     });
 
     it('activates investigation via click and keyboard (Enter/Space) without inline handlers', () => {
-        global.fetch = jest.fn(() => Promise.resolve({
+        global.fetch = mock(() => Promise.resolve({
             ok: true,
             json: () => Promise.resolve({ summary: { totalSessions: 0, totalTokens: 0, totalCost: 0, topModel: 'unknown' }, sessions: [] })
         }));
@@ -192,12 +191,12 @@ describe('renderSpikesList safety', () => {
 
 describe('investigateSpike fetch + close', () => {
     beforeEach(() => {
-        Element.prototype.scrollIntoView = jest.fn();
+        Element.prototype.scrollIntoView = mock();
         document.body.innerHTML = `
             <div id="spike-investigation" style="display:none;"></div>
             <div id="spike-details"></div>
             <div id="spike-sessions"></div>`;
-        global.fetch = jest.fn(() => Promise.resolve({
+        global.fetch = mock(() => Promise.resolve({
             ok: true,
             json: () => Promise.resolve({
                 summary: { totalSessions: 1, totalTokens: 100, totalCost: 0.5, topModel: 'anthropic/claude-opus-4' },
@@ -214,7 +213,7 @@ describe('investigateSpike fetch + close', () => {
     });
 
     it('shows error when fetch fails', async () => {
-        global.fetch = jest.fn(() => Promise.resolve({ ok: false, status: 500 }));
+        global.fetch = mock(() => Promise.resolve({ ok: false, status: 500 }));
         await investigateSpike(1700000000000);
         expect(document.getElementById('spike-details').textContent).toContain('Error');
     });

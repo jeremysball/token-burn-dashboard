@@ -1,10 +1,3 @@
-/**
- * @jest-environment jsdom
- *
- * TDD for Task 7: scale short B + comma multiples, heatmap dates/values,
- * overflow-sensitive rendering. These tests assert the *post-fix* behavior and
- * fail before the implementation lands.
- */
 
 import { renderAnalytics } from '../../dashboard/js/views/analytics.js';
 import {
@@ -79,6 +72,8 @@ const billionData = () => ({
   pricing_by_model: {}
 });
 
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
+
 describe('Task 7: scale page rendering', () => {
   beforeEach(() => {
     document.head.innerHTML = '';
@@ -110,7 +105,7 @@ describe('Task 7: daily heatmap rendering', () => {
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    mock.restore();
   });
 
   it('renders daily value short with full value in title', () => {
@@ -129,7 +124,7 @@ describe('Task 7: daily heatmap rendering', () => {
 
   it('renders the weekday for the UTC date key in non-UTC browsers', () => {
     const original = Date.prototype.toLocaleDateString;
-    const localeSpy = jest.spyOn(Date.prototype, 'toLocaleDateString')
+    const localeSpy = spyOn(Date.prototype, 'toLocaleDateString')
       .mockImplementation(function(locale, options) {
         if (options?.timeZone !== 'UTC') return 'Thu';
         return original.call(this, locale, options);

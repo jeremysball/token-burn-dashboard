@@ -1,17 +1,17 @@
-/**
- * @jest-environment jsdom
- */
 
 import { 
   emojis, 
   getEmoji, 
   CHART_COLORS, 
+  getModelPricing, 
   getPricing, 
   setPricing,
   calculateCost,
   CACHE_KEY,
   CACHE_VERSION 
 } from '../../dashboard/js/config.js';
+
+import { describe, expect, it, beforeAll } from 'bun:test';
 
 /** @type {Array<{pattern: RegExp, input: number, output: number, cacheRead: number, cacheWrite: number}>} */
 const TEST_PRICING = [

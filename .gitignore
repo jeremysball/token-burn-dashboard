@@ -1,6 +1,8 @@
 node_modules/
+bun.lockb
 *.log
 .DS_Store
+.lint-report.json
 .env
 *.png
 *.jpg
@@ -14,8 +16,15 @@ test-*.js
 fix_ports.js
 .worktrees/
 .lavish/
+.claude/
 
 _run.sh
+
+# model experiment dirs
+gpt-*/
+k2*/
+gemini-*/
+examples/
 
 .superpowers/*
 !.superpowers/plans/

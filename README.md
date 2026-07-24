@@ -241,11 +241,7 @@ token-burn-dashboard/
 └── package.json
 ```
 
-## Feature Roadmap
-
-See [FEATURES.md](./FEATURES.md) for detailed feature ideas and roadmap.
-
-### Coming Soon
+## Coming Soon
 - 🚨 Budget alerts & notifications
 - 👥 Team/project support
 - 📊 Enhanced export (CSV, PDF)
