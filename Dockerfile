@@ -6,6 +6,7 @@ FROM oven/bun:1.3.11 AS deps
 WORKDIR /app
 
 COPY package.json bun.lock ./
+COPY scripts/install-hooks.mjs ./scripts/install-hooks.mjs
 RUN bun install --frozen-lockfile --production
 
 # Build stage: full install (incl. Vite) to produce the dist-dashboard/ bundle.

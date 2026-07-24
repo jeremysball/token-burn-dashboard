@@ -11,6 +11,17 @@ import {
 } from '../../dashboard/js/views/analytics';
 import { renderDashboard } from '../../dashboard/js/views/dashboard.js';
 import * as state from '../../dashboard/js/state';
+import { setPricing } from '../../dashboard/js/config.js';
+const { MODEL_PRICING } = require('../../lib/pricing');
+
+// Seed frontend pricing from backend data
+setPricing(MODEL_PRICING.map(p => ({
+    pattern: new RegExp(p.pattern),
+    input: p.input,
+    output: p.output,
+    cacheRead: p.cacheRead,
+    cacheWrite: p.cacheWrite
+})));
 
 const XSS = '<img src=x onerror=alert(1)>';
 const QUOTE_PAYLOAD = 'x" onmouseover=alert(1)';
