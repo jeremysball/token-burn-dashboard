@@ -38,6 +38,8 @@ function stylesheetLinks(html) {
   return links;
 }
 
+import { describe, expect, it, test } from 'bun:test';
+
 describe('dashboard stylesheet links', () => {
   it('links main.css then design-v2.css in document order', () => {
     const links = stylesheetLinks(indexHtml);

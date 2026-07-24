@@ -2,8 +2,8 @@
  * Tests for /api/tokens/stream error responses
  */
 
-jest.mock('../../../../lib/cache', () => ({
-  getTokensData: jest.fn()
+mock.module('../../../../lib/cache', () => ({
+  getTokensData: mock()
 }));
 
 const { handleSseRoute } = require('../../../../lib/routes/sse');
@@ -14,22 +14,16 @@ function createMockRes() {
   const writes = [];
   return {
     writableEnded: false,
-    writeHead: jest.fn(),
-    write: jest.fn(chunk => writes.push(chunk)),
-    end: jest.fn(),
+    writeHead: mock(),
+    write: mock(chunk => writes.push(chunk)),
+    end: mock(),
     writes
   };
 }
 
+import { describe, expect, it, mock } from 'bun:test';
+
 describe('handleSseRoute error responses', () => {
-  beforeEach(() => {
-    jest.useFakeTimers();
-  });
-
-  afterEach(() => {
-    jest.useRealTimers();
-  });
-
   it('does not leak the raw error message to SSE clients', async () => {
     cache.getTokensData.mockReturnValue(Promise.reject(new Error('ENOENT: /secret/internal/path')));
     const req = new EventEmitter();

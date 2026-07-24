@@ -1,9 +1,3 @@
-/**
- * @jest-environment jsdom
- *
- * TDD for Task 8: tokens/cost metric toggle with real Models.dev pricing.
- * These tests assert the post-implementation behavior and fail before it lands.
- */
 
 import { renderAnalytics, setHeatmapMetric, retryModelsDevPricing } from '../../dashboard/js/views/analytics.js';
 import { setCatalog, clearCatalogCache, fetchModelsDevCatalog } from '../../dashboard/js/modelsdev-pricing.js';
@@ -75,6 +69,8 @@ const findRule = (rules, selector) => {
     }
     return null;
 };
+
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 
 describe('Task 8: metric toggle', () => {
     beforeEach(() => {
@@ -197,7 +193,7 @@ describe('Task 8: catalog failure state visibility', () => {
     afterEach(() => { clearCatalogCache(); setHeatmapMetric('tokens'); });
 
     it('renders an explicit unavailable message (not loading) when the catalog request fails', async () => {
-        const rejectingFetch = jest.fn().mockResolvedValue({
+        const rejectingFetch = mock().mockResolvedValue({
             ok: false, status: 503, json: async () => ({})
         });
         await expect(fetchModelsDevCatalog(rejectingFetch)).rejects.toThrow();
@@ -217,7 +213,7 @@ describe('Task 8: catalog failure state visibility', () => {
     });
 
     it('exposes a Retry pricing button and clears the failure on retry', async () => {
-        const failFetch = jest.fn().mockResolvedValue({ ok: false, status: 503, json: async () => ({}) });
+        const failFetch = mock().mockResolvedValue({ ok: false, status: 503, json: async () => ({}) });
         global.fetch = failFetch;
         await expect(fetchModelsDevCatalog()).rejects.toThrow();
 
@@ -227,7 +223,7 @@ describe('Task 8: catalog failure state visibility', () => {
         expect(retryBtn.textContent).toMatch(/retry/i);
 
         // Flip the network to success and invoke the visible retry handler.
-        const okFetch = jest.fn().mockResolvedValue({
+        const okFetch = mock().mockResolvedValue({
             ok: true, status: 200, json: async () => ({ openrouter: { models: { 'z-ai/glm-5': { cost: { input: 1, output: 3 } } } } })
         });
         global.fetch = okFetch;

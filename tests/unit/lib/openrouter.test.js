@@ -4,6 +4,8 @@
 
 const { stripProviderPrefix, buildOpenRouterPricingRecord } = require('../../../lib/openrouter');
 
+import { describe, expect, it } from 'bun:test';
+
 describe('OpenRouter first-slash parsing', () => {
   it('strips only the first provider segment, keeps the rest', () => {
     expect(stripProviderPrefix('anthropic/claude-3-5-sonnet/20240620')).toBe('claude-3-5-sonnet/20240620');

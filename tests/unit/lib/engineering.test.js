@@ -1,5 +1,7 @@
 const { extractFileRefs, getFileExtensionLang, parseShortStat } = require('../../../lib/engineering');
 
+import { describe, expect, test } from 'bun:test';
+
 describe('lib/engineering extractFileRefs', () => {
   test('extract workspace file refs only', () => {
     const text = 'Edited /workspace/foo/bar.js and /usr/bin and /home/jeremy/baz.ts and https://example.com';

@@ -1,34 +1,31 @@
-jest.mock('../../../lib/historical-data', () => ({
-  extractHistoricalData: jest.fn(() => Promise.resolve([]))
-}));
-const mockWorker = { once: jest.fn() };
-const mockWorkerConstructor = jest.fn(() => mockWorker);
-jest.mock('worker_threads', () => ({ Worker: mockWorkerConstructor }));
+import { beforeEach, describe, expect, it, mock } from 'bun:test';
 
-const { extractHistoricalData } = require('../../../lib/historical-data');
 const { startBackgroundUpdater } = require('../../../lib/cache');
+const mockWorker = { once: mock() };
+const mockWorkerConstructor = mock(() => mockWorker);
 
 describe('background cache warmup', () => {
   beforeEach(() => {
-    jest.useFakeTimers();
-    jest.clearAllMocks();
+    mock.clearAllMocks();
     mockWorker.once.mockClear();
   });
 
-  afterEach(() => {
-    jest.clearAllTimers();
-    jest.useRealTimers();
-  });
-
   it('defers essential scans without prewarming Git Blame', async () => {
-    startBackgroundUpdater();
+    const extractHistoricalDataImpl = mock(() => Promise.resolve([]));
+    const getOpenRouterPricingSnapshotImpl = mock(() => ({}));
 
-    expect(extractHistoricalData).not.toHaveBeenCalled();
+    startBackgroundUpdater({
+      WorkerImpl: mockWorkerConstructor,
+      extractHistoricalDataImpl,
+      getOpenRouterPricingSnapshotImpl
+    });
+
+    expect(extractHistoricalDataImpl).not.toHaveBeenCalled();
     expect(mockWorkerConstructor).not.toHaveBeenCalled();
 
-    await jest.advanceTimersByTimeAsync(0);
+    await Bun.sleep(1);
 
-    expect(extractHistoricalData).toHaveBeenCalledTimes(1);
+    expect(extractHistoricalDataImpl).toHaveBeenCalledTimes(1);
     expect(mockWorkerConstructor).toHaveBeenCalledTimes(1);
   });
 });
