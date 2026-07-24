@@ -15,6 +15,7 @@ FROM oven/bun:1.3.11 AS build
 WORKDIR /app
 
 COPY package.json bun.lock ./
+COPY scripts/install-hooks.mjs ./scripts/install-hooks.mjs
 RUN bun install --frozen-lockfile
 COPY vite.config.js ./vite.config.js
 COPY dashboard ./dashboard
