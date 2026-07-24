@@ -1,26 +1,26 @@
 # syntax=docker/dockerfile:1
 
 # Deps stage: install production dependencies with cache-friendly layering.
-FROM node:22-bookworm-slim AS deps
+FROM oven/bun:1.3.11 AS deps
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --production
 
 # Build stage: full install (incl. Vite) to produce the dist-dashboard/ bundle.
-FROM node:22-bookworm-slim AS build
+FROM oven/bun:1.3.11 AS build
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
 COPY vite.config.js ./vite.config.js
 COPY dashboard ./dashboard
-RUN npm run build:ui
+RUN bun run build:ui
 
 # Runtime stage: minimal Node.js image with only the tools this app actually needs.
-FROM node:22-bookworm-slim AS runtime
+FROM oven/bun:1.3.11 AS runtime
 
 WORKDIR /app
 
@@ -45,4 +45,4 @@ USER app
 
 EXPOSE 7071
 
-CMD ["node", "server.js"]
+CMD ["bun", "server.js"]
