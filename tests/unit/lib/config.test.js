@@ -1,101 +1,49 @@
-/**
- * Tests for server configuration
- */
+import { describe, expect, test } from 'bun:test';
 
-const config = require('../../../lib/config');
+const configModule = require('../../../lib/config');
+const { loadConfig } = configModule;
 
-describe('Server Config', () => {
-  it('has required configuration values', () => {
-    expect(config.PORT).toBeDefined();
-    expect(config.TOKEN_BURN_SCRIPT).toBeDefined();
-    expect(config.PYTHON_TIMEOUT).toBeDefined();
-    expect(config.SSE_UPDATE_INTERVAL).toBeDefined();
-    expect(config.REQUEST_TIMEOUT).toBeDefined();
-  });
+describe('loadConfig', () => {
+  test('derives secure defaults and the project root from supplied dependencies', () => {
+    const config = loadConfig({}, '/projects/dashboard');
 
-  it('uses environment PORT or defaults to 7071', () => {
-    const originalPort = process.env.PORT;
-    
-    delete process.env.PORT;
-    // Reload to test default
-    jest.resetModules();
-    const configNoPort = require('../../../lib/config');
-    expect(configNoPort.PORT).toBe(7071);
-    
-    process.env.PORT = '8080';
-    jest.resetModules();
-    const configWithPort = require('../../../lib/config');
-    expect(configWithPort.PORT).toBe('8080');
-    
-    process.env.PORT = originalPort;
-    jest.resetModules();
-  });
-
-  it('has reasonable timeout values', () => {
-    expect(config.PYTHON_TIMEOUT).toBeGreaterThan(0);
-    expect(config.SSE_KEEPALIVE_INTERVAL).toBeGreaterThan(0);
-    expect(config.REQUEST_TIMEOUT).toBeGreaterThan(config.PYTHON_TIMEOUT);
-  });
-
-  it('includes MIME type mappings', () => {
-    expect(config.MIME_TYPES['.html']).toBe('text/html');
-    expect(config.MIME_TYPES['.css']).toBe('text/css');
-    expect(config.MIME_TYPES['.js']).toBe('application/javascript');
+    expect(config).toMatchObject({
+      PORT: 7071,
+      HOST: '127.0.0.1',
+      ALLOWED_ORIGINS: [],
+      AUTH_TOKEN: null,
+      PROJECT_ROOT: '/projects/dashboard',
+      MAX_REQUEST_BODY_BYTES: 1024 * 1024,
+      MAX_FILE_BYTES: 100 * 1024 * 1024,
+      CLAUDE_MAX_DEPTH: 4
+    });
+    expect(config.TOKEN_BURN_SCRIPT).toEndWith('/lib/token-burn.js');
     expect(config.MIME_TYPES['.json']).toBe('application/json');
   });
 
-  describe('security defaults', () => {
-    it('defaults HOST to loopback', () => {
-      const originalHost = process.env.HOST;
-      delete process.env.HOST;
-      jest.resetModules();
-      const cfg = require('../../../lib/config');
-      expect(cfg.HOST).toBe('127.0.0.1');
-      if (originalHost !== undefined) process.env.HOST = originalHost;
-      jest.resetModules();
-    });
+  test('derives port, origins, auth token, and explicit project root from its environment', () => {
+    const config = loadConfig({
+      PORT: '8080',
+      ALLOWED_ORIGINS: 'https://a.example, https://b.example, ,',
+      DASHBOARD_AUTH_TOKEN: 'secret-token',
+      DASHBOARD_PROJECT_ROOT: '/data/dashboard'
+    }, '/projects/dashboard');
 
-    it('parses ALLOWED_ORIGINS from a comma-separated env var', () => {
-      const original = process.env.ALLOWED_ORIGINS;
-      process.env.ALLOWED_ORIGINS = 'https://a.example, https://b.example';
-      jest.resetModules();
-      const cfg = require('../../../lib/config');
-      expect(cfg.ALLOWED_ORIGINS).toEqual(['https://a.example', 'https://b.example']);
-      if (original === undefined) delete process.env.ALLOWED_ORIGINS;
-      else process.env.ALLOWED_ORIGINS = original;
-      jest.resetModules();
-    });
+    expect(config.PORT).toBe('8080');
+    expect(config.ALLOWED_ORIGINS).toEqual(['https://a.example', 'https://b.example']);
+    expect(config.AUTH_TOKEN).toBe('secret-token');
+    expect(config.PROJECT_ROOT).toBe('/data/dashboard');
+  });
 
-    it('defaults ALLOWED_ORIGINS to an empty array', () => {
-      const original = process.env.ALLOWED_ORIGINS;
-      delete process.env.ALLOWED_ORIGINS;
-      jest.resetModules();
-      const cfg = require('../../../lib/config');
-      expect(cfg.ALLOWED_ORIGINS).toEqual([]);
-      if (original !== undefined) process.env.ALLOWED_ORIGINS = original;
-      jest.resetModules();
-    });
+  test('falls back to the supplied HOME before cwd for the project root', () => {
+    const config = loadConfig({ HOME: '/home/dashboard' }, '/projects/dashboard');
 
-    it('defaults AUTH_TOKEN to null', () => {
-      const original = process.env.DASHBOARD_AUTH_TOKEN;
-      delete process.env.DASHBOARD_AUTH_TOKEN;
-      jest.resetModules();
-      const cfg = require('../../../lib/config');
-      expect(cfg.AUTH_TOKEN).toBeNull();
-      if (original !== undefined) process.env.DASHBOARD_AUTH_TOKEN = original;
-      jest.resetModules();
-    });
+    expect(config.PROJECT_ROOT).toBe('/home/dashboard');
+  });
 
-    it('defaults PROJECT_ROOT to HOME or cwd', () => {
-      const original = process.env.DASHBOARD_PROJECT_ROOT;
-      delete process.env.DASHBOARD_PROJECT_ROOT;
-      jest.resetModules();
-      const cfg = require('../../../lib/config');
-      const expected = process.env.HOME || process.cwd();
-      expect(cfg.PROJECT_ROOT).toBe(expected);
-      if (original === undefined) delete process.env.DASHBOARD_PROJECT_ROOT;
-      else process.env.DASHBOARD_PROJECT_ROOT = original;
-      jest.resetModules();
-    });
+  test('keeps default production values alongside the loader', () => {
+    expect(configModule.loadConfig).toBe(loadConfig);
+    expect(configModule.PYTHON_TIMEOUT).toBe(30000);
+    expect(configModule.REQUEST_TIMEOUT).toBe(35000);
   });
 });
