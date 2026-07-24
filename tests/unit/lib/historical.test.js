@@ -2,20 +2,17 @@
  * Tests for historical-data normalization and bucketing
  */
 
-const { extractHistoricalData, normalizeTimeMs } = require('../../../lib/historical-data');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
+import { afterEach, describe, expect, it, mock } from 'bun:test';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { createHistoricalDataExtractor, normalizeTimeMs } from '../../../lib/historical-data';
 
 const writeTemp = (lines) => {
   const file = path.join(os.tmpdir(), `hd-test-${Date.now()}-${Math.random()}.jsonl`);
   fs.writeFileSync(file, lines.join('\n'));
   return file;
 };
-
-jest.mock('../../../lib/session-discovery', () => ({
-  findAllSessionFiles: jest.fn()
-}));
 
 describe('normalizeTimeMs', () => {
   it('returns null for non-numeric input', () => {
@@ -38,9 +35,7 @@ describe('normalizeTimeMs', () => {
   });
 
   it('handles the threshold boundary correctly', () => {
-    // exactly 1e9 is not in the (1e9, 1e10) window -> untouched
     expect(normalizeTimeMs(1e9)).toBe(1e9);
-    // exactly 1e10 is not in the (1e9, 1e10) window -> untouched
     expect(normalizeTimeMs(1e10)).toBe(1e10);
   });
 
@@ -55,15 +50,13 @@ describe('normalizeTimeMs', () => {
 });
 
 describe('extractHistoricalData ISO timestamp regression', () => {
-  const { findAllSessionFiles } = require('../../../lib/session-discovery');
   const tempFiles = [];
 
   afterEach(() => {
-    tempFiles.forEach(f => {
-      try { fs.unlinkSync(f); } catch { /* ignore */ }
+    tempFiles.forEach(file => {
+      try { fs.unlinkSync(file); } catch { /* ignore */ }
     });
     tempFiles.length = 0;
-    findAllSessionFiles.mockReset();
   });
 
   it('buckets ISO timestamps by their actual UTC hour, not epoch zero', async () => {
@@ -79,10 +72,12 @@ describe('extractHistoricalData ISO timestamp regression', () => {
       })
     ]);
     tempFiles.push(file);
-    findAllSessionFiles.mockReturnValue([{ path: file, source: 'pi' }]);
+    const findAllSessionFilesImpl = mock(() => [{ path: file, source: 'pi' }]);
 
+    const extractHistoricalData = createHistoricalDataExtractor({ findAllSessionFilesImpl });
     const data = await extractHistoricalData();
 
+    expect(findAllSessionFilesImpl).toHaveBeenCalledTimes(1);
     expect(data.length).toBe(1);
     const expectedMs = new Date('2026-07-10T05:00:00Z').getTime();
     const expectedBucket = Math.floor(expectedMs / (3600 * 1000)) * (3600 * 1000);
@@ -103,8 +98,9 @@ describe('extractHistoricalData ISO timestamp regression', () => {
       })
     ]);
     tempFiles.push(file);
-    findAllSessionFiles.mockReturnValue([{ path: file, source: 'pi' }]);
+    const findAllSessionFilesImpl = mock(() => [{ path: file, source: 'pi' }]);
 
+    const extractHistoricalData = createHistoricalDataExtractor({ findAllSessionFilesImpl });
     const data = await extractHistoricalData();
 
     expect(data.length).toBe(0);
