@@ -19,7 +19,7 @@ COPY vite.config.js ./vite.config.js
 COPY dashboard ./dashboard
 RUN bun run build:ui
 
-# Runtime stage: minimal Node.js image with only the tools this app actually needs.
+# Runtime stage: minimal Bun image with only the tools this app actually needs.
 FROM oven/bun:1.3.11 AS runtime
 
 WORKDIR /app
