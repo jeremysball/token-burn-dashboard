@@ -1,4 +1,3 @@
-/* global Bun */
 import { beforeAll, describe, expect, it, mock } from 'bun:test';
 
 describe('animateNumber', () => {

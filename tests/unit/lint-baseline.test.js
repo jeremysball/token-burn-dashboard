@@ -114,4 +114,11 @@ describe('lint baseline gate', () => {
 
     expect(configuration.languageOptions.globals.Bun).toBe('readonly');
   });
+
+  test('does not retain Jest compatibility globals', async () => {
+    const eslint = new ESLint({ cwd: repositoryRoot });
+    const configuration = await eslint.calculateConfigForFile(join(repositoryRoot, 'tests/unit/lint-baseline.test.js'));
+
+    expect(configuration.languageOptions.globals.jest).toBeUndefined();
+  });
 });
