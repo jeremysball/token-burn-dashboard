@@ -1,4 +1,3 @@
-/* global Bun */
 import {
   fmtNum,
   fmtInt,

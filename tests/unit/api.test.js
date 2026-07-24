@@ -1,4 +1,3 @@
-/* global Bun */
 import { fetchTokens, fetchHistorical, refreshData, updateData, connectSSE, disconnectSSE } from '../../dashboard/js/api.js';
 import { setCurrentData, setHistoryData, setFileHistoricalData, setEventSource, historyData } from '../../dashboard/js/state.js';
 

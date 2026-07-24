@@ -83,7 +83,6 @@ export default [
     files: ['tests/**/*.js', '**/*.spec.js', 'test-*.js'],
     languageOptions: {
       globals: {
-        ...globals.jest,
         Bun: 'readonly',
         describe: 'readonly',
         it: 'readonly',
@@ -92,8 +91,7 @@ export default [
         beforeEach: 'readonly',
         afterEach: 'readonly',
         beforeAll: 'readonly',
-        afterAll: 'readonly',
-        jest: 'readonly'
+        afterAll: 'readonly'
       }
     }
   },
