@@ -65,8 +65,10 @@ wins the cascade in every case (for selectors with equal specificity).
    overrides the earlier one, and design-v2's later definitions win the
    cascade for color/background/border/padding since design-v2 loads last.
    Only `font-weight: 700` and `gap: 6px` from main.css's first block still
-   contribute (both are also set the same way further down, so no visible
-   difference, but the selector is genuinely still live, not dead).
+   contribute: `gap: 6px` is repeated identically in the second block (no
+   visible difference), while `font-weight: 700` is never redeclared
+   anywhere else and wins unopposed — either way, the selector is genuinely
+   still live, not dead.
 6. `llm-insights-section` — partially duplicate; main.css's `margin-top: 24px`
    (line 2061) is never overridden by design-v2.css (line 895) and stays live.
 
