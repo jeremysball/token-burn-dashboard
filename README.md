@@ -9,7 +9,7 @@ Real-time token usage analytics dashboard with cost tracking, built with a Monke
 ## Features
 
 ### 📊 Real-Time Analytics
-- Live token usage tracking from Pi session files
+- Live token usage tracking from Pi and Claude Code session files
 - Server-Sent Events (SSE) for automatic updates every 5 seconds
 - Historical trend visualization with sparklines
 - Deep insights with AI-powered pattern analysis
@@ -17,7 +17,7 @@ Real-time token usage analytics dashboard with cost tracking, built with a Monke
 ### 💰 Cost Analysis
 - Per-model cost estimation
 - Configurable pricing per 1M tokens for 7 providers
-- Total cost breakdown (input, output, cache read, cache write)
+- Total cost breakdown (input, output, cache read, cache write, reasoning)
 - Cache efficiency metrics and savings calculation
 
 ### 📈 Visualizations
@@ -205,7 +205,7 @@ The dashboard reads session files from both Pi and Claude Code:
 ```
 
 Claude Code discovery can be redirected with `CLAUDE_PROJECTS_DIR`, and
-additional session directories can be supplied with `EXTRA_SESSION_DIRS`.
+additional Pi session directories can be supplied with `EXTRA_SESSION_DIRS`.
 
 ## Configuration
 
@@ -224,7 +224,7 @@ unset.
 | `DASHBOARD_PROJECT_ROOT` | Root containing repositories for Git Blame's path restriction (defaults to `$HOME`); does not affect session discovery |
 | `TASKFERRY_INSIGHTS_MODEL` | Model passed to taskferry for AI insights (default `opencode/deepseek-v4-flash-free`) |
 | `DASHBOARD_INSIGHTS_SCRATCH_DIR` | Isolated scratch directory for taskferry insights jobs |
-| `EXTRA_SESSION_DIRS` | Comma- or colon-separated additional session directories |
+| `EXTRA_SESSION_DIRS` | Comma- or colon-separated additional Pi session directories (appended to `PI_SESSION_BASES`; does not affect Claude Code discovery) |
 | `CLAUDE_PROJECTS_DIR` | Override the Claude Code projects directory (default `~/.claude/projects`) |
 | `MAX_SESSION_BYTES` | Maximum session file size in bytes (default `104857600`) |
 | `OPENROUTER_MODELS_URL` | OpenRouter models endpoint for live pricing |
@@ -244,14 +244,14 @@ The local fallback pricing table covers 7 provider families:
 - **Gemini**: Gemini 1.5 Pro, Gemini 1.5 Flash, and other Gemini models
 - **Kimi**: Kimi K2.6, Kimi K2.5, and Kimi K2
 - **GLM**: GLM models
-- **Minimax**: Minimax M3
+- **Minimax**: Minimax M3 (`minimax-m3` in `lib/pricing.js`)
 - **Default**: Fallback pricing for unknown models
 
 OpenRouter pricing is fetched dynamically when available and takes precedence
 over the local fallback.
 
 ### Theme
-Toggle between dark/light modes with the 🌓 button.
+Toggle between dark/light modes with the ☾ button.
 
 ## Architecture
 
