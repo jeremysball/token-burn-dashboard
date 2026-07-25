@@ -403,6 +403,13 @@ body {
   background: linear-gradient(90deg, var(--mono-border), transparent);
 }
 
+.section-subtitle {
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+  opacity: 0.65;
+}
+
 .top-models-grid {
   gap: 14px;
 }
