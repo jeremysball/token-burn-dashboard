@@ -56,11 +56,17 @@ wins the cascade in every case (for selectors with equal specificity).
    — partially duplicate; design-v2 wins per-property, but main.css's
    `flex-wrap: wrap` on `.top-model-header` is never overridden and stays live.
 4. `deep-insights-grid`, `insight-card--deep` — partially duplicate; design-v2
-   wins per-property, but main.css's `display: grid`/`grid-template-columns`/
-   `animation: cardIn` are never overridden and stay live.
-5. `real-time-badge` — partially duplicate; main.css (line 210) sets
-   font-weight/color/gap/`::before`, design-v2.css (line 369) sets
-   background/border/padding — both live, neither fully overrides the other.
+   wins per-property, but main.css's base `display: grid`/`grid-template-columns`/
+   `animation: cardIn` stay live outside two edge cases: design-v2 narrows
+   `grid-template-columns` to `1fr` under `@media (max-width: 768px)`, and
+   disables `animation: cardIn` via `.is-ambient-update .insight-card--deep`.
+5. `real-time-badge` — defined twice in each file (main.css: 210, 1143;
+   design-v2.css: 369, 1825, 2014); the later definition in each file mostly
+   overrides the earlier one, and design-v2's later definitions win the
+   cascade for color/background/border/padding since design-v2 loads last.
+   Only `font-weight: 700` and `gap: 6px` from main.css's first block still
+   contribute (both are also set the same way further down, so no visible
+   difference, but the selector is genuinely still live, not dead).
 6. `llm-insights-section` — partially duplicate; main.css's `margin-top: 24px`
    (line 2061) is never overridden by design-v2.css (line 895) and stays live.
 

@@ -22,10 +22,10 @@ Real-time token usage analytics dashboard with cost tracking, built with a Monke
 
 ### 📈 Visualizations
 - Interactive donut charts (Plotly.js)
-- Stacked bar comparisons
+- Bar chart model comparisons
 - Sparkline trend graphs
 - Timeline view with range selection (1h to 30d)
-- Calendar heatmap view
+- Daily usage bar chart and heatmap views
 - Model distribution pie charts
 
 ### 🧠 Smart Insights
@@ -168,7 +168,7 @@ tests/
 - **Models Tab**: Sortable, filterable model table
 - **Compare Tab**: Side-by-side model comparison with bar charts
 - **Timeline Tab**: Time-series with range selection (1h, 24h, 7d, 30d, all)
-- **Calendar Tab**: Daily usage heatmap
+- **Calendar Tab**: Daily usage bar chart
 - **Distribution Tab**: Token distribution pie charts
 - **Insights Tab**: Deep analytics with pattern detection
 - **Scale Tab**: Token scale visualization
@@ -273,7 +273,7 @@ token-burn-dashboard/
 ├── lib/                   # Server modules
 │   ├── config.js          # Server configuration
 │   ├── cache.js           # Data caching layer
-│   ├── historical-data.js # Session file parser
+│   ├── historical-data.js # Historical time-series data extraction
 │   ├── token-burn.js      # Token calculation
 │   └── routes/            # API route handlers
 ├── tests/                 # Test suite
