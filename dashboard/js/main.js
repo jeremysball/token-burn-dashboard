@@ -305,6 +305,11 @@ const init = async () => {
     // Fetch fresh data (includes historical for charts)
     refreshData();
 
+    // Historical buckets (used for the "top models, last 48h" grid) only
+    // arrive via refreshData(), not SSE, so re-fetch them periodically or
+    // that grid goes stale for the rest of the session.
+    setInterval(refreshData, 5 * 60 * 1000);
+
     // Connect SSE
     connectSSE();
 
