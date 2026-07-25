@@ -78,8 +78,8 @@ export const renderDashboard = (fullRender = true) => {
     // Update burn rate gauge
     updateBurnRateGauge();
 
-    // Render top models (update in place unless full render)
-    renderTopModels(tokens_by_model, fullRender);
+    // Render top models over the last 48 hours (update in place unless full render)
+    renderTopModels(getTokensByModelLast48h(tokens_by_model), fullRender);
 
     // Generate insights (update in place unless full render)
     generateInsights(fullRender);
@@ -220,6 +220,34 @@ const updateBurnRateGauge = () => {
     
     // Update heatmap
     renderBurnRateHeatmap();
+};
+
+const TOP_MODELS_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+/**
+ * Sum tokens_by_model across fileHistoricalData's hourly buckets that fall
+ * within the last 48 hours. Falls back to the lifetime totals only when no
+ * historical buckets are available yet (e.g. right after startup) — an empty
+ * 48h window with real historical data present stays empty rather than
+ * showing lifetime totals under a "last 48h" label.
+ * @param {Record<string, {total: number}>} lifetimeTokensByModel
+ * @returns {Record<string, {total: number}>}
+ */
+const getTokensByModelLast48h = (lifetimeTokensByModel) => {
+    if (!fileHistoricalData.length) return lifetimeTokensByModel;
+
+    const cutoff = Date.now() - TOP_MODELS_WINDOW_MS;
+    /** @type {Record<string, {total: number}>} */
+    const windowed = {};
+
+    for (const bucket of fileHistoricalData) {
+        if (!bucket || bucket.time < cutoff) continue;
+        for (const [name, total] of Object.entries(bucket.tokens_by_model || {})) {
+            windowed[name] = { total: (windowed[name]?.total || 0) + total };
+        }
+    }
+
+    return windowed;
 };
 
 /**
