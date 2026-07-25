@@ -60,8 +60,8 @@ wins the cascade in every case (for selectors with equal specificity).
    `animation: cardIn` stay live outside two edge cases: design-v2 narrows
    `grid-template-columns` to `1fr` under `@media (max-width: 768px)`, and
    disables `animation: cardIn` via `.is-ambient-update .insight-card--deep`.
-5. `real-time-badge` — defined twice in each file (main.css: 210, 1143;
-   design-v2.css: 369, 1825, 2014); the later definition in each file mostly
+5. `real-time-badge` — defined twice in main.css (210, 1143) and three times
+   in design-v2.css (369, 1825, 2014); the later definitions mostly
    overrides the earlier one, and design-v2's later definitions win the
    cascade for color/background/border/padding since design-v2 loads last.
    Only `font-weight: 700` and `gap: 6px` from main.css's first block still
