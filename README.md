@@ -196,11 +196,11 @@ tests/
 The dashboard reads session files from both Pi and Claude Code:
 
 ```text
-# Pi
-~/.pi/sessions/**/*.jsonl
-~/.pi/agent/sessions/**/*.jsonl
+# Pi (one level deep only, not fully recursive)
+~/.pi/sessions/*.jsonl
+~/.pi/agent/sessions/*/*.jsonl
 
-# Claude Code
+# Claude Code (recursive, depth-capped)
 ~/.claude/projects/**/*.jsonl
 ```
 
@@ -221,7 +221,7 @@ unset.
 | `HOST` | Bind address (default `127.0.0.1`) |
 | `ALLOWED_ORIGINS` | Comma-separated CORS origins; empty disables cross-origin access |
 | `DASHBOARD_AUTH_TOKEN` | Bearer token required for `/api/*` requests when set |
-| `DASHBOARD_PROJECT_ROOT` | Root containing repositories for Git Blame and session discovery (defaults to `$HOME`) |
+| `DASHBOARD_PROJECT_ROOT` | Root containing repositories for Git Blame's path restriction (defaults to `$HOME`); does not affect session discovery |
 | `TASKFERRY_INSIGHTS_MODEL` | Model passed to taskferry for AI insights (default `opencode/deepseek-v4-flash-free`) |
 | `DASHBOARD_INSIGHTS_SCRATCH_DIR` | Isolated scratch directory for taskferry insights jobs |
 | `EXTRA_SESSION_DIRS` | Comma- or colon-separated additional session directories |

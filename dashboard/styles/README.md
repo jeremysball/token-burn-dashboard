@@ -19,12 +19,12 @@ places.
 | `:root` base variables and `[data-theme="light"]` | `main.css` (base) + `design-v2.css` (override) | Both files define `:root` and `[data-theme="light"]`. `main.css` (`dashboard/styles/main.css` lines 9 and 29) provides the base/fallback token set; `design-v2.css` (lines 13 and 56) is loaded afterward and intentionally overrides the theme tokens with a darker palette plus its own radius/shadow/source-color variables. **However, `design-v2.css` actually contains a second `:root` + `[data-theme="light"]` pair starting around line 1709 — see the "Second theme block" section below.** The first override is deliberate, not a stray duplicate — do not "consolidate" it or the live theme regresses. |
 | `pricing-source-badge`, `.openrouter`, `.local` | `design-v2.css` | Base definitions removed from `main.css`. |
 | `top-model-name` | `design-v2.css` | Base definition removed from `main.css`. |
-| `top-model-header`, `.top-model-emoji`, `.top-model-value`, `.top-model-spark` | duplicated: `main.css` + `design-v2.css` (design-v2 wins on load order) | These four selectors are defined in both files and were NOT cleaned up when the rest of the top-model consolidation happened. `main.css` defines them at lines 281, 288, 291, 296 (all inside the top-models-grid responsive block) and `design-v2.css` defines them at lines 451, 458, 528, 543. Because `design-v2.css` is loaded after `main.css`, design-v2 wins the cascade for every one of them. Treat as design-v2-owned for now; the duplicate definitions in `main.css` are dead code on the live page. |
+| `top-model-header`, `.top-model-emoji`, `.top-model-value`, `.top-model-spark` | duplicated: `main.css` + `design-v2.css` (design-v2 wins per-property on load order) | These four selectors are defined in both files and were NOT cleaned up when the rest of the top-model consolidation happened. `main.css` defines them at lines 281, 288, 291, 296 (all inside the top-models-grid responsive block) and `design-v2.css` defines them at lines 451, 458, 528, 543. `design-v2.css` wins the cascade only for properties it actually redeclares; `main.css`'s `.top-model-header` also sets `flex-wrap: wrap`, which `design-v2.css` never sets, so that declaration is still live on the page. Not dead code — treat `main.css` as still contributing here, not just a stale leftover. |
 | `hero-section`, `hero-stat`, `hero-stat.primary`, `hero-label`, `hero-value` | `design-v2.css` | Base definitions removed from `main.css`. `main.css` retains `hero-spark` / `hero-spark svg`, which are unique to it. |
 | `insights-section`, `insights-section h2`, `insights-grid` | `design-v2.css` | Base and responsive definitions removed from `main.css`; design-v2.css owns the complete base and responsive insights grid. Also note `.hero-stat.burn-rate` is owned by design-v2.css (including its `display:flex`/`flex-direction:column` behavior). |
-| `scale-hero`, `scale-grid` | `main.css` (layout) + `design-v2.css` (border-radius polish) | `design-v2.css` only polishes border-radius; the full layout is defined only in `main.css`, so it is NOT a duplicate and stays in `main.css`. **Note: `design-v2.css` also re-overrides `.scale-hero` (and `.code-summary-grid`, `.code-breakdown`, `.heatmaps-container`) at line 1955 inside the second theme block — see below.** |
+| `scale-hero`, `scale-grid` | `main.css` (layout, both selectors) + `design-v2.css` (border-radius polish, `.scale-hero` only) | `design-v2.css` only polishes `.scale-hero`'s border-radius (line 1699) — `.scale-grid` does not appear in `design-v2.css` at all. The full layout for both selectors is defined only in `main.css`, so this is NOT a duplicate. **Note: `design-v2.css` also re-overrides `.scale-hero` (and `.code-summary-grid`, `.code-breakdown`, `.heatmaps-container` — never `.scale-grid`) at line 1955 inside the second theme block — see below.** |
 | Deep-insights tab: `.insights-header`, `.refresh-insights-btn` | `main.css` only | Defined only in `main.css` (lines 1883, 1912, and the hover/active rules around them). `design-v2.css` does not redefine these. Retained in main.css. |
-| Deep-insights tab: `.deep-insights-grid`, `.insight-card--deep` | duplicated: `main.css` + `design-v2.css` (design-v2 wins on load order) | Defined in **both** files. `main.css` defines `.deep-insights-grid` at line 1941 and `.insight-card--deep` at lines 1948 and 1957. `design-v2.css` defines `.deep-insights-grid` at lines 820 and 1563 (responsive override), and `.insight-card--deep` at lines 824, 835, 845, plus an ambient-update suppression rule at line 1632. Because `design-v2.css` is loaded after `main.css`, design-v2 wins the cascade for these selectors on the live page. The `main.css` definitions are dead code in practice. |
+| Deep-insights tab: `.deep-insights-grid`, `.insight-card--deep` | duplicated: `main.css` + `design-v2.css` (design-v2 wins per-property on load order) | Defined in **both** files. `main.css` defines `.deep-insights-grid` at line 1941 (`display: grid`, `grid-template-columns`, `margin-bottom`) and `.insight-card--deep` at lines 1948 and 1957 (including `animation: cardIn`). `design-v2.css` defines `.deep-insights-grid` at lines 820 (`gap` only) and 1563 (responsive column override), and `.insight-card--deep` at lines 824, 835, 845 (border/shadow/hover, no `animation`), plus an ambient-update suppression rule at line 1632. `design-v2.css` only wins the properties it redeclares — `main.css`'s `display: grid`, `grid-template-columns`, and `animation: cardIn` are never overridden and remain live. Not dead code. |
 
 ## Second theme block (Experimental-compute fieldbook)
 
@@ -50,12 +50,14 @@ wins the cascade in every case (for selectors with equal specificity).
 1. `:root` and `[data-theme="light"]` — token palette overrides (and the second
    "fieldbook" `:root`/`[data-theme="light"]` is its own internal duplication
    within design-v2.css — see above).
-2. `scale-hero` and `scale-grid` — design-v2 only adds a `border-radius` polish
-   on top of the layout owned by main.css.
+2. `scale-hero` only (not `scale-grid`, which design-v2 never touches) — design-v2
+   only adds a `border-radius` polish on top of the layout owned by main.css.
 3. `top-model-header`, `top-model-emoji`, `top-model-value`, `top-model-spark`
-   — full duplicate definitions; main.css versions are dead code in practice.
-4. `deep-insights-grid`, `insight-card--deep` — full duplicate definitions;
-   main.css versions are dead code in practice.
+   — partially duplicate; design-v2 wins per-property, but main.css's
+   `flex-wrap: wrap` on `.top-model-header` is never overridden and stays live.
+4. `deep-insights-grid`, `insight-card--deep` — partially duplicate; design-v2
+   wins per-property, but main.css's `display: grid`/`grid-template-columns`/
+   `animation: cardIn` are never overridden and stay live.
 
 ## History
 
@@ -68,7 +70,9 @@ design-v2 was not yet linked) is now resolved — `design-v2.css` is linked in
 
 The `.top-model-header` / `.top-model-emoji` / `.top-model-value` /
 `.top-model-spark` and `.deep-insights-grid` / `.insight-card--deep` duplicates
-were missed during that consolidation and remain in `main.css` as dead code.
+were missed during that consolidation and remain in `main.css`, still
+contributing properties design-v2.css never redeclares (see the summary
+above) — not dead code, despite being an unintentional leftover duplicate.
 The "Experimental-compute fieldbook" second theme block was added later as an
 internal re-skin of `design-v2.css` and is documented above.
 
