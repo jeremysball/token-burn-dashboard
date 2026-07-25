@@ -62,7 +62,7 @@ wins the cascade in every case (for selectors with equal specificity).
    disables `animation: cardIn` via `.is-ambient-update .insight-card--deep`.
 5. `real-time-badge` — defined twice in main.css (210, 1143) and three times
    in design-v2.css (369, 1825, 2014); the later definitions mostly
-   overrides the earlier one, and design-v2's later definitions win the
+   override the earlier ones, and design-v2's later definitions win the
    cascade for color/background/border/padding since design-v2 loads last.
    Only `font-weight: 700` and `gap: 6px` from main.css's first block still
    contribute: `gap: 6px` is repeated identically in the second block (no
