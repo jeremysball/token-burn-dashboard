@@ -226,8 +226,10 @@ const TOP_MODELS_WINDOW_MS = 48 * 60 * 60 * 1000;
 
 /**
  * Sum tokens_by_model across fileHistoricalData's hourly buckets that fall
- * within the last 48 hours. Falls back to the lifetime totals when no
- * historical buckets are available yet (e.g. right after startup).
+ * within the last 48 hours. Falls back to the lifetime totals only when no
+ * historical buckets are available yet (e.g. right after startup) — an empty
+ * 48h window with real historical data present stays empty rather than
+ * showing lifetime totals under a "last 48h" label.
  * @param {Record<string, {total: number}>} lifetimeTokensByModel
  * @returns {Record<string, {total: number}>}
  */
@@ -245,7 +247,7 @@ const getTokensByModelLast48h = (lifetimeTokensByModel) => {
         }
     }
 
-    return Object.keys(windowed).length ? windowed : lifetimeTokensByModel;
+    return windowed;
 };
 
 /**
