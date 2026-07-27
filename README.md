@@ -2,48 +2,37 @@
 
 Real-time token usage analytics dashboard with cost tracking, built with a MonkeyType-inspired aesthetic.
 
-[![Tests](https://img.shields.io/badge/tests-jest-blue)](./tests)
+[![Tests](https://img.shields.io/badge/tests-bun%20test-blue)](./tests)
 [![Linting](https://img.shields.io/badge/linting-eslint-green)](./eslint.config.mjs)
 [![License](https://img.shields.io/badge/license-MIT-yellow)](./LICENSE)
 
 ## Features
 
 ### 📊 Real-Time Analytics
-- Live token usage tracking from Pi session files
+- Live token usage tracking from Pi and Claude Code session files
 - Server-Sent Events (SSE) for automatic updates every 5 seconds
 - Historical trend visualization with sparklines
 - Deep insights with AI-powered pattern analysis
 
 ### 💰 Cost Analysis
 - Per-model cost estimation
-- Configurable pricing per 1M tokens for 6 providers
-- Total cost breakdown (input, output, cache read, cache write)
+- Configurable pricing per 1M tokens for 7 providers
+- Total cost breakdown (input, output, cache read, cache write, reasoning)
 - Cache efficiency metrics and savings calculation
 
 ### 📈 Visualizations
 - Interactive donut charts (Plotly.js)
-- Stacked bar comparisons
+- Bar chart model comparisons
 - Sparkline trend graphs
 - Timeline view with range selection (1h to 30d)
-- Calendar heatmap view
+- Daily usage bar chart and heatmap views
 - Model distribution pie charts
 
 ### 🧠 Smart Insights
 - Automated efficiency analysis
-- Model recommendation engine
 - Cost trajectory projections
 - Cache optimization suggestions
 - Usage velocity tracking
-
-### ⌨️ Keyboard Shortcuts
-| Key | Action |
-|-----|--------|
-| `1-5` | Switch views |
-| `R` | Refresh data |
-| `T` | Toggle theme |
-| `/` | Search focus |
-| `?` | Show help |
-| `Esc` | Close modals |
 
 ### 🎨 Themes
 - Dark mode (default) - terminal-inspired aesthetic
@@ -52,15 +41,17 @@ Real-time token usage analytics dashboard with cost tracking, built with a Monke
 
 ## Quick Start
 
+[Bun](https://bun.sh/) 1.3.11 or newer is required.
+
 ```bash
 # Install dependencies
-npm install
+bun install
 
 # Start the server
-npm start
+bun run start
 
 # Or in development mode
-npm run dev
+bun run dev
 
 # Dashboard will be available at:
 open http://localhost:7071
@@ -107,17 +98,17 @@ docker run -d \
 
 ### Testing
 ```bash
-# Run all tests with coverage
-npm test
+# Run all unit tests with coverage
+bun test tests/unit --coverage
 
 # Run tests in watch mode
-npm run test:watch
+bun run test:watch
 
 # Run linting
-npm run lint
+bun run lint
 
 # Fix linting issues
-npm run lint:fix
+bun run lint:fix
 ```
 
 ### Frontend dev server (HMR)
@@ -127,10 +118,10 @@ reloading during UI work:
 
 ```bash
 # Terminal 1: backend API
-npm run dev
+bun run dev
 
 # Terminal 2: Vite dev server with HMR, proxying /api to the backend
-npm run dev:ui
+bun run dev:ui
 ```
 
 Vite serves the dashboard on its own port and proxies `/api` requests to the
@@ -139,7 +130,7 @@ backend (`http://127.0.0.1:7071` by default, override with `BACKEND_URL`).
 ### Building the frontend for production
 
 ```bash
-npm run build:ui
+bun run build:ui
 ```
 
 This bundles `dashboard/` into `dist-dashboard/`. When `server.js` is started
@@ -147,10 +138,9 @@ with `NODE_ENV=production`, it serves `dist-dashboard/` instead of the raw
 `dashboard/` source (talking to Vite at all only happens in dev mode above).
 
 ### Testing Stack
-- **Jest** - Test runner with coverage
-- **jsdom** - Browser environment for unit tests
-- **Playwright** - E2E testing for UI components
-- **Babel** - ES6+ transpilation for tests
+- **Bun test** - Bun's built-in test runner with coverage
+- **happy-dom** - DOM implementation for unit tests (with `@happy-dom/global-registrator`)
+- **Playwright** - E2E testing via `@playwright/test`
 
 ### Test Structure
 ```
@@ -178,9 +168,14 @@ tests/
 - **Models Tab**: Sortable, filterable model table
 - **Compare Tab**: Side-by-side model comparison with bar charts
 - **Timeline Tab**: Time-series with range selection (1h, 24h, 7d, 30d, all)
-- **Calendar Tab**: Daily usage heatmap
+- **Calendar Tab**: Daily usage bar chart
 - **Distribution Tab**: Token distribution pie charts
 - **Insights Tab**: Deep analytics with pattern detection
+- **Scale Tab**: Token scale visualization
+- **Code Tab**: Lines of code, languages, and project metrics
+- **Heatmaps Tab**: Usage patterns across time and models
+- **Git Blame Tab**: AI-associated commit and project analysis
+- **Spikes Tab**: Detect and investigate usage spikes
 
 ## API Endpoints
 
@@ -189,35 +184,80 @@ tests/
 | `/api/tokens` | GET | Current cumulative token totals |
 | `/api/tokens/historical` | GET | Per-hour token deltas from session files |
 | `/api/tokens/stream` | GET | SSE real-time updates |
-| `/api/insights/analyze` | POST | AI pattern analysis from summary data |
+| `/api/insights/analyze` | POST | AI pattern analysis from summary data; returns 503 if the `taskferry` CLI is unavailable |
+| `/api/pricing` | GET | Local model pricing table |
+| `/api/git/blame` | GET | AI-associated commit and session analysis |
+| `/api/spikes` | GET | Detect recent token-usage spikes |
+| `/api/spikes/investigate` | GET | Investigate a spike by timestamp |
 | `/api/health` | GET | Health check with uptime |
 
 ## Data Sources
 
-The dashboard reads from Pi session files:
+The dashboard reads session files from both Pi and Claude Code:
+
+```text
+# Pi (one level deep only, not fully recursive)
+~/.pi/sessions/*.jsonl
+~/.pi/agent/sessions/*/*.jsonl
+
+# Claude Code (recursive, depth-capped)
+~/.claude/projects/**/*.jsonl
 ```
-~/.pi/agent/sessions/**/*.jsonl
-```
+
+Claude Code discovery can be redirected with `CLAUDE_PROJECTS_DIR`, and
+additional Pi session directories can be supplied with `EXTRA_SESSION_DIRS`.
 
 ## Configuration
 
+### Environment Variables
+
+Copy [`.env.example`](.env.example) to `.env` to configure the server. All
+variables are optional; the defaults shown there are used when a value is
+unset.
+
+| Variable | Purpose |
+|----------|---------|
+| `PORT` | HTTP port (default `7071`) |
+| `HOST` | Bind address (default `127.0.0.1`) |
+| `ALLOWED_ORIGINS` | Comma-separated CORS origins; empty disables cross-origin access |
+| `DASHBOARD_AUTH_TOKEN` | Bearer token required for `/api/*` requests when set |
+| `DASHBOARD_PROJECT_ROOT` | Root containing repositories for Git Blame's path restriction (defaults to `$HOME`); does not affect session discovery |
+| `TASKFERRY_INSIGHTS_MODEL` | Model passed to taskferry for AI insights (default `opencode/deepseek-v4-flash-free`) |
+| `DASHBOARD_INSIGHTS_SCRATCH_DIR` | Isolated scratch directory for taskferry insights jobs |
+| `EXTRA_SESSION_DIRS` | Comma- or colon-separated additional Pi session directories (appended to `PI_SESSION_BASES`; does not affect Claude Code discovery) |
+| `CLAUDE_PROJECTS_DIR` | Override the Claude Code projects directory (default `~/.claude/projects`) |
+| `MAX_SESSION_BYTES` | Maximum session file size in bytes (default `104857600`) |
+| `OPENROUTER_MODELS_URL` | OpenRouter models endpoint for live pricing |
+| `OPENROUTER_REFRESH_MS` | OpenRouter pricing refresh interval in milliseconds |
+| `OPENROUTER_TIMEOUT_MS` | OpenRouter request timeout in milliseconds |
+| `OPENROUTER_DISABLE_AUTOFETCH` | Set to `1` to disable background OpenRouter pricing fetches |
+
+The `/api/insights/analyze` endpoint dispatches work through the `taskferry`
+CLI. Install `taskferry` and make it available on `PATH`; otherwise this
+endpoint returns `503 Service Unavailable`.
+
 ### Supported Model Pricing
-The dashboard includes pricing for:
-- **OpenAI**: GPT-4o, GPT-4o-mini, o1, o3-mini
-- **Anthropic**: Claude 3.5 Sonnet, Claude 3 Opus, Claude 3 Haiku
-- **DeepSeek**: DeepSeek Chat, DeepSeek Reasoner
-- **Google**: Gemini 1.5 Pro, Gemini 1.5 Flash
+The local fallback pricing table covers 7 provider families:
+- **OpenAI**: GPT-4o, GPT-4o-mini, o1-mini, o3-mini, and o1
+- **Claude**: Claude 3.5 Sonnet, Claude 3 Opus, Claude 3 Haiku, and other Claude models
+- **DeepSeek**: DeepSeek Chat and DeepSeek Reasoner
+- **Gemini**: Gemini 1.5 Pro, Gemini 1.5 Flash, and other Gemini models
+- **Kimi**: Kimi K2.6, Kimi K2.5, and Kimi K2
+- **GLM**: GLM models
+- **Minimax**: Minimax M3 (`minimax-m3` in `lib/pricing.js`)
 - **Default**: Fallback pricing for unknown models
 
+OpenRouter pricing is fetched dynamically when available and takes precedence
+over the local fallback.
+
 ### Theme
-Toggle between dark/light modes with the 🌓 button or press `T`.
+Toggle between dark/light modes with the ☾ button.
 
 ## Architecture
 
 ```
 token-burn-dashboard/
 ├── server.js              # HTTP server + API
-├── api/                   # Alternative API server
 ├── dashboard/
 │   ├── index.html         # Main dashboard
 │   ├── js/
@@ -229,11 +269,11 @@ token-burn-dashboard/
 │   │   └── views/         # View components
 │   │       ├── dashboard.js
 │   │       └── analytics.js
-│   └── css/               # Styles
+│   └── styles/            # Styles
 ├── lib/                   # Server modules
 │   ├── config.js          # Server configuration
 │   ├── cache.js           # Data caching layer
-│   ├── historical-data.js # Session file parser
+│   ├── historical-data.js # Historical time-series data extraction
 │   ├── token-burn.js      # Token calculation
 │   └── routes/            # API route handlers
 ├── tests/                 # Test suite
