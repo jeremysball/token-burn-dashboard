@@ -104,8 +104,6 @@
     "server.js|max-lines-per-function": 1,
     "server.js|max-statements": 1,
     "server.js|sonarjs/cognitive-complexity": 1,
-    "src/components/DetailPanel.js|max-statements": 1,
-    "src/MonoDashboard.js|complexity": 1,
     "tests/burn-rate-gauge.spec.js|no-unused-vars": 1,
     "tests/burn-rate-gauge.spec.js|sonarjs/no-dead-store": 1,
     "tests/burn-rate-gauge.spec.js|sonarjs/no-fixed-wait-in-tests": 3,
