@@ -41,7 +41,6 @@ COPY --from=deps --chown=app:app /app/node_modules ./node_modules
 COPY --from=build --chown=app:app /app/dist-dashboard ./dist-dashboard
 COPY --chown=app:app server.js ./server.js
 COPY --chown=app:app lib ./lib
-COPY --chown=app:app src ./src
 
 USER app
 
