@@ -54,8 +54,12 @@ bun run start
 bun run dev
 
 # Dashboard will be available at:
-open http://localhost:7071
+open http://127.0.0.1:7071
 ```
+
+The dashboard itself needs nothing else to work. The AI Insights tab is the
+one exception: it shells out to the `taskferry` CLI and shows a friendly
+"unavailable" state if `taskferry` isn't on `PATH` — see [Configuration](#configuration).
 
 ## Docker
 
