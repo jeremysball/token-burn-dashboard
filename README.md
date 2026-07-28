@@ -61,6 +61,10 @@ The dashboard itself needs nothing else to work. The AI Insights tab is the
 one exception: it shells out to the `taskferry` CLI and shows a friendly
 "unavailable" state if `taskferry` isn't on `PATH`; see [Configuration](#configuration).
 
+On first boot you may see a line like `Skipping large file: <path> (NNMB)` —
+that's the `MAX_SESSION_BYTES` guard working as intended on an oversized
+session log, not an error.
+
 ## Docker
 
 A pre-built image is published to GHCR on every push to `main` via
