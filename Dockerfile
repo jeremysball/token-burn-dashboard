@@ -19,6 +19,7 @@ COPY scripts/install-hooks.mjs ./scripts/install-hooks.mjs
 RUN bun install --frozen-lockfile
 COPY vite.config.js ./vite.config.js
 COPY dashboard ./dashboard
+COPY scripts/copy-static-data.mjs ./scripts/copy-static-data.mjs
 RUN bun run build:ui
 
 # Runtime stage: minimal Bun image with only the tools this app actually needs.

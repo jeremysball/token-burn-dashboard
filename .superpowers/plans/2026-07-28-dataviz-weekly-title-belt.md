@@ -31,7 +31,7 @@
 - Produces:
   - `WEEKLY_HISTORY_DAYS` (exported constant, `15`) from `dashboard/js/config.js`, consumed by both `dashboard/js/api.js`'s retention cap and `dashboard/js/title-belt.js`'s window math, so the two can't drift independently.
   - `computeWeekWindow(weeklyData): {thisWeek: Record<string, {total:number, input:number, output:number, cache_read:number, cache_write:number}>, lastWeek: Record<string, {...}>|null, weekEndDay: string}|null` from `dashboard/js/title-belt.js` — `null` when `weeklyData` has fewer than 8 entries (not even one full week-over-week boundary yet). `lastWeek` is `null` when there aren't 15 entries yet (not enough history for a week-over-week comparison), even if `thisWeek` is available.
-  - `scoreTitleBelt(weekWindow, pricingByModel): {volumeCrown, thriftKing, sommelier, mostImproved, eligibleModels: string[]}` — each of `volumeCrown`/`thriftKing`/`sommelier` is `{name, tokens, share, effectiveRate}|null`; `mostImproved` is `{name, tokens, growthPct}|null` (always `null` when `weekWindow.lastWeek` is `null`, or when no eligible model has nonzero prior-week tokens).
+  - `scoreTitleBelt(weekWindow, pricingByModel): {volumeCrown, thriftKing, sommelier, mostImproved}` — each of `volumeCrown`/`thriftKing`/`sommelier` is `{name, tokens, share, effectiveRate}|null`; `mostImproved` is `{name, tokens, growthPct}|null` (always `null` when `weekWindow.lastWeek` is `null`, or when no eligible model has nonzero prior-week tokens, or when the best week-over-week growth is non-positive).
 
 - [ ] **Step 1: Widen the retention cap**
 
@@ -77,16 +77,24 @@ describe('weeklyData retention', () => {
 
   it('retains up to WEEKLY_HISTORY_DAYS distinct-day snapshots, not just 7', () => {
     const realDateNow = Date.now;
+    const RealDate = Date;
     try {
       for (let i = 0; i < WEEKLY_HISTORY_DAYS + 3; i++) {
-        const day = new Date(Date.UTC(2026, 0, 1 + i));
+        const day = new RealDate(Date.UTC(2026, 0, 1 + i));
         Date.now = () => day.getTime();
+        // Override Date constructor so `new Date().toISOString()` (used by
+        // updateData's day-key derivation) also sees the mocked time.
+        globalThis.Date = class extends RealDate {
+          constructor() { super(day.getTime()); }
+          static now() { return day.getTime(); }
+        };
         updateData({
           total_tokens: 1000 * (i + 1),
           tokens_by_model: { 'a/model-1': { total: 1000 * (i + 1), input: 0, output: 0, cache_read: 0, cache_write: 0 } }
         });
       }
     } finally {
+      globalThis.Date = RealDate;
       Date.now = realDateNow;
     }
 
@@ -159,7 +167,8 @@ describe('scoreTitleBelt', () => {
     const weeklyData = fixtureWeeklyData(15, { 'a/model-1': 10000, 'a/model-2': 5000, 'a/negligible': 10 });
     const window = computeWeekWindow(weeklyData);
     const scored = scoreTitleBelt(window, pricingByModel);
-    expect(scored.eligibleModels).not.toContain('a/negligible');
+    const beltWinners = [scored.volumeCrown?.name, scored.thriftKing?.name, scored.sommelier?.name, scored.mostImproved?.name];
+    expect(beltWinners).not.toContain('a/negligible');
   });
 
   it('awards Volume Crown to the highest-token-share eligible model', () => {
@@ -193,13 +202,32 @@ describe('scoreTitleBelt', () => {
       });
     }
     const scored = scoreTitleBelt(computeWeekWindow(out), pricingByModel);
-    expect(scored.eligibleModels).toContain('a/model-2'); // clears the volume floor this week
+    const beltWinners = [scored.volumeCrown?.name, scored.thriftKing?.name, scored.sommelier?.name, scored.mostImproved?.name];
+    expect(beltWinners).toContain('a/model-2'); // clears the volume floor this week — wins at least one belt
     expect(scored.mostImproved?.name).not.toBe('a/model-2'); // but has 0 prior-week tokens -> ineligible for Most Improved
   });
 
   it('returns a null mostImproved when there is no lastWeek window at all', () => {
     const weeklyData = fixtureWeeklyData(8, { 'a/model-1': 1000 }); // only 8 snapshots, no lastWeek
     const scored = scoreTitleBelt(computeWeekWindow(weeklyData), pricingByModel);
+    expect(scored.mostImproved).toBeNull();
+  });
+
+  it('returns a null mostImproved when all eligible models shrank week-over-week', () => {
+    // Build 15 days where tokens grow for 8 days then shrink for 7 days
+    // so thisWeek < lastWeek for every model.
+    const out = [];
+    let cum = 0;
+    for (let d = 0; d < 15; d++) {
+      if (d < 8) cum += 1000;
+      else cum -= 400;
+      out.push({
+        day: `d${d}`,
+        tokens: Math.max(0, cum),
+        models: { 'a/model-1': { total: Math.max(0, cum), input: Math.max(0, cum), output: 0, cache_read: 0, cache_write: 0 } }
+      });
+    }
+    const scored = scoreTitleBelt(computeWeekWindow(out), pricingByModel);
     expect(scored.mostImproved).toBeNull();
   });
 });
@@ -215,6 +243,7 @@ Expected: FAIL — `Cannot find module '../../dashboard/js/title-belt.js'`
 ```js
 // dashboard/js/title-belt.js
 import { WEEKLY_HISTORY_DAYS } from './config.js';
+import { calculateCostWithPricing } from './modelsdev-pricing.js';
 
 export const ELIGIBILITY_FLOOR = 0.01; // 1% of the week's total tokens
 
@@ -264,36 +293,42 @@ export function computeWeekWindow(weeklyData) {
 }
 
 /**
+ * The effective $/M convention: all four rates must be finite before
+ * a model is allowed to participate in effective-rate-per-million calculations.
+ * @param {any|null|undefined} pricing
+ * @returns {boolean}
+ */
+export function hasUsableFullPricing(pricing) {
+    const r = [pricing?.input, pricing?.output, pricing?.cacheRead, pricing?.cacheWrite].map(Number);
+    return r.every(Number.isFinite);
+}
+
+/**
  * @param {any} stats
  * @param {any} pricing
  * @returns {number|null}
  */
 function effectiveRatePerMillion(stats, pricing) {
-    const inputRate = Number(pricing?.input);
-    const outputRate = Number(pricing?.output);
-    const cacheReadRate = Number(pricing?.cacheRead);
-    const cacheWriteRate = Number(pricing?.cacheWrite);
-    if (![inputRate, outputRate, cacheReadRate, cacheWriteRate].every(Number.isFinite)) return null;
+    if (!hasUsableFullPricing(pricing)) return null;
     if (stats.total <= 0) return null;
-    const cost = (stats.input / 1e6) * inputRate + (stats.output / 1e6) * outputRate
-        + (stats.cache_read / 1e6) * cacheReadRate + (stats.cache_write / 1e6) * cacheWriteRate;
+    const { total: cost, priced } = calculateCostWithPricing(stats, pricing);
+    if (!priced) return null;
     return cost / (stats.total / 1e6);
 }
 
 /**
  * @param {{thisWeek: Record<string, any>, lastWeek: Record<string, any>|null}|null} weekWindow
  * @param {Record<string, any>|undefined} pricingByModel
- * @returns {{volumeCrown: any, thriftKing: any, sommelier: any, mostImproved: any, eligibleModels: string[]}}
+ * @returns {{volumeCrown: any, thriftKing: any, sommelier: any, mostImproved: any}}
  */
 export function scoreTitleBelt(weekWindow, pricingByModel) {
-    if (!weekWindow) return { volumeCrown: null, thriftKing: null, sommelier: null, mostImproved: null, eligibleModels: [] };
+    if (!weekWindow) return { volumeCrown: null, thriftKing: null, sommelier: null, mostImproved: null };
 
     const { thisWeek, lastWeek } = weekWindow;
     const totalTokens = Object.values(thisWeek).reduce((sum, s) => sum + s.total, 0);
-    if (totalTokens <= 0) return { volumeCrown: null, thriftKing: null, sommelier: null, mostImproved: null, eligibleModels: [] };
+    if (totalTokens <= 0) return { volumeCrown: null, thriftKing: null, sommelier: null, mostImproved: null };
 
     const eligible = Object.entries(thisWeek).filter(([, s]) => s.total / totalTokens >= ELIGIBILITY_FLOOR);
-    const eligibleModels = eligible.map(([name]) => name);
 
     const scored = eligible.map(([name, s]) => ({
         name,
@@ -316,17 +351,49 @@ export function scoreTitleBelt(weekWindow, pricingByModel) {
                 return { name, tokens: s.total, growthPct: ((s.total - priorTokens) / priorTokens) * 100 };
             })
             .filter(Boolean);
-        if (improved.length) mostImproved = improved.sort((a, b) => b.growthPct - a.growthPct)[0];
+        if (improved.length) {
+            const best = improved.sort((a, b) => b.growthPct - a.growthPct)[0];
+            if (best.growthPct > 0) mostImproved = best;
+        }
     }
 
-    return { volumeCrown, thriftKing, sommelier, mostImproved, eligibleModels };
+    return { volumeCrown, thriftKing, sommelier, mostImproved };
 }
 ```
 
 - [ ] **Step 8: Run tests to verify they pass**
 
 Run: `bun test tests/unit/title-belt.test.js`
-Expected: PASS (8 tests)
+Expected: PASS (9 tests)
+
+- [ ] **Step 8b: Add unit test for `hasUsableFullPricing`**
+
+In `tests/unit/utils.test.js`, add:
+
+```js
+import { hasUsableFullPricing } from '../../dashboard/js/title-belt.js';
+
+describe('hasUsableFullPricing', () => {
+  it('returns true when all four rates are finite', () => {
+    expect(hasUsableFullPricing({ input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 })).toBe(true);
+  });
+  it('returns false when a rate is NaN', () => {
+    expect(hasUsableFullPricing({ input: NaN, output: 15, cacheRead: 0.3, cacheWrite: 3.75 })).toBe(false);
+  });
+  it('returns false when input is missing', () => {
+    expect(hasUsableFullPricing({ output: 15, cacheRead: 0.3, cacheWrite: 3.75 })).toBe(false);
+  });
+  it('returns false when cacheRead is missing', () => {
+    expect(hasUsableFullPricing({ input: 3, output: 15, cacheWrite: 3.75 })).toBe(false);
+  });
+  it('returns false for null pricing', () => {
+    expect(hasUsableFullPricing(null)).toBe(false);
+  });
+});
+```
+
+Run: `bun test tests/unit/utils.test.js`
+Expected: PASS
 
 - [ ] **Step 9: Run the full unit suite to catch regressions**
 
@@ -466,10 +533,7 @@ Expected: FAIL — `Cannot find module '../../dashboard/js/title-belt-render.js'
 ```js
 // dashboard/js/title-belt-render.js
 import { computeWeekWindow, scoreTitleBelt } from './title-belt.js';
-import { escapeHtml, fmtNum } from './utils.js';
-
-/** @param {{name: string}|null} entry @returns {string} */
-const shortName = (entry) => (entry ? entry.name.split('/').pop() : '');
+import { escapeHtml, fmtNum, displayModel } from './utils.js';
 
 /**
  * @param {string} iconId
@@ -483,7 +547,7 @@ function beltRow(iconId, title, entry, detail) {
         <div class="belt-row">
             <span class="belt-badge"><svg aria-hidden="true"><use href="#${iconId}"></use></svg></span>
             <span class="belt-title">${escapeHtml(title)}</span>
-            <span class="belt-model">${entry ? escapeHtml(shortName(entry)) : '—'}</span>
+            <span class="belt-model">${entry ? escapeHtml(displayModel(entry.name)) : '—'}</span>
             <span class="belt-detail">${escapeHtml(detail)}</span>
         </div>
     `;
@@ -564,7 +628,7 @@ Expected: PASS
 
 - [ ] **Step 9: Extend the shared Playwright smoke test to cover the ticker + title belt together**
 
-This is the spec's Testing-section requirement ("Playwright smoke test confirming the ticker and title belt render without layout overflow or clipped content"). In `tests/playwright/overflow.spec.js`, add:
+This is the spec's Testing-section requirement ("Playwright smoke test confirming the ticker and title belt render without layout overflow or clipped content"). The existing `expectNoOverflow` helper only checks horizontal overflow (`scrollWidth` vs `clientWidth`). To also catch vertical/`overflow:hidden` clipping, extend the helper (or add a companion `expectNoVerticalOverflow` helper) that compares `scrollHeight` vs `clientHeight`. In `tests/playwright/overflow.spec.js`, add:
 
 ```js
   test('weekly title belt (Analytics > Insights)', async ({ page }) => {
@@ -572,6 +636,15 @@ This is the spec's Testing-section requirement ("Playwright smoke test confirmin
     await page.click('button:has-text("Insights")');
     await expect(page.locator('#weekly-title-belt-container')).toBeVisible({ timeout: 10000 });
     await expectNoOverflow(page, '#weekly-title-belt-container');
+    // Also check vertical overflow / clipped content (spec requirement).
+    // Extend expectNoOverflow to also assert scrollHeight <= clientHeight + 2,
+    // or add a standalone check here:
+    const overflows = await page.$$eval('#weekly-title-belt-container', els =>
+      els.map(el => ({ scroll: el.scrollHeight, client: el.clientHeight, text: el.textContent?.slice(0, 50) }))
+    );
+    for (const o of overflows) {
+      expect(o.scroll, `vertical overflow #weekly-title-belt-container ${o.text}`).toBeLessThanOrEqual(o.client + 2);
+    }
   });
 ```
 
