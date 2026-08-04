@@ -10,6 +10,9 @@ import {
   hide,
   show,
   getPlotlyLayout,
+  cacheHitRatePct,
+  hasUsableCacheReadPricing,
+  ensureWidgetBuilt,
   splitModelKey,
   displayModel,
   parseModelKey,
@@ -398,5 +401,63 @@ describe('Utils Module', () => {
       document.body.innerHTML = '';
       expect(() => positionNotifications()).not.toThrow();
     });
+  });
+});
+
+describe('cacheHitRatePct', () => {
+  it('returns correct percentage for mixed input and cacheRead', () => {
+    expect(cacheHitRatePct(50, 50)).toBeCloseTo(50, 5);
+    expect(cacheHitRatePct(25, 75)).toBeCloseTo(75, 5);
+  });
+
+  it('returns 0 when both inputs are zero or missing', () => {
+    expect(cacheHitRatePct(0, 0)).toBe(0);
+    expect(cacheHitRatePct(null, null)).toBe(0);
+  });
+
+  it('returns 100 when only cacheRead has volume', () => {
+    expect(cacheHitRatePct(0, 1000)).toBe(100);
+  });
+});
+
+describe('hasUsableCacheReadPricing', () => {
+  it('returns true when both input and cacheRead are finite numbers', () => {
+    expect(hasUsableCacheReadPricing({ input: 3, cacheRead: 0.3 })).toBe(true);
+  });
+
+  it('returns false when cacheRead is missing or non-finite', () => {
+    expect(hasUsableCacheReadPricing({ input: 3 })).toBe(false);
+    expect(hasUsableCacheReadPricing({ input: 3, cacheRead: NaN })).toBe(false);
+  });
+
+  it('returns false for null/undefined pricing', () => {
+    expect(hasUsableCacheReadPricing(null)).toBe(false);
+    expect(hasUsableCacheReadPricing(undefined)).toBe(false);
+  });
+});
+
+describe('ensureWidgetBuilt', () => {
+  it('builds on first call and returns true', () => {
+    const container = { dataset: {} };
+    let built = 0;
+    const result = ensureWidgetBuilt(container, 'xBuilt', () => { built++; });
+    expect(built).toBe(1);
+    expect(result).toBe(true);
+    expect(container.dataset.xBuilt).toBe('true');
+  });
+
+  it('no-ops on second call and returns false', () => {
+    const container = { dataset: { xBuilt: 'true' } };
+    let built = 0;
+    const result = ensureWidgetBuilt(container, 'xBuilt', () => { built++; });
+    expect(built).toBe(0);
+    expect(result).toBe(false);
+  });
+
+  it('isolates different flag keys on the same container', () => {
+    const container = { dataset: { aBuilt: 'true' } };
+    let built = 0;
+    ensureWidgetBuilt(container, 'bBuilt', () => { built++; });
+    expect(built).toBe(1);
   });
 });
