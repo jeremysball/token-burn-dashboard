@@ -9,6 +9,12 @@ export const VERSION_KEY = 'tokenBurnCacheVersion';
 export const CACHE_DURATION = 5 * 60 * 1000;
 export const MAX_HISTORY_POINTS = 1000;
 
+// Daily weeklyData snapshots to retain. 15 gives three week-boundary anchors
+// (today, 7 days ago, 14 days ago) so the weekly title belt can compute both
+// "this week" and "last week" per-model deltas — 7 would only ever cover one
+// week and could never support a week-over-week comparison.
+export const WEEKLY_HISTORY_DAYS = 15;
+
 // ===== PROVIDER BADGES =====
 export const emojis = {
     kimi: 'K', claude: 'C', gpt: 'O', openai: 'O',
