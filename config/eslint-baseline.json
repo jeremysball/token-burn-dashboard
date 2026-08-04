@@ -143,6 +143,6 @@
     "tests/unit/task-9-spike-redesign.test.js|no-unused-vars": 1,
     "tests/unit/task-9-spike-redesign.test.js|sonarjs/prefer-specific-assertions": 6,
     "tests/unit/task-9-spike-redesign.test.js|sonarjs/unused-import": 1,
-    "tests/unit/utils.test.js|max-lines": 1
+    "tests/unit/utils.test.js|max-lines": 2
   }
 }

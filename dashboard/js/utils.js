@@ -290,3 +290,49 @@ export const positionNotifications = () => {
     container.style.top = `${Math.round(bottom) + 12}px`;
     container.style.bottom = '';
 };
+
+// ===== CACHE / WIDGET HELPERS (shared across dataviz widgets) =====
+
+/**
+ * Cache-hit rate as a percentage (0-100), the convention established
+ * at insights.js:371 and reused by cache-slider, live-event-feed,
+ * league-table, and weekly-report. Returns 0 when no cacheable volume.
+ * @param {number|null|undefined} input
+ * @param {number|null|undefined} cacheRead
+ * @returns {number}
+ */
+export function cacheHitRatePct(input, cacheRead) {
+    const inTokens = Number(input) || 0;
+    const outTokens = Number(cacheRead) || 0;
+    const total = inTokens + outTokens;
+    return total > 0 ? (outTokens / total) * 100 : 0;
+}
+
+/**
+ * "Skip a model with unusable pricing rather than fabricate a number" —
+ * the cache-savings convention shared by cache-slider and live-event-feed.
+ * @param {any|null|undefined} pricing
+ * @returns {boolean}
+ */
+export function hasUsableCacheReadPricing(pricing) {
+    const inputRate = Number(pricing?.input);
+    const cacheReadRate = Number(pricing?.cacheRead);
+    return Number.isFinite(inputRate) && Number.isFinite(cacheReadRate);
+}
+
+/**
+ * Build-once gate for panels that render on every renderDashboard()/
+ * tab-switch but should only construct their DOM the first time. Stores
+ * the built flag on container.dataset[flagKey]. Returns true if the
+ * build was performed this call.
+ * @param {HTMLElement} container
+ * @param {string} flagKey
+ * @param {(container: HTMLElement) => void} build
+ * @returns {boolean}
+ */
+export function ensureWidgetBuilt(container, flagKey, build) {
+    if (container.dataset[flagKey] === 'true') return false;
+    build(container);
+    container.dataset[flagKey] = 'true';
+    return true;
+}
