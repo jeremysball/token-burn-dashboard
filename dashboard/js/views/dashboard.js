@@ -3,6 +3,7 @@ import { fmtNum, fmtInt, fmtCur, createSparkline, splitModelKey, displayModel, e
 import { currentData, historyData, fileHistoricalData } from '../state.js';
 import { updateEquivTickers } from '../equiv-ticker.js';
 import { renderOdometer, updateOdometer } from '../odometer.js';
+import { renderCacheSlider } from '../cache-slider.js';
 
 /**
  * @typedef {{
@@ -90,6 +91,9 @@ export const renderDashboard = (fullRender = true) => {
         cost: total_cost?.total || 0,
         burnRate: calculateBurnRate().rate
     });
+
+    const cacheSection = document.getElementById('cache-savings-section');
+    if (cacheSection) renderCacheSlider(cacheSection, cd);
 
     // Render top models over the last 48 hours (update in place unless full render)
     renderTopModels(getTokensByModelLast48h(tokens_by_model), fullRender);
