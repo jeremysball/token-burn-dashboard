@@ -48,6 +48,20 @@ test.describe('no horizontal overflow on critical selectors', () => {
     await expectNoOverflow(page, '.latest-pill');
   });
 
+  test('weekly title belt (Analytics > Insights)', async ({ page }) => {
+    await page.click('button:has-text("Analytics")');
+    await page.click('button:has-text("Insights")');
+    await expect(page.locator('#weekly-title-belt-container')).toBeVisible({ timeout: 10000 });
+    await expectNoOverflow(page, '#weekly-title-belt-container');
+    // Also check vertical overflow / clipped content (spec requirement).
+    const overflows = await page.$$eval('#weekly-title-belt-container', els =>
+      els.map(el => ({ scroll: el.scrollHeight, client: el.clientHeight, text: el.textContent?.slice(0, 50) }))
+    );
+    for (const o of overflows) {
+      expect(o.scroll, `vertical overflow #weekly-title-belt-container ${o.text}`).toBeLessThanOrEqual(o.client + 2);
+    }
+  });
+
   test('scale tab', async ({ page }) => {
     await page.click('button:has-text("Analytics")');
     await page.click('button:has-text("Scale")');
