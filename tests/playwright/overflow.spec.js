@@ -43,6 +43,11 @@ test.describe('no horizontal overflow on critical selectors', () => {
     await expectNoOverflow(page, '.cache-hero');
   });
 
+  test('live event pill', async ({ page }) => {
+    await expect(page.locator('.latest-pill')).toBeVisible({ timeout: 10000 });
+    await expectNoOverflow(page, '.latest-pill');
+  });
+
   test('scale tab', async ({ page }) => {
     await page.click('button:has-text("Analytics")');
     await page.click('button:has-text("Scale")');
