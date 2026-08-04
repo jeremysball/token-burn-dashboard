@@ -38,4 +38,26 @@ describe('formatFactoid', () => {
     expect(() => formatFactoid(template, 42)).not.toThrow();
     expect(formatFactoid(template, 42)).toBe(template);
   });
+
+  it('leaves a malformed multi-n identifier untouched instead of corrupting it', () => {
+    const template = '{nn}';
+    expect(() => formatFactoid(template, 12)).not.toThrow();
+    expect(formatFactoid(template, 12)).toBe(template);
+  });
+
+  it('formats a bare {n} whose value renders in exponential notation', () => {
+    expect(formatFactoid('{n}', 1e21)).toBe((1e21).toLocaleString('en-US'));
+    expect(formatFactoid('{n}', 1e-7)).toBe('0');
+  });
+
+  it('leaves a placeholder with more than one format-spec segment untouched', () => {
+    const template = '{n:.2f:.3f}';
+    expect(() => formatFactoid(template, 42)).not.toThrow();
+    expect(formatFactoid(template, 42)).toBe(template);
+  });
+
+  it('reuses the same compiled evaluator across repeated calls with the same expression', () => {
+    expect(formatFactoid('{n*2}', 10)).toBe('20');
+    expect(formatFactoid('{n*2}', 20)).toBe('40');
+  });
 });
