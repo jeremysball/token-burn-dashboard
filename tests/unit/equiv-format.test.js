@@ -10,6 +10,12 @@ describe('formatFactoid', () => {
     expect(formatFactoid('{n*3/4:.1f} of it', 100)).toBe('75.0 of it');
   });
 
+  it('leaves an out-of-range fixed decimal spec untouched', () => {
+    const template = '{n:.999f}';
+    expect(() => formatFactoid(template, 42)).not.toThrow();
+    expect(formatFactoid(template, 42)).toBe(template);
+  });
+
   it('formats {X/n:.Nf} — value in the denominator', () => {
     expect(formatFactoid('a {1000000/n:.3f} share', 4000000)).toBe('a 0.250 share');
   });

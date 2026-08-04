@@ -28,9 +28,11 @@ export function formatFactoid(copyTemplate, n) {
         if (typeof value !== 'number' || !Number.isFinite(value)) return whole;
 
         if (parts.length > 1) {
-            const digits = parseInt(parts[1], 10) || 0;
-            return value.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+            const digitsSpec = parts[1].match(/^(\d{1,3})f$/);
+            if (!digitsSpec || Number(digitsSpec[1]) > 100) return whole;
+            const digits = Number(digitsSpec[1]);
+            return value.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
         }
-        return Math.round(value).toLocaleString();
+        return Math.round(value).toLocaleString('en-US');
     });
 }

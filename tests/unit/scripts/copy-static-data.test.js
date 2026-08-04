@@ -7,15 +7,19 @@ import { copyStaticData } from '../../../scripts/copy-static-data.mjs';
 describe('copyStaticData', () => {
   let src;
   let dest;
+  let tempRoots;
 
   beforeEach(() => {
-    src = mkdtempSync(join(tmpdir(), 'copy-static-data-src-'));
-    dest = join(mkdtempSync(join(tmpdir(), 'copy-static-data-dest-')), 'nested', 'dist-dashboard-data');
+    tempRoots = [];
+    const srcRoot = mkdtempSync(join(tmpdir(), 'copy-static-data-src-'));
+    const destRoot = mkdtempSync(join(tmpdir(), 'copy-static-data-dest-'));
+    tempRoots.push(srcRoot, destRoot);
+    src = srcRoot;
+    dest = join(destRoot, 'nested', 'dist-dashboard-data');
   });
 
   afterEach(() => {
-    rmSync(src, { recursive: true, force: true });
-    rmSync(dest, { recursive: true, force: true });
+    for (const root of tempRoots) rmSync(root, { recursive: true, force: true });
   });
 
   it('copies a flat file from src into a dest directory that does not exist yet', () => {
