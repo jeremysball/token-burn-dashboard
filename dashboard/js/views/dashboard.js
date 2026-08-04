@@ -1,7 +1,8 @@
 import { CHART_COLORS, getEmoji, getPricingForModel } from '../config.js';
-import { fmtNum, fmtCur, createSparkline, splitModelKey, displayModel, escapeHtml, parseModelKey, notify } from '../utils.js';
+import { fmtNum, fmtInt, fmtCur, createSparkline, splitModelKey, displayModel, escapeHtml, parseModelKey, notify } from '../utils.js';
 import { currentData, historyData, fileHistoricalData } from '../state.js';
 import { updateEquivTickers } from '../equiv-ticker.js';
+import { renderOdometer, updateOdometer } from '../odometer.js';
 
 /**
  * @typedef {{
@@ -36,13 +37,18 @@ export const renderDashboard = (fullRender = true) => {
     const cd = /** @type {DashboardData} */ (currentData);
     const { total_tokens, total_cost, tokens_by_model, files_processed, total_lines } = cd;
 
-    // Update hero stats with animation
+    // Update hero token count via the literal odometer. The digit roll
+    // fires only when total_tokens actually changed and only after the
+    // first paint — never on page load, never while idle (spec-mandated;
+    // an earlier mockup draft that rolled on load/idle was corrected
+    // during review).
     const heroTokens = document.getElementById('hero-tokens');
     if (heroTokens) {
         const currentTokens = parseInt(heroTokens.dataset.value || '0');
         if (currentTokens !== total_tokens) {
             heroTokens.dataset.value = String(total_tokens);
-            getGlobal('animateNumber')(heroTokens, currentTokens, total_tokens, 800, '', '');
+            const formatted = fmtInt(total_tokens);
+            updateOdometer(heroTokens, formatted);
         }
     }
 
