@@ -309,6 +309,27 @@ body {
 .odo-static { display: inline-block; }
 @media (prefers-reduced-motion: reduce) { .odo-digit-strip { transition: none; } }
 
+.cache-hero {
+  background: var(--mono-surface);
+  border: 1px solid var(--mono-border-accent);
+  border-radius: var(--radius-lg);
+  padding: 22px 24px;
+  margin-bottom: 24px;
+}
+.cache-hero-top { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
+.cache-hero-label { font-size: 0.61rem; letter-spacing: 0.14em; color: var(--mono-text-muted); text-transform: uppercase; }
+.cache-hero-value { font-size: clamp(1.8rem, 3.4vw, 2.6rem); font-weight: 700; letter-spacing: -0.05em; color: var(--mono-accent); font-variant-numeric: tabular-nums; }
+.cache-hero-value small { font-size: 0.5em; color: var(--mono-text-muted); font-weight: 500; letter-spacing: 0; margin-left: 6px; }
+.cache-bar-wrap { position: relative; height: 34px; background: var(--mono-bg); border: 1px solid var(--mono-border); margin-bottom: 14px; }
+.cache-bar-paid { position: absolute; inset: 0; background: var(--mono-text-dim); opacity: 0.35; width: var(--paid-pct, 28%); }
+.cache-bar-avoided { position: absolute; top: 0; bottom: 0; left: var(--paid-pct, 28%); right: 0; background: repeating-linear-gradient(45deg, var(--mono-accent-dim) 0 6px, transparent 6px 12px); border-left: 2px dashed var(--mono-accent); }
+.cache-bar-labels { display: flex; justify-content: space-between; font-size: 0.68rem; color: var(--mono-text-muted); margin-bottom: 20px; }
+.cache-bar-labels b { color: var(--mono-text); }
+.cache-slider-row { display: flex; align-items: center; gap: 14px; font-size: 0.72rem; color: var(--mono-text-muted); }
+.cache-slider-row input[type="range"] { flex: 1; appearance: none; height: 3px; background: var(--mono-border); outline: none; }
+.cache-slider-row input[type="range"]::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; background: var(--mono-accent); cursor: pointer; }
+.cache-slider-readout { font-family: inherit; color: var(--mono-text); font-weight: 700; min-width: 4.5em; text-align: right; }
+
 /* Burn rate redesign */
 .hero-stat.burn-rate {
   display: flex;
