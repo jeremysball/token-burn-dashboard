@@ -4,6 +4,7 @@ import { connectSSE, updateData, refreshData } from './api.js';
 import { renderDashboard, updateDashboardCharts } from './views/dashboard.js';
 import { renderAnalytics, setAnalyticsTabHandler, setAnalyticsRangeHandler, loadGitBlame, loadSpikes } from './views/analytics.js';
 import { loadPricing } from './config.js';
+import { initEquivTickers } from './equiv-ticker.js';
 
 // ===== ANIMATED NUMBER COUNTER =====
 
@@ -282,6 +283,10 @@ const init = async () => {
     // Position notifications below the header
     positionNotifications();
     window.addEventListener('resize', positionNotifications);
+
+    // Kick off the equivalence-corpus fetch early so it's ready by the time
+    // the first render calls updateEquivTickers().
+    initEquivTickers();
 
     // Load cache
     const cached = loadCache();

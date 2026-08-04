@@ -279,6 +279,29 @@ body {
   100% { transform: scale(1); }
 }
 
+.equiv-ticker {
+  margin-top: 14px;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  background: var(--mono-bg);
+  border-left: 2px solid var(--mono-accent);
+  padding: 9px 12px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.equiv-ticker .glyph { color: var(--mono-accent); flex: none; font-weight: 700; }
+.equiv-ticker .equiv-text {
+  color: var(--mono-text-muted);
+  min-width: 0;
+  transition: opacity 0.35s ease;
+}
+.equiv-ticker .equiv-text.fade { opacity: 0; }
+.equiv-ticker .equiv-text b { color: var(--mono-text); font-weight: 700; }
+@media (prefers-reduced-motion: reduce) {
+  .equiv-ticker .equiv-text { transition: none; }
+}
+
 /* Burn rate redesign */
 .hero-stat.burn-rate {
   display: flex;
