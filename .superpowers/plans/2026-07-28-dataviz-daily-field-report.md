@@ -398,7 +398,7 @@ describe('buildDailyReportSummary', () => {
       }
     };
 
-    const summary = buildDailyReportSummary(currentData, fileHistoricalData);
+    const summary = buildDailyReportSummary(currentData, fileHistoricalData, now);
 
     expect(summary.peakHour.hour).toBe(14);
     expect(summary.peakHour.totalTokens).toBe(200000);
@@ -421,7 +421,7 @@ describe('buildDailyReportSummary', () => {
       }
     };
 
-    const summary = buildDailyReportSummary(currentData, fileHistoricalData);
+    const summary = buildDailyReportSummary(currentData, fileHistoricalData, now);
 
     expect(summary.peakHour.tokenShareByModel['a/model-2']).toBeCloseTo(10000 / 110000, 2);
     expect(summary.peakHour.costShareByModel['a/model-2']).toBeGreaterThan(summary.peakHour.tokenShareByModel['a/model-2']);
@@ -435,7 +435,7 @@ describe('buildDailyReportSummary', () => {
       { time: todayMidnightUTC - 12 * H, total: 100000, tokens_by_model: {} },
       { time: todayMidnightUTC + 9 * H, total: 100000, tokens_by_model: { 'a/model-1': 100000 } }
     ];
-    const summary = buildDailyReportSummary({ pricing_by_model: {} }, fileHistoricalData);
+    const summary = buildDailyReportSummary({ pricing_by_model: {} }, fileHistoricalData, now);
 
     expect(summary.baseline.meanHourlyTokens).toBeCloseTo(100000, 0);
     expect(summary.baseline.stddevHourlyTokens).toBeCloseTo(0, 0);
@@ -454,17 +454,12 @@ Expected: FAIL — `Cannot find module '../../dashboard/js/daily-report.js'`
 // dashboard/js/daily-report.js (Part 1 of 2 — pure summary builder; the
 // render/fetch half is added in Step 5 below)
 
+import { calculateCostWithPricing } from './modelsdev-pricing.js';
+import { meanStddev } from './utils.js';
+
 /** @param {number} ms @returns {string} */
 function toUtcDateKey(ms) {
     return new Date(ms).toISOString().slice(0, 10);
-}
-
-/** @param {number[]} values @returns {{mean: number, stddev: number}} */
-function meanStddev(values) {
-    if (!values.length) return { mean: 0, stddev: 0 };
-    const mean = values.reduce((a, b) => a + b, 0) / values.length;
-    const variance = values.reduce((a, b) => a + (b - mean) ** 2, 0) / values.length;
-    return { mean, stddev: Math.sqrt(variance) };
 }
 
 /**
@@ -482,12 +477,11 @@ function computeShares(tokensByModel, pricingByModel) {
 
     for (const [model, tokens] of Object.entries(tokensByModel)) {
         tokenShareByModel[model] = tokens / totalTokens;
-        // Approximate hourly per-model cost from that model's blended input
-        // rate — a rough estimate (this data doesn't split input/output/cache
-        // per hour, only a total), good enough for the report's relative
-        // token-vs-cost-share contrast, not for exact billing.
-        const rate = Number(pricingByModel?.[model]?.input);
-        const cost = Number.isFinite(rate) ? (tokens / 1e6) * rate : 0;
+        // Hourly buckets carry total tokens per model without a per-type
+        // (input/output/cache/reasoning) split, so we approximate cost via
+        // calculateCostWithPricing's blended rate (input+output when only a
+        // total is available) — more accurate than input-only pricing.
+        const cost = calculateCostWithPricing(tokens, pricingByModel?.[model] || null).total;
         costByModel[model] = cost;
         totalCost += cost;
     }
@@ -506,11 +500,20 @@ function computeShares(tokensByModel, pricingByModel) {
  * @param {Array<{time: number, total: number, tokens_by_model?: Record<string, number>}>} fileHistoricalData
  * @returns {object|null}
  */
-export function buildDailyReportSummary(currentData, fileHistoricalData) {
+export function buildDailyReportSummary(currentData, fileHistoricalData, now = Date.now()) {
     if (!fileHistoricalData || fileHistoricalData.length === 0) return null;
 
-    const todayKey = toUtcDateKey(Date.now());
-    const todaysBuckets = fileHistoricalData.filter((b) => toUtcDateKey(b.time) === todayKey);
+    const todayKey = toUtcDateKey(now);
+    // Cache date-key lookups per unique timestamp to avoid repeated
+    // Date+toISOString allocations on every bucket every 5s render.
+    /** @type {Map<number, string>} */
+    const dateKeyCache = new Map();
+    const cachedDateKey = (ms) => {
+        let k = dateKeyCache.get(ms);
+        if (k === undefined) { k = toUtcDateKey(ms); dateKeyCache.set(ms, k); }
+        return k;
+    };
+    const todaysBuckets = fileHistoricalData.filter((b) => cachedDateKey(b.time) === todayKey);
     if (todaysBuckets.length === 0) return null;
 
     const pricingByModel = currentData?.pricing_by_model || {};
@@ -535,8 +538,7 @@ export function buildDailyReportSummary(currentData, fileHistoricalData) {
 
     let totalCostToday = 0;
     for (const [model, tokens] of Object.entries(tokensByModelToday)) {
-        const rate = Number(pricingByModel?.[model]?.input);
-        if (Number.isFinite(rate)) totalCostToday += (tokens / 1e6) * rate;
+        totalCostToday += calculateCostWithPricing(tokens, pricingByModel?.[model] || null).total;
     }
 
     const { mean: meanHourlyTokens, stddev: stddevHourlyTokens } = meanStddev(fileHistoricalData.map((b) => b.total || 0));
@@ -568,62 +570,25 @@ Expected: PASS (4 tests)
 Append to `dashboard/js/daily-report.js`:
 
 ```js
-// dashboard/js/daily-report.js (Part 2 of 2 — render/fetch, appended below Part 1)
+// dashboard/js/daily-report.js (Part 2 of 2 — widget wiring, appended below Part 1)
 
-/** @type {{date: string, text: string}|null} */
-let cachedReport = null;
+import { createTaskferryReportWidget } from './report-widget.js';
+import { ensureWidgetBuilt } from './utils.js';
+const dailyReport = createTaskferryReportWidget({
+    endpoint: '/api/insights/daily-report',
+    cacheKeyField: 'date',
+    bodyId: 'dailyFieldReportBody',
+    dateLabelId: 'dailyFieldReportDate',
+    retryId: 'dailyFieldReportRetry',
+    containerId: 'daily-field-report-container',
+    loadingText: "Loading today's field report…",
+    headingFor: (d) => `FIELD REPORT // ${d}`,
+    notEnoughText: () => null,
+    buildFlag: 'dailyReportBuilt'
+});
+
 /** @type {string|null} */
-let inFlightForDate = null;
-
-/** @param {HTMLElement} container */
-function build(container) {
-    container.innerHTML = `
-        <div class="field-report" id="dailyFieldReport">
-            <div class="fr-date" id="dailyFieldReportDate"></div>
-            <div id="dailyFieldReportBody">Loading today's field report…</div>
-        </div>
-    `;
-    container.dataset.dailyReportBuilt = 'true';
-}
-
-/**
- * @param {HTMLElement} container
- * @param {object} summary
- */
-async function fetchAndRender(container, summary) {
-    inFlightForDate = summary.date;
-    const bodyEl = container.querySelector('#dailyFieldReportBody');
-    bodyEl.textContent = "Loading today's field report…";
-
-    try {
-        const res = await fetch('/api/insights/daily-report', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(summary)
-        });
-        if (!res.ok) {
-            const errBody = await res.json().catch(() => ({}));
-            throw new Error(errBody.error || `Server error: ${res.status}`);
-        }
-        const data = await res.json();
-        cachedReport = { date: summary.date, text: data.insights };
-        renderCached(container);
-    } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        bodyEl.innerHTML = `<span style="color: var(--mono-danger, #ef4444);">Report generation failed: ${message}</span> `
-            + `<button type="button" class="retry-btn" id="dailyFieldReportRetry">↻ Retry</button>`;
-        container.querySelector('#dailyFieldReportRetry')?.addEventListener('click', () => fetchAndRender(container, summary));
-    } finally {
-        inFlightForDate = null;
-    }
-}
-
-/** @param {HTMLElement} container */
-function renderCached(container) {
-    if (!cachedReport) return;
-    container.querySelector('#dailyFieldReportDate').textContent = `FIELD REPORT // ${cachedReport.date}`;
-    container.querySelector('#dailyFieldReportBody').innerHTML = cachedReport.text.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
-}
+let lastBuiltDateKey = null;
 
 /**
  * @param {HTMLElement} container
@@ -631,28 +596,31 @@ function renderCached(container) {
  * @param {any[]} fileHistoricalData
  */
 export function renderDailyFieldReport(container, currentData, fileHistoricalData) {
-    if (container.dataset.dailyReportBuilt !== 'true') build(container);
+    // C19-2: compute today's UTC date key in O(1) instead of building the
+    // full summary just to check the cache — the summary is only built when
+    // we know we need a new report.
+    const todayKey = new Date().toISOString().slice(0, 10);
+    if (lastBuiltDateKey === todayKey) return;
 
     const summary = buildDailyReportSummary(currentData, fileHistoricalData);
     if (!summary) {
-        container.querySelector('#dailyFieldReportBody').textContent = 'Not enough data yet for a report today.';
+        ensureWidgetBuilt(container, 'dailyReportBuilt', (c) => {
+            c.innerHTML = '<div class="field-report" id="dailyFieldReport">'
+                + '<div id="dailyFieldReportBody">Not enough data yet for a report today.</div></div>';
+        });
         return;
     }
 
-    if (cachedReport?.date === summary.date) {
-        renderCached(container);
-        return;
-    }
-    if (inFlightForDate === summary.date) return; // already fetching this date's report
-
-    fetchAndRender(container, summary);
+    lastBuiltDateKey = todayKey;
+    dailyReport.render(container, summary);
 }
 
-export function resetDailyFieldReportForTest() {
-    cachedReport = null;
-    inFlightForDate = null;
-}
+export const resetDailyFieldReportForTest = () => {
+    lastBuiltDateKey = null;
+    dailyReport.resetForTest();
+};
 ```
+`notEnoughText: () => null` matches this plan's upstream null guard at `buildDailyReportSummary` (~line 369, returns `null` when there's no data for today's UTC calendar day yet) — the render side has no separate empty-state logic.
 
 In `dashboard/index.html`, add the section after `live-feed-section` (or, if that plan hasn't landed, after the hero section):
 
@@ -679,7 +647,302 @@ In `dashboard/styles/design-v2.css`, add:
 .field-report b { color: var(--mono-accent); }
 ```
 
-- [ ] **Step 6: Write the failing integration test for the render/fetch half**
+- [ ] **Step 6: Add shared helpers to `dashboard/js/utils.js`**
+
+Add `ensureWidgetBuilt`, `meanStddev`, and `formatMarkdownBoldToHtml` to `dashboard/js/utils.js` (at the bottom, before the closing of the file). `meanStddev` delegates to the existing exported `computeSeriesStats` in `dashboard/js/views/analytics/tabs/spikes.js:52` — import it into utils.js:
+
+```js
+import { computeSeriesStats } from './views/analytics/tabs/spikes.js';
+
+// ===== WIDGET HELPERS =====
+/**
+ * Ensure a widget's DOM is built exactly once by checking/setting a data-* flag.
+ * @param {HTMLElement} container
+ * @param {string} flagName   dataset key, e.g. 'dailyReportBuilt'
+ * @param {(container: HTMLElement) => void} buildFn
+ */
+export const ensureWidgetBuilt = (container, flagName, buildFn) => {
+    if (container.dataset[flagName] !== 'true') {
+        buildFn(container);
+        container.dataset[flagName] = 'true';
+    }
+};
+
+// ===== STATISTICS =====
+/**
+ * Delegates to the existing computeSeriesStats() core formula, adapting
+ * shapes at the boundary: computeSeriesStats expects an array of
+ * {total: number} points (it reads p.total) and returns {mean, std, count},
+ * not the plain-number-array-in / {mean, stddev}-out shape this call site
+ * and its callers use — verified directly against
+ * dashboard/js/views/analytics/tabs/spikes.js:52-61, not assumed.
+ * @param {number[]} values
+ * @returns {{mean: number, stddev: number}}
+ */
+export const meanStddev = (values) => {
+    const { mean, std } = computeSeriesStats((values || []).map((v) => ({ total: v })));
+    return { mean, stddev: std };
+};
+
+// ===== MARKDOWN HELPERS =====
+/**
+ * Convert markdown bold to HTML <b>. Mirrors the existing field-report
+ * response renderers. Pattern-only transform with no content escaping —
+ * preserves current behavior on untrusted taskferry output.
+ * @param {string} text
+ * @returns {string}
+ */
+export function formatMarkdownBoldToHtml(text) {
+    return text.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+}
+```
+
+Add unit tests for these helpers to `tests/unit/utils.test.js`:
+
+```js
+import { describe, expect, it } from 'bun:test';
+import { meanStddev, formatMarkdownBoldToHtml } from '../../dashboard/js/utils.js';
+
+describe('meanStddev', () => {
+  it('returns correct mean and stddev for a populated array', () => {
+    const { mean, stddev } = meanStddev([10, 20, 30]);
+    expect(mean).toBeCloseTo(20, 5);
+    expect(stddev).toBeCloseTo(8.165, 2);
+  });
+
+  it('returns zeros for an empty array', () => {
+    const { mean, stddev } = meanStddev([]);
+    expect(mean).toBe(0);
+    expect(stddev).toBe(0);
+  });
+
+  it('returns zero stddev for a single value', () => {
+    const { mean, stddev } = meanStddev([42]);
+    expect(mean).toBe(42);
+    expect(stddev).toBe(0);
+  });
+});
+
+describe('formatMarkdownBoldToHtml', () => {
+  it('converts a single bold pair', () => {
+    expect(formatMarkdownBoldToHtml('hello **world**')).toBe('hello <b>world</b>');
+  });
+
+  it('converts multiple bold pairs', () => {
+    expect(formatMarkdownBoldToHtml('**a** and **b**')).toBe('<b>a</b> and <b>b</b>');
+  });
+
+  it('returns text unchanged when there are no bold markers', () => {
+    expect(formatMarkdownBoldToHtml('no bold here')).toBe('no bold here');
+  });
+});
+```
+
+- [ ] **Step 7: Create `dashboard/js/report-widget.js`**
+
+Create `dashboard/js/report-widget.js` with the `createTaskferryReportWidget` factory (this factory imports `formatMarkdownBoldToHtml` and `ensureWidgetBuilt` from `./utils.js`):
+
+```js
+import { formatMarkdownBoldToHtml, ensureWidgetBuilt } from './utils.js';
+
+/**
+ * @typedef {object} ReportWidgetOptions
+ * @property {string} endpoint
+ * @property {string} cacheKeyField           'date' or 'weekEndDay' — which summary field
+ *                                            identifies the cached bucket
+ * @property {string} bodyId
+ * @property {string} dateLabelId
+ * @property {string} retryId
+ * @property {string} containerId
+ * @property {string} loadingText
+ * @property {(cacheKeyValue: string) => string} headingFor
+ * @property {(summary: any) => string|null} notEnoughText    returns null if summary is acceptable,
+ *                                                             returns a message string if not enough
+ * @property {string} buildFlag                                 e.g. 'dailyReportBuilt'
+ */
+
+/**
+ * @param {ReportWidgetOptions} opts
+ * @returns {{
+ *   render: (container: HTMLElement, summary: any) => void,
+ *   resetForTest: () => void
+ * }}
+ */
+export function createTaskferryReportWidget(opts) {
+    let cached = null;
+    let inFlight = null;
+
+    function build(container) {
+        container.innerHTML = `
+            <div class="field-report" id="${opts.containerId.replace(/-container$/, '')}">
+                <div class="fr-date" id="${opts.dateLabelId}"></div>
+                <div id="${opts.bodyId}">${opts.loadingText}</div>
+            </div>
+        `;
+    }
+
+    async function fetchAndRender(container, summary) {
+        const cacheKeyValue = summary[opts.cacheKeyField];
+        inFlight = cacheKeyValue;
+        const bodyEl = container.querySelector(`#${opts.bodyId}`);
+        bodyEl.textContent = opts.loadingText;
+        try {
+            const res = await fetch(opts.endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(summary)
+            });
+            if (!res.ok) {
+                const errBody = await res.json().catch(() => ({}));
+                throw new Error(errBody.error || `Server error: ${res.status}`);
+            }
+            const data = await res.json();
+            cached = { [opts.cacheKeyField]: cacheKeyValue, text: data.insights };
+            renderCached(container);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            bodyEl.innerHTML = `<span style="color: var(--mono-danger, #ef4444);">Report generation failed: ${message}</span> `
+                + `<button type="button" class="retry-btn" id="${opts.retryId}">↻ Retry</button>`;
+            container.querySelector(`#${opts.retryId}`)?.addEventListener('click', () => fetchAndRender(container, summary));
+        } finally {
+            inFlight = null;
+        }
+    }
+
+    function renderCached(container) {
+        if (!cached) return;
+        const cacheKeyValue = cached[opts.cacheKeyField];
+        container.querySelector(`#${opts.dateLabelId}`).textContent = opts.headingFor(cacheKeyValue);
+        container.querySelector(`#${opts.bodyId}`).innerHTML = formatMarkdownBoldToHtml(cached.text);
+    }
+
+    function render(container, summary) {
+        ensureWidgetBuilt(container, opts.buildFlag, build);
+
+        const noData = opts.notEnoughText(summary);
+        if (noData !== null) {
+            container.querySelector(`#${opts.bodyId}`).textContent = noData;
+            return;
+        }
+
+        const cacheKeyValue = summary[opts.cacheKeyField];
+        if (cached?.[opts.cacheKeyField] === cacheKeyValue) {
+            renderCached(container);
+            return;
+        }
+        if (inFlight === cacheKeyValue) return;
+        fetchAndRender(container, summary);
+    }
+
+    function resetForTest() {
+        cached = null;
+        inFlight = null;
+    }
+
+    return { render, resetForTest };
+}
+```
+
+- [ ] **Step 8: Add `tests/unit/report-widget.test.js`**
+
+Create `tests/unit/report-widget.test.js` covering: empty-summary short-circuit, build-once, body text on success, error path with retry, in-flight de-duplication, cache-hit served from memory, and `resetForTest` clearing state:
+
+```js
+import { describe, expect, it, beforeEach, mock } from 'bun:test';
+import { createTaskferryReportWidget } from '../../dashboard/js/report-widget.js';
+
+describe('createTaskferryReportWidget', () => {
+  let container;
+  let widget;
+
+  beforeEach(() => {
+    document.body.innerHTML = '<div id="test-container"></div>';
+    container = document.getElementById('test-container');
+    widget = createTaskferryReportWidget({
+      endpoint: '/api/test-report',
+      cacheKeyField: 'date',
+      bodyId: 'testBody',
+      dateLabelId: 'testDate',
+      retryId: 'testRetry',
+      containerId: 'test-container',
+      loadingText: 'Loading…',
+      headingFor: (d) => `REPORT // ${d}`,
+      notEnoughText: (s) => (s.data ? null : 'Not enough data'),
+      buildFlag: 'testBuilt'
+    });
+  });
+
+  it('shows notEnoughText when the summary is insufficient', () => {
+    widget.render(container, { data: null });
+    expect(container.querySelector('#testBody').textContent).toBe('Not enough data');
+  });
+
+  it('builds the widget DOM exactly once', () => {
+    widget.render(container, { date: '2026-07-28', data: true });
+    widget.render(container, { date: '2026-07-28', data: true });
+    expect(container.querySelectorAll('.field-report').length).toBe(1);
+  });
+
+  it('renders body text on a successful fetch', async () => {
+    globalThis.fetch = mock(() => Promise.resolve(
+      new Response(JSON.stringify({ insights: 'A **quiet** day.' }), { status: 200 })
+    ));
+    widget.render(container, { date: '2026-07-28', data: true });
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(container.querySelector('#testBody').innerHTML).toContain('<b>quiet</b>');
+  });
+
+  it('shows an error and retry control on fetch failure', async () => {
+    globalThis.fetch = mock(() => Promise.resolve(
+      new Response(JSON.stringify({ error: 'unavailable' }), { status: 503 })
+    ));
+    widget.render(container, { date: '2026-07-28', data: true });
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(container.querySelector('#testBody').textContent).toMatch(/failed/i);
+    expect(container.querySelector('#testRetry')).not.toBeNull();
+  });
+
+  it('de-duplicates in-flight requests for the same cache key', () => {
+    globalThis.fetch = mock(() => new Promise(() => {})); // never resolves
+    widget.render(container, { date: '2026-07-28', data: true });
+    widget.render(container, { date: '2026-07-28', data: true });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('serves a cache hit from memory without fetching', async () => {
+    globalThis.fetch = mock(() => Promise.resolve(
+      new Response(JSON.stringify({ insights: 'Cached.' }), { status: 200 })
+    ));
+    widget.render(container, { date: '2026-07-28', data: true });
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    globalThis.fetch = mock(() => { throw new Error('should not be called'); });
+    widget.render(container, { date: '2026-07-28', data: true });
+    expect(container.querySelector('#testBody').innerHTML).toContain('Cached.');
+  });
+
+  it('clears state on resetForTest', async () => {
+    globalThis.fetch = mock(() => Promise.resolve(
+      new Response(JSON.stringify({ insights: 'Done.' }), { status: 200 })
+    ));
+    widget.render(container, { date: '2026-07-28', data: true });
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    widget.resetForTest();
+    globalThis.fetch = mock(() => Promise.resolve(
+      new Response(JSON.stringify({ insights: 'Fresh.' }), { status: 200 })
+    ));
+    widget.render(container, { date: '2026-07-28', data: true });
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(container.querySelector('#testBody').innerHTML).toContain('Fresh.');
+  });
+});
+```
+
+- [ ] **Step 9: Write the failing integration test for the render/fetch half**
 
 ```js
 // Append to tests/unit/daily-report.test.js
@@ -728,12 +991,12 @@ describe('renderDailyFieldReport', () => {
 });
 ```
 
-- [ ] **Step 7: Run tests to verify they pass**
+- [ ] **Step 10: Run tests to verify they pass**
 
 Run: `bun test tests/unit/daily-report.test.js`
 Expected: PASS (7 tests total)
 
-- [ ] **Step 8: Wire into `renderDashboard()`**
+- [ ] **Step 11: Wire into `renderDashboard()`**
 
 In `dashboard/js/views/dashboard.js`, add the import:
 
@@ -748,16 +1011,23 @@ import { renderDailyFieldReport } from '../daily-report.js';
     if (dailyReportSection) renderDailyFieldReport(dailyReportSection, cd, fileHistoricalData);
 ```
 
-- [ ] **Step 9: Run the full unit suite to catch regressions**
+- [ ] **Step 12: Run the full unit suite to catch regressions**
 
 Run: `bun run test`
 Expected: PASS
 
-- [ ] **Step 10: Add a Playwright check**
+- [ ] **Step 13: Add a Playwright check**
 
-In `tests/playwright-fixtures.js`, add a route stub for the new endpoint next to the existing `**/api/insights/analyze`-style stubs (there isn't one for `/api/insights/analyze` currently in that file — add both, following the same `page.route(...)` pattern as the other stubs in `routeDashboardApis`):
+In `tests/playwright-fixtures.js`, add route stubs for both endpoints next to the existing `**/api/insights/analyze`-style stubs (there isn't one for `/api/insights/analyze` currently in that file — add both, following the same `page.route(...)` pattern as the other stubs in `routeDashboardApis`):
 
 ```js
+  await page.route('**/api/insights/analyze', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ insights: 'Mock analysis result.', source: 'taskferry' })
+    });
+  });
   await page.route('**/api/insights/daily-report', async (route) => {
     await route.fulfill({
       status: 200,
@@ -776,14 +1046,14 @@ In `tests/playwright/overflow.spec.js`, inside `test.describe('no horizontal ove
   });
 ```
 
-- [ ] **Step 11: Run the Playwright suite**
+- [ ] **Step 14: Run the Playwright suite**
 
 Run: `bun run test:e2e`
 Expected: PASS
 
-- [ ] **Step 12: Commit**
+- [ ] **Step 15: Commit**
 
 ```bash
-git add dashboard/js/daily-report.js dashboard/index.html dashboard/js/views/dashboard.js dashboard/styles/design-v2.css tests/unit/daily-report.test.js tests/playwright-fixtures.js tests/playwright/overflow.spec.js
+git add dashboard/js/daily-report.js dashboard/js/report-widget.js dashboard/js/utils.js dashboard/index.html dashboard/js/views/dashboard.js dashboard/styles/design-v2.css tests/unit/daily-report.test.js tests/unit/report-widget.test.js tests/unit/utils.test.js tests/playwright-fixtures.js tests/playwright/overflow.spec.js
 git commit -m "feat(dashboard): add the daily field report widget"
 ```
