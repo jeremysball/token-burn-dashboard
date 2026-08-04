@@ -4,6 +4,7 @@ import { currentData, historyData, fileHistoricalData } from '../state.js';
 import { updateEquivTickers } from '../equiv-ticker.js';
 import { renderOdometer, updateOdometer } from '../odometer.js';
 import { renderCacheSlider } from '../cache-slider.js';
+import { renderLiveEventFeed } from '../live-event-feed.js';
 
 /**
  * @typedef {{
@@ -94,6 +95,9 @@ export const renderDashboard = (fullRender = true) => {
 
     const cacheSection = document.getElementById('cache-savings-section');
     if (cacheSection) renderCacheSlider(cacheSection, cd);
+
+    const liveFeedSection = document.getElementById('live-feed-section');
+    if (liveFeedSection) renderLiveEventFeed(liveFeedSection, cd);
 
     // Render top models over the last 48 hours (update in place unless full render)
     renderTopModels(getTokensByModelLast48h(tokens_by_model), fullRender);
