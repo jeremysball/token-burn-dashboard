@@ -6,6 +6,8 @@ import { renderCompareTab } from './analytics/tabs/compare.js';
 import { renderTimelineTab } from './analytics/tabs/timeline.js';
 import { renderCalendarTab } from './analytics/tabs/calendar.js';
 import { renderDistributionTab } from './analytics/tabs/distribution.js';
+import { weeklyData } from '../state.js';
+import { renderTitleBelt } from '../title-belt-render.js';
 import {
     renderDeepInsightsTab,
     generateDeepInsights,
@@ -71,6 +73,10 @@ export const renderAnalytics = (fullRender = true) => {
             break;
         case 'insights':
             renderDeepInsightsTab();
+            {
+                const titleBeltContainer = document.getElementById('weekly-title-belt-container');
+                if (titleBeltContainer) renderTitleBelt(titleBeltContainer, weeklyData, currentData?.pricing_by_model);
+            }
             break;
         case 'scale':
             renderScaleTab(document.getElementById('scale-comparisons') || undefined);
