@@ -55,6 +55,7 @@
     "dashboard/js/views/analytics/tabs/shared.js|sonarjs/no-nested-template-literals": 1,
     "dashboard/js/views/analytics/tabs/spikes.js|max-lines-per-function": 2,
     "dashboard/js/views/analytics/tabs/spikes.js|sonarjs/no-nested-template-literals": 1,
+    "dashboard/js/views/analytics/tabs/timeline.js|max-lines-per-function": 1,
     "dashboard/js/views/analytics/tabs/timeline.js|max-statements": 1,
     "dashboard/js/views/dashboard.js|complexity": 4,
     "dashboard/js/views/dashboard.js|max-lines": 1,
