@@ -12,6 +12,8 @@
     "dashboard/js/api.js|max-statements": 2,
     "dashboard/js/api.js|sonarjs/cognitive-complexity": 1,
     "dashboard/js/config.js|sonarjs/duplicates-in-character-class": 1,
+    "dashboard/js/equiv-format.js|sonarjs/code-eval": 1,
+    "dashboard/js/equiv-format.js|sonarjs/super-linear-regex": 1,
     "dashboard/js/main.js|max-params": 1,
     "dashboard/js/main.js|max-statements": 2,
     "dashboard/js/main.js|sonarjs/pseudo-random": 4,
