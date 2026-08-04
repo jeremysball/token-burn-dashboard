@@ -162,11 +162,13 @@ export function updateOdometer(el, valueStr) {
     }
     if (valueStr === state.valueStr) return;
 
+    let anySkipped = false;
     chars.forEach((ch, idx) => {
         const col = state.digitCols[idx];
         if (!col) return; // static char
         const digit = parseInt(ch, 10);
-        if (digit === col.digit || col.busy) return;
+        if (digit === col.digit) return;
+        if (col.busy) { anySkipped = true; return; }
 
         col.busy = true;
         const rowNext = document.createElement('span');
@@ -192,7 +194,7 @@ export function updateOdometer(el, valueStr) {
         setTimeout(settle, 650); // fallback in case transitionend doesn't fire (e.g. reduced-motion, headless DOM)
     });
 
-    state.valueStr = valueStr;
+    if (!anySkipped) state.valueStr = valueStr;
 }
 ```
 
@@ -360,12 +362,7 @@ with:
         if (currentTokens !== total_tokens) {
             heroTokens.dataset.value = String(total_tokens);
             const formatted = fmtInt(total_tokens);
-            if (heroTokens.dataset.odometerInitialized === 'true') {
-                updateOdometer(heroTokens, formatted);
-            } else {
-                renderOdometer(heroTokens, formatted);
-                heroTokens.dataset.odometerInitialized = 'true';
-            }
+            updateOdometer(heroTokens, formatted);
         }
     }
 ```

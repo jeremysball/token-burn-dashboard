@@ -17,6 +17,150 @@
 
 ---
 
+### Task 0: extend `dashboard/js/utils.js` with shared cache/widget helpers
+
+This plan is the first (in execution order) of five plans that need these helpers — `cache-slider` itself, `live-event-feed`, `league-table`, and `weekly-field-report` (per `cacheHitRatePct`), plus `cache-slider` and `live-event-feed` (per `hasUsableCacheReadPricing`), plus `cache-slider`, `live-event-feed`, `daily-field-report`, and `weekly-field-report` (per `ensureWidgetBuilt`). Landing them here means the later plans can import rather than redefine.
+
+**Files:**
+- Modify: `dashboard/js/utils.js` (append after `positionNotifications`, the last existing export)
+- Test: `tests/unit/utils.test.js` (existing file — add new `describe` blocks; it already covers `splitModelKey`, `parseModelKey`, `displayModel`, `escapeHtml`, `fmtNum`, `fmtInt`, `fmtCur`)
+
+- [ ] **Step 1: Write the failing tests**
+
+Add to `tests/unit/utils.test.js`, alongside the existing imports and `describe` blocks:
+
+```js
+// add to the existing import from '../../dashboard/js/utils.js':
+//   cacheHitRatePct, hasUsableCacheReadPricing, ensureWidgetBuilt
+
+describe('cacheHitRatePct', () => {
+  it('returns correct percentage for mixed input and cacheRead', () => {
+    expect(cacheHitRatePct(50, 50)).toBeCloseTo(50, 5);
+    expect(cacheHitRatePct(25, 75)).toBeCloseTo(75, 5);
+  });
+
+  it('returns 0 when both inputs are zero or missing', () => {
+    expect(cacheHitRatePct(0, 0)).toBe(0);
+    expect(cacheHitRatePct(null, null)).toBe(0);
+  });
+
+  it('returns 100 when only cacheRead has volume', () => {
+    expect(cacheHitRatePct(0, 1000)).toBe(100);
+  });
+});
+
+describe('hasUsableCacheReadPricing', () => {
+  it('returns true when both input and cacheRead are finite numbers', () => {
+    expect(hasUsableCacheReadPricing({ input: 3, cacheRead: 0.3 })).toBe(true);
+  });
+
+  it('returns false when cacheRead is missing or non-finite', () => {
+    expect(hasUsableCacheReadPricing({ input: 3 })).toBe(false);
+    expect(hasUsableCacheReadPricing({ input: 3, cacheRead: NaN })).toBe(false);
+  });
+
+  it('returns false for null/undefined pricing', () => {
+    expect(hasUsableCacheReadPricing(null)).toBe(false);
+    expect(hasUsableCacheReadPricing(undefined)).toBe(false);
+  });
+});
+
+describe('ensureWidgetBuilt', () => {
+  it('builds on first call and returns true', () => {
+    const container = { dataset: {} };
+    let built = 0;
+    const result = ensureWidgetBuilt(container, 'xBuilt', () => { built++; });
+    expect(built).toBe(1);
+    expect(result).toBe(true);
+    expect(container.dataset.xBuilt).toBe('true');
+  });
+
+  it('no-ops on second call and returns false', () => {
+    const container = { dataset: { xBuilt: 'true' } };
+    let built = 0;
+    const result = ensureWidgetBuilt(container, 'xBuilt', () => { built++; });
+    expect(built).toBe(0);
+    expect(result).toBe(false);
+  });
+
+  it('isolates different flag keys on the same container', () => {
+    const container = { dataset: { aBuilt: 'true' } };
+    let built = 0;
+    ensureWidgetBuilt(container, 'bBuilt', () => { built++; });
+    expect(built).toBe(1);
+  });
+});
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `bun test tests/unit/utils.test.js`
+Expected: FAIL — `cacheHitRatePct is not defined` (or similar — the imports don't exist in `utils.js` yet)
+
+- [ ] **Step 3: Add the helpers to `dashboard/js/utils.js`**
+
+Append after the existing `positionNotifications` export (the last export in the file):
+
+```js
+// ===== CACHE / WIDGET HELPERS (shared across dataviz widgets) =====
+
+/**
+ * Cache-hit rate as a percentage (0-100), the convention established
+ * at insights.js:371 and reused by cache-slider, live-event-feed,
+ * league-table, and weekly-report. Returns 0 when no cacheable volume.
+ * @param {number|null|undefined} input
+ * @param {number|null|undefined} cacheRead
+ * @returns {number}
+ */
+export function cacheHitRatePct(input, cacheRead) {
+    const inTokens = Number(input) || 0;
+    const outTokens = Number(cacheRead) || 0;
+    const total = inTokens + outTokens;
+    return total > 0 ? (outTokens / total) * 100 : 0;
+}
+
+/**
+ * "Skip a model with unusable pricing rather than fabricate a number" —
+ * the cache-savings convention shared by cache-slider and live-event-feed.
+ * @param {any|null|undefined} pricing
+ * @returns {boolean}
+ */
+export function hasUsableCacheReadPricing(pricing) {
+    const inputRate = Number(pricing?.input);
+    const cacheReadRate = Number(pricing?.cacheRead);
+    return Number.isFinite(inputRate) && Number.isFinite(cacheReadRate);
+}
+
+/**
+ * Build-once gate for panels that render on every renderDashboard()/
+ * tab-switch but should only construct their DOM the first time. Stores
+ * the built flag on container.dataset[flagKey]. Returns true if the
+ * build was performed this call.
+ * @param {HTMLElement} container
+ * @param {string} flagKey
+ * @param {(container: HTMLElement) => void} build
+ * @returns {boolean}
+ */
+export function ensureWidgetBuilt(container, flagKey, build) {
+    if (container.dataset[flagKey] === 'true') return false;
+    build(container);
+    container.dataset[flagKey] = 'true';
+    return true;
+}
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `bun test tests/unit/utils.test.js`
+Expected: PASS (all existing tests plus the 9 new ones above)
+
+```
+git add dashboard/js/utils.js tests/unit/utils.test.js
+git commit -m "feat(dashboard): add shared cacheHitRatePct/hasUsableCacheReadPricing/ensureWidgetBuilt helpers"
+```
+
+---
+
 ### Task 1: `cache-scenario.js` — pure what-if calculation
 
 **Files:**
@@ -121,16 +265,16 @@ Expected: FAIL — `Cannot find module '../../dashboard/js/cache-scenario.js'`
 
 ```js
 // dashboard/js/cache-scenario.js
+import { cacheHitRatePct } from './utils.js';
+
 /**
  * Blended real cache-hit rate across the whole fleet, as a percentage.
+ * Delegates to the shared cacheHitRatePct helper for the core formula.
  * @param {{total_input?: number, total_cache_read?: number}|null} currentData
  * @returns {number}
  */
 export function getRealCacheHitRatePct(currentData) {
-    const input = currentData?.total_input || 0;
-    const cacheRead = currentData?.total_cache_read || 0;
-    const total = input + cacheRead;
-    return total > 0 ? (cacheRead / total) * 100 : 0;
+    return cacheHitRatePct(currentData?.total_input, currentData?.total_cache_read);
 }
 
 /**
@@ -148,17 +292,23 @@ export function computeCacheScenario(currentData, hitRatePct) {
     const pricingByModel = currentData?.pricing_by_model || {};
     const h = Math.max(0, Math.min(100, hitRatePct)) / 100;
 
-    let paid = 0;
+    const fleetInput = Number(currentData?.total_input) || 0;
+    const fleetCacheRead = Number(currentData?.total_cache_read) || 0;
+    const fleetTotal = fleetInput + fleetCacheRead;
+    const actualRate = fleetTotal > 0 ? fleetCacheRead / fleetTotal : 0;
+
     let paidAtZeroPct = 0;
+    let paidAtActual = 0;
+    let paidAtUniform = 0;
     let coverage = false;
 
     for (const [name, stats] of models) {
         const pricing = pricingByModel[name];
-        const inputRate = Number(pricing?.input);
-        const cacheReadRate = Number(pricing?.cacheRead);
-        if (!Number.isFinite(inputRate) || !Number.isFinite(cacheReadRate)) continue;
+        if (!Number.isFinite(Number(pricing?.input)) || !Number.isFinite(Number(pricing?.cacheRead))) continue;
         coverage = true;
 
+        const inputRate = Number(pricing.input);
+        const cacheReadRate = Number(pricing.cacheRead);
         const outputRate = Number(pricing?.output);
         const cacheWriteRate = Number(pricing?.cacheWrite);
         const input = Number(stats.input) || 0;
@@ -170,14 +320,25 @@ export function computeCacheScenario(currentData, hitRatePct) {
             + (cacheWrite / 1e6) * (Number.isFinite(cacheWriteRate) ? cacheWriteRate : 0);
 
         const cacheableTokens = input + cacheRead;
+        const uncachedTokens = cacheableTokens * (1 - h);
         const cachedTokens = cacheableTokens * h;
-        const uncachedTokens = cacheableTokens - cachedTokens;
 
-        paid += fixedCost + (uncachedTokens / 1e6) * inputRate + (cachedTokens / 1e6) * cacheReadRate;
         paidAtZeroPct += fixedCost + (cacheableTokens / 1e6) * inputRate;
+        paidAtUniform += fixedCost + (uncachedTokens / 1e6) * inputRate + (cachedTokens / 1e6) * cacheReadRate;
+
+        // C3 fix: per-model actual hit rate for self-consistency at real position
+        const modelActualRate = cacheableTokens > 0 ? cacheRead / cacheableTokens : 0;
+        paidAtActual += fixedCost + (cacheableTokens * (1 - modelActualRate) / 1e6) * inputRate
+            + (cacheableTokens * modelActualRate / 1e6) * cacheReadRate;
     }
 
     if (!coverage) return { paid: 0, paidAtZeroPct: 0, savedVsNoCache: 0, paidPct: 0 };
+
+    // C3: blend uniform-rate cost with per-model-actual cost so that
+    // at the slider's real position (h == actualRate), paid == paidAtActual
+    // (matching total_cost), while at h=0 paid == paidAtZeroPct.
+    const w = actualRate > 0 ? Math.min(1, (h / actualRate) ** 2) : 0;
+    const paid = paidAtUniform * (1 - w) + paidAtActual * w;
 
     const savedVsNoCache = paidAtZeroPct - paid;
     const paidPct = paidAtZeroPct > 0 ? Math.max(2, Math.min(98, (paid / paidAtZeroPct) * 100)) : 50;
@@ -215,7 +376,7 @@ git commit -m "feat(dashboard): add cache what-if scenario calculation"
 
 - [ ] **Step 1: Add the section markup**
 
-In `dashboard/index.html`, insert a new section between the hero section (`dashboard/index.html:42-64`) and the chart section (`dashboard/index.html:66-73`):
+In `dashboard/index.html`, insert a new section between the hero section (`dashboard/index.html:42-64`) and the chart section (`dashboard/index.html:66-73`). This section MUST appear first among the three dynamic sections (cache-savings → live-event-feed → daily-field-report) so that visible section order is deterministic:
 
 ```html
             <!-- Cache Savings -->
@@ -322,11 +483,15 @@ Expected: FAIL — `Cannot find module '../../dashboard/js/cache-slider.js'`
 
 ```js
 // dashboard/js/cache-slider.js
-import { fmtCur } from './utils.js';
+import { fmtCur, ensureWidgetBuilt } from './utils.js';
 import { getRealCacheHitRatePct, computeCacheScenario } from './cache-scenario.js';
 
 /** @type {any} */
 let latestData = null;
+/** @type {number|null} */
+let lastRenderedSliderValue = null;
+/** @type {any} */
+let lastRenderedData = null;
 
 /**
  * @param {HTMLElement} container
@@ -364,7 +529,6 @@ function buildSection(container) {
         slider.dataset.userMoved = 'true';
         renderReadout(container, parseFloat(slider.value));
     });
-    container.dataset.cacheSliderBuilt = 'true';
 }
 
 /**
@@ -390,7 +554,7 @@ function renderReadout(container, hitRatePct) {
  */
 export function renderCacheSlider(container, currentData) {
     latestData = currentData;
-    if (container.dataset.cacheSliderBuilt !== 'true') buildSection(container);
+    ensureWidgetBuilt(container, 'cacheSliderBuilt', buildSection);
 
     const slider = /** @type {HTMLInputElement} */ (container.querySelector('#cacheSlider'));
     const realRate = getRealCacheHitRatePct(currentData);
@@ -398,11 +562,15 @@ export function renderCacheSlider(container, currentData) {
     if (slider.dataset.userMoved !== 'true') {
         slider.value = realRate.toFixed(1);
     } else if (parseFloat(slider.value) > realRate) {
-        // The real rate itself dipped below where the user had dragged to —
-        // clamp so the slider never reads a hit rate higher than reality allows.
         slider.value = realRate.toFixed(1);
     }
-    renderReadout(container, parseFloat(slider.value));
+
+    // C19: skip renderReadout when neither slider position nor data changed
+    const currentSliderValue = parseFloat(slider.value);
+    if (currentSliderValue === lastRenderedSliderValue && currentData === lastRenderedData) return;
+    lastRenderedSliderValue = currentSliderValue;
+    lastRenderedData = currentData;
+    renderReadout(container, currentSliderValue);
 }
 ```
 

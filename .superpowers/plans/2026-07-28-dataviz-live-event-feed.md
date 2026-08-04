@@ -105,6 +105,8 @@ Expected: FAIL — `Cannot find module '../../dashboard/js/live-event-diff.js'`
 
 ```js
 // dashboard/js/live-event-diff.js
+import { cacheHitRatePct, hasUsableCacheReadPricing } from './utils.js';
+
 /**
  * @param {Record<string, {total: number}>|null} prevTokensByModel
  * @param {Record<string, {total: number}>} currTokensByModel
@@ -133,17 +135,14 @@ export function pickLatestEvent(events, currTokensByModel, pricingByModel) {
     const stats = currTokensByModel[biggest.model] || {};
     const input = Number(stats.input) || 0;
     const cacheRead = Number(stats.cache_read) || 0;
-    const cacheableTotal = input + cacheRead;
-    const cachePct = cacheableTotal > 0 ? (cacheRead / cacheableTotal) * 100 : 0;
+    const cachePct = cacheHitRatePct(input, cacheRead);
 
     const pricing = pricingByModel?.[biggest.model];
-    const inputRate = Number(pricing?.input);
-    const cacheReadRate = Number(pricing?.cacheRead);
     let cost = null;
-    if (Number.isFinite(inputRate) && Number.isFinite(cacheReadRate)) {
+    if (hasUsableCacheReadPricing(pricing)) {
         const cachedDelta = biggest.delta * (cachePct / 100);
         const uncachedDelta = biggest.delta - cachedDelta;
-        cost = (uncachedDelta / 1e6) * inputRate + (cachedDelta / 1e6) * cacheReadRate;
+        cost = (uncachedDelta / 1e6) * pricing.input + (cachedDelta / 1e6) * pricing.cacheRead;
     }
 
     return { model: biggest.model, delta: biggest.delta, cachePct, cost };
@@ -264,7 +263,7 @@ Expected: FAIL — `Cannot find module '../../dashboard/js/live-event-feed.js'`
 
 ```js
 // dashboard/js/live-event-feed.js
-import { fmtNum, fmtCur } from './utils.js';
+import { fmtNum, fmtCur, cacheHitRatePct, hasUsableCacheReadPricing, ensureWidgetBuilt, displayModel } from './utils.js';
 import { computeGrowthEvents, pickLatestEvent } from './live-event-diff.js';
 
 /** @type {Record<string, {total: number}>|null} */
@@ -278,7 +277,6 @@ function build(container) {
             <span id="latestPillText">Waiting for activity…</span>
         </div>
     `;
-    container.dataset.liveFeedBuilt = 'true';
 }
 
 /**
@@ -286,7 +284,7 @@ function build(container) {
  * @param {{model: string, delta: number, cachePct: number, cost: number|null}} event
  */
 function renderEvent(container, event) {
-    const shortName = event.model.split('/').pop();
+    const shortName = displayModel(event.model);
     const detailBits = [];
     if (event.cost !== null) detailBits.push(fmtCur(event.cost));
     detailBits.push(`${event.cachePct.toFixed(0)}% cache`);
@@ -299,7 +297,7 @@ function renderEvent(container, event) {
  * @param {any} currentData
  */
 export function renderLiveEventFeed(container, currentData) {
-    if (container.dataset.liveFeedBuilt !== 'true') build(container);
+    ensureWidgetBuilt(container, 'liveFeedBuilt', build);
 
     const currTokensByModel = currentData?.tokens_by_model || {};
     if (prevTokensByModel) {

@@ -22,7 +22,7 @@
     "check": "bun run lint && bun run typecheck",
     "prepare": "bun scripts/install-hooks.mjs",
     "dev:ui": "bunx --bun vite",
-    "build:ui": "bunx --bun vite build"
+    "build:ui": "bunx --bun vite build && bun scripts/copy-static-data.mjs"
   },
   "keywords": [
     "dashboard",

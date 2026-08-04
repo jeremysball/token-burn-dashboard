@@ -83,14 +83,16 @@ describe('buildLeagueTable', () => {
         expect(others[0].name).toBe('a/model-8');
     });
 
-    it('computes effective $/M from costsByModel, null when cost is missing', () => {
+    it('computes effective $/M from pricing via calculateCostWithPricing, null when pricing is missing', () => {
         const tokensByModel = { 'a/model-1': { total: 1000000, input: 500000, output: 500000, cache_read: 0, cache_write: 0 } };
-        const costsByModel = { 'a/model-1': { total: 4.5 } };
-        const { top } = buildLeagueTable(tokensByModel, costsByModel, [], {});
-        expect(top[0].effectiveRatePerMillion).toBeCloseTo(4.5, 5);
+        // pricing $3/M input, $15/M output -> cost = 500k/1e6*3 + 500k/1e6*15 = 1.5 + 7.5 = 9.0
+        // effective $/M = 9.0 / (1e6/1e6) = 9.0
+        const pricing = { 'a/model-1': { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 } };
+        const { top } = buildLeagueTable(tokensByModel, {}, [], pricing);
+        expect(top[0].effectiveRatePerMillion).toBeCloseTo(9.0, 5);
 
-        const { top: topNoCost } = buildLeagueTable(tokensByModel, {}, [], {});
-        expect(topNoCost[0].effectiveRatePerMillion).toBeNull();
+        const { top: topNoPricing } = buildLeagueTable(tokensByModel, {}, [], {});
+        expect(topNoPricing[0].effectiveRatePerMillion).toBeNull();
     });
 
     it('computes cache % using the same formula as the Insights tab', () => {
@@ -142,10 +144,16 @@ Expected: FAIL — `Cannot find module '../../dashboard/js/league-table.js'`
 ```js
 // dashboard/js/league-table.js
 import { computeWeekWindow, scoreTitleBelt } from './title-belt.js';
+import { calculateCostWithPricing } from './modelsdev-pricing.js';
+import { cacheHitRatePct } from './utils.js';
 
 /** @typedef {{rank: number, name: string, tokens: number, effectiveRatePerMillion: number|null, cachePct: number, badge: 'volumeCrown'|'thriftKing'|'sommelier'|'mostImproved'|null}} LeagueRow */
 
 const BADGE_PRIORITY = ['volumeCrown', 'thriftKing', 'sommelier', 'mostImproved'];
+
+/** Memoization guard for weekly belt scoring — weeklyData changes at most once per calendar day. */
+let _lastWeeklyRef = null;
+let _cachedBelts = null;
 
 /**
  * @param {ReturnType<typeof scoreTitleBelt>} belts
@@ -170,14 +178,26 @@ export function buildLeagueTable(tokensByModel, costsByModel, weeklyData, pricin
     const sorted = Object.entries(tokensByModel || {}).sort((a, b) => b[1].total - a[1].total);
     if (sorted.length === 0) return { top: [], others: [] };
 
-    const belts = scoreTitleBelt(computeWeekWindow(weeklyData), pricingByModel);
+    // C19: Only recompute weekly belt scoring when weeklyData has actually changed.
+    // weeklyData changes at most once per calendar day; SSE triggers this every 5s.
+    if (weeklyData !== _lastWeeklyRef) {
+        _cachedBelts = scoreTitleBelt(computeWeekWindow(weeklyData), pricingByModel);
+        _lastWeeklyRef = weeklyData;
+    }
+    const belts = _cachedBelts;
 
     const rows = sorted.map(([name, stats], index) => {
-        const cost = costsByModel?.[name]?.total;
-        const effectiveRatePerMillion = (typeof cost === 'number' && stats.total > 0)
-            ? cost / (stats.total / 1e6)
+        // C7: Use calculateCostWithPricing (reasoning-inclusive) instead of
+        // costsByModel[name].total, so this surface agrees with the title-belt's
+        // effective-$/M definition. calculateCostWithPricing returns
+        // {total, priced} — priced is false when a nonzero token dimension
+        // has no published rate, in which case we must not fabricate a number.
+        const costResult = pricingByModel ? calculateCostWithPricing(stats, pricingByModel[name]) : null;
+        const effectiveRatePerMillion = (costResult?.priced && stats.total > 0)
+            ? costResult.total / (stats.total / 1e6)
             : null;
-        const cachePct = ((stats.cache_read || 0) / ((stats.input || 0) + (stats.cache_read || 0) || 1)) * 100;
+        // C18: Reuse the shared helper instead of re-implementing the formula inline.
+        const cachePct = cacheHitRatePct(stats.input, stats.cache_read);
         return { rank: index + 1, name, tokens: stats.total, effectiveRatePerMillion, cachePct, badge: badgeFor(belts, name) };
     });
 
@@ -367,7 +387,7 @@ Expected: FAIL — `renderCompareTab` still renders a Plotly chart, not a table.
 - [ ] **Step 6: Rewrite `compare.js`**
 ```js
 // dashboard/js/views/analytics/tabs/compare.js
-import { currentData, escapeHtml } from './shared.js';
+import { currentData, escapeHtml, displayModel } from './shared.js';
 import { weeklyData } from '../../../state.js';
 import { buildLeagueTable } from '../../../league-table.js';
 
@@ -386,7 +406,7 @@ function rowHtml(row, hidden) {
     return `
         <tr class="${hidden ? 'league-other-row' : ''}" ${hidden ? 'style="display:none"' : ''}>
             <td class="num">${row.rank}</td>
-            <td>${escapeHtml(row.name.split('/').pop())}</td>
+            <td>${escapeHtml(displayModel(row.name))}</td>
             <td>${badgeCell(row.badge)}</td>
             <td class="num">${row.effectiveRatePerMillion !== null ? '$' + row.effectiveRatePerMillion.toFixed(2) : '—'}</td>
             <td class="num">${row.cachePct.toFixed(0)}%</td>

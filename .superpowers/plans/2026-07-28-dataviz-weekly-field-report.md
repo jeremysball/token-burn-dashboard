@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A taskferry-generated weekly narrative paragraph in Analytics > Insights, alongside the title belt — the story counterpart to the daily field report, reasoning across two weeks of data instead of restating a longer version of the daily report.
+**Goal:** A taskferry-generated weekly narrative paragraph in Analytics > Insights, alongside the title belt — the story counterpart to the daily field report, reasoning across a multi-week baseline (mean/stddev of trailing weeks) and same-calendar-position recurrence patterns instead of restating a longer version of the daily report.
 
-**Architecture:** Reuses `dashboard/js/title-belt.js`'s `computeWeekWindow()` (this-week/last-week per-model deltas) and the generalized `runTaskferryAnalysis` dispatch machinery from the daily-field-report plan, adding a day-over-day breakdown and a distinct weekly-trend prompt.
+**Architecture:** Reuses `dashboard/js/title-belt.js`'s `computeWeekWindow()` (this-week/last-week per-model deltas) and the generalized `runTaskferryAnalysis` dispatch machinery from the daily-field-report plan, adding multi-week baseline statistics (mean/stddev across trailing weeks), same-calendar-position recurrence detection, and a distinct weekly-trend prompt.
 
 **Tech Stack:** Node `http`/`child_process` (`lib/routes/api.js`), taskferry CLI, vanilla ES modules, `bun:test` + `happy-dom`.
 
@@ -12,8 +12,8 @@
 
 - Source spec: `.superpowers/specs/2026-07-28-dataviz-mockup-widgets-design.md`, Section 3 ("Weekly field report (paragraph)") and Section 5 ("Taskferry dispatch failure").
 - Depends on `.superpowers/plans/2026-07-28-dataviz-weekly-title-belt.md` having merged first — reuses `WEEKLY_HISTORY_DAYS` (`dashboard/js/config.js`) and `computeWeekWindow` (`dashboard/js/title-belt.js`).
-- Depends on `.superpowers/plans/2026-07-28-dataviz-daily-field-report.md` having merged first — reuses the generalized `runTaskferryAnalysis(summary, execFileImpl, fsImpl, pathImpl, cryptoImpl, res, opts)` signature from `lib/routes/api.js`.
-- **Documented data-availability constraint:** `weeklyData` is capped at `WEEKLY_HISTORY_DAYS` (15) daily snapshots, giving exactly two week-over-week windows (this week vs. last week) — never three. The spec's "growth-rate acceleration/deceleration" and "anomaly recurrence at the same calendar position across weeks" language is satisfied here as a **two-week** comparison (this week's growth% and this-week-vs-last-week same-day-of-week deltas), not a longer rolling trend the current snapshot mechanism can't support. This is the same category of honest scoping as the daily report's z-score handling — real numbers over a real (if narrower) window, not a fabricated longer trend.
+- Depends on `.superpowers/plans/2026-07-28-dataviz-daily-field-report.md` having merged first — reuses the generalized `runTaskferryAnalysis(summary, execFileImpl, fsImpl, pathImpl, cryptoImpl, res, opts)` signature from `lib/routes/api.js`, and shared helpers `cacheHitRatePct`, `formatMarkdownBoldToHtml` from `dashboard/js/utils.js` plus `createTaskferryReportWidget`, `ensureWidgetBuilt` from `dashboard/js/report-widget.js`.
+- **Documented data-availability constraint:** `weeklyData` is capped at `WEEKLY_HISTORY_DAYS` (15) daily snapshots, yielding up to two complete trailing weeks plus a partial current week — enough for a **multi-week baseline** (mean/stddev of the trailing complete weeks, excluding the current one) and a **same-calendar-position recurrence check** (compare each day in the current week against the same position in every trailing week, flag positions that are ≥2σ above the trailing mean). This matches the spec's Section 3 requirements (multi-week baseline for cache-efficiency drift; anomaly recurrence at the same calendar position across weeks) without fabricating data the snapshot window cannot provide.
 - No silent fallback on dispatch failure — same convention as the daily field report and the existing `/api/insights/analyze` route.
 
 ---
@@ -34,10 +34,15 @@
   totalTokensThisWeek: number,
   totalTokensLastWeek: number|null,
   growthPct: number|null,
+  weeklyBaselineGrowthMean: number|null,     // mean growth% across trailing weeks
+  weeklyBaselineGrowthStddev: number|null,    // stddev of growth% across trailing weeks
   cacheHitRateThisWeekPct: number,
   cacheHitRateLastWeekPct: number|null,
-  dailyTokensThisWeek: number[],       // 7 values, oldest to newest
-  dailyTokensLastWeek: number[]|null,  // 7 values, oldest to newest, or null
+  weeklyBaselineCacheMean: number|null,       // mean cache rate across trailing weeks
+  weeklyBaselineCacheStddev: number|null,     // stddev of cache rate across trailing weeks
+  dailyTokensThisWeek: number[],              // 7 values, oldest to newest
+  dailyTokensLastWeek: number[]|null,         // 7 values, oldest to newest, or null
+  dailyPositionRecurrentFlags: boolean[],     // 7 values: true if position ≥2σ above trailing mean
   topModelThisWeek: string,
   modelShareThisWeek: Record<string, number>  // fractions, sum ~1
 }
@@ -56,10 +61,15 @@ describe('handleWeeklyReportRoute', () => {
     totalTokensThisWeek: 4200000000,
     totalTokensLastWeek: 3900000000,
     growthPct: 7.7,
+    weeklyBaselineGrowthMean: 5.0,
+    weeklyBaselineGrowthStddev: 2.1,
     cacheHitRateThisWeekPct: 98.5,
     cacheHitRateLastWeekPct: 97.1,
+    weeklyBaselineCacheMean: 97.8,
+    weeklyBaselineCacheStddev: 0.5,
     dailyTokensThisWeek: [500e6, 600e6, 580e6, 620e6, 610e6, 640e6, 650e6],
     dailyTokensLastWeek: [480e6, 550e6, 560e6, 590e6, 570e6, 580e6, 570e6],
+    dailyPositionRecurrentFlags: [false, false, false, false, false, false, false],
     topModelThisWeek: 'anthropic/claude-sonnet-5',
     modelShareThisWeek: { 'anthropic/claude-sonnet-5': 0.76, 'kimi/k2p5': 0.24 }
   };
@@ -99,13 +109,20 @@ function validateWeeklyReportSummary(summary) {
   if (typeof summary.totalTokensThisWeek !== 'number') return 'summary.totalTokensThisWeek must be a number';
   if (summary.totalTokensLastWeek !== null && typeof summary.totalTokensLastWeek !== 'number') return 'summary.totalTokensLastWeek must be a number or null';
   if (summary.growthPct !== null && typeof summary.growthPct !== 'number') return 'summary.growthPct must be a number or null';
+  if (summary.weeklyBaselineGrowthMean !== null && typeof summary.weeklyBaselineGrowthMean !== 'number') return 'summary.weeklyBaselineGrowthMean must be a number or null';
+  if (summary.weeklyBaselineGrowthStddev !== null && typeof summary.weeklyBaselineGrowthStddev !== 'number') return 'summary.weeklyBaselineGrowthStddev must be a number or null';
   if (typeof summary.cacheHitRateThisWeekPct !== 'number') return 'summary.cacheHitRateThisWeekPct must be a number';
   if (summary.cacheHitRateLastWeekPct !== null && typeof summary.cacheHitRateLastWeekPct !== 'number') return 'summary.cacheHitRateLastWeekPct must be a number or null';
+  if (summary.weeklyBaselineCacheMean !== null && typeof summary.weeklyBaselineCacheMean !== 'number') return 'summary.weeklyBaselineCacheMean must be a number or null';
+  if (summary.weeklyBaselineCacheStddev !== null && typeof summary.weeklyBaselineCacheStddev !== 'number') return 'summary.weeklyBaselineCacheStddev must be a number or null';
   if (!Array.isArray(summary.dailyTokensThisWeek) || summary.dailyTokensThisWeek.length !== 7 || !summary.dailyTokensThisWeek.every((/** @type {any} */ n) => typeof n === 'number')) {
     return 'summary.dailyTokensThisWeek must be an array of 7 numbers';
   }
   if (summary.dailyTokensLastWeek !== null && (!Array.isArray(summary.dailyTokensLastWeek) || summary.dailyTokensLastWeek.length !== 7 || !summary.dailyTokensLastWeek.every((/** @type {any} */ n) => typeof n === 'number'))) {
     return 'summary.dailyTokensLastWeek must be an array of 7 numbers, or null';
+  }
+  if (!Array.isArray(summary.dailyPositionRecurrentFlags) || summary.dailyPositionRecurrentFlags.length !== 7 || !summary.dailyPositionRecurrentFlags.every((/** @type {any} */ v) => typeof v === 'boolean')) {
+    return 'summary.dailyPositionRecurrentFlags must be an array of 7 booleans';
   }
   if (typeof summary.topModelThisWeek !== 'string') return 'summary.topModelThisWeek must be a string';
   if (!summary.modelShareThisWeek || typeof summary.modelShareThisWeek !== 'object') return 'summary.modelShareThisWeek must be an object';
@@ -127,9 +144,9 @@ HARD RULE: this is a read-only analysis task. You may read exactly one file — 
 **What to write:** ONE paragraph, 5-7 sentences, genuinely reasoning at WEEK scale — this is explicitly NOT a longer version of a daily report. Use ONLY numbers derivable from the file.
 
 **Required content (this is what makes it week-scale, not day-scale):**
-1. State growthPct (totalTokensThisWeek vs totalTokensLastWeek) and characterize it as accelerating, decelerating, or flat — you only have this week and last week to compare, so describe the direction and magnitude honestly; do not claim a longer multi-week trend the data doesn't cover.
-2. Compare cacheHitRateThisWeekPct against cacheHitRateLastWeekPct and call out any real drift (a change of more than ~1 percentage point is worth naming; smaller than that, say cache discipline "held steady").
-3. Compare dailyTokensThisWeek against dailyTokensLastWeek DAY-BY-DAY AT THE SAME POSITION (index 0 vs index 0, index 1 vs index 1, ...). If the same day-of-week position shows an elevated value in both weeks, name that as a recurring pattern worth watching. If nothing recurs at the same position, say so instead of inventing a pattern.
+1. Compare growthPct against the multi-week baseline mean (weeklyBaselineGrowthMean) and characterize the current week as accelerating, decelerating, or inline with the historical pattern — use weeklyBaselineGrowthStddev to gauge significance.
+2. Compare cacheHitRateThisWeekPct against the multi-week baseline (weeklyBaselineCacheMean) and call out any real drift (a change of more than ~1 percentage point is worth naming; smaller than that, say cache discipline "held steady"). Use weeklyBaselineCacheStddev to gauge significance.
+3. For each day in dailyTokensThisWeek, check whether it is ≥2σ above the same-calendar-position mean across trailing weeks (dailyPositionRecurrentFlags, 7 booleans). Name any positions flagged as recurrent; if none recur, say so instead of inventing a pattern.
 4. Name topModelThisWeek and its share from modelShareThisWeek.
 
 **Style:** Direct, specific, numbers-first. Markdown bold (**text**) for model names and key numbers. No bullet points — this is prose, one paragraph.`;
@@ -294,6 +311,24 @@ describe('buildWeeklyReportSummary', () => {
     const summary = buildWeeklyReportSummary(fixtureWeeklyData(15, { 'a/model-1': 1000, 'a/model-2': 200 }));
     expect(summary.topModelThisWeek).toBe('a/model-1');
   });
+
+  it('computes multi-week baseline mean and stddev for growth and cache rate with 15+ snapshots', () => {
+    const summary = buildWeeklyReportSummary(fixtureWeeklyData(15, { 'a/model-1': 1000 }));
+    expect(summary.weeklyBaselineGrowthMean).not.toBeNull();
+    expect(summary.weeklyBaselineGrowthStddev).not.toBeNull();
+    expect(summary.weeklyBaselineCacheMean).not.toBeNull();
+    expect(summary.weeklyBaselineCacheStddev).not.toBeNull();
+  });
+
+  it('returns all-true dailyPositionRecurrentFlags when current week is flat and trailing weeks were zero', () => {
+    const out = [];
+    for (let d = 0; d < 22; d++) {
+      out.push({ day: `d${d}`, tokens: d < 15 ? 1000 : 2000, models: { 'a/model-1': { total: d < 15 ? 1000 : 2000, input: d < 15 ? 1000 : 2000, output: 0, cache_read: 0, cache_write: 0 } } });
+    }
+    const summary = buildWeeklyReportSummary(out);
+    expect(summary.dailyPositionRecurrentFlags.length).toBe(7);
+    expect(summary.dailyPositionRecurrentFlags.some((f) => f)).toBe(true);
+  });
 });
 ```
 
@@ -307,6 +342,7 @@ Expected: FAIL — `Cannot find module '../../dashboard/js/weekly-report.js'`
 ```js
 // dashboard/js/weekly-report.js (Part 1 of 2 — pure summary builder)
 import { computeWeekWindow } from './title-belt.js';
+import { cacheHitRatePct } from './utils.js';
 
 /**
  * Day-over-day .tokens deltas for `count` consecutive days ending right
@@ -328,6 +364,47 @@ function dailyDeltas(weeklyData, endIdxExclusive, count) {
 }
 
 /**
+ * Returns all overlapping week windows from weeklyData (each 7 consecutive days),
+ * skipping the last (current) week. Used to compute multi-week baselines.
+ * @param {any[]} weeklyData
+ * @returns {Array<{thisWeek: Record<string, object>, lastWeek: Record<string, object>|null, weekEndDay: string}>}
+ */
+function computeAllWeekWindows(weeklyData) {
+    const windows = [];
+    for (let endIdx = weeklyData.length; endIdx >= 7; endIdx -= 7) {
+        const weekDays = weeklyData.slice(endIdx - 7, endIdx);
+        const thisWeek = {};
+        for (const day of weekDays) {
+            for (const [name, stats] of Object.entries(day.models || {})) {
+                thisWeek[name] = thisWeek[name] || { total: 0, input: 0, output: 0, cache_read: 0, cache_write: 0 };
+                thisWeek[name].total += stats.total || 0;
+                thisWeek[name].input += stats.input || 0;
+                thisWeek[name].output += stats.output || 0;
+                thisWeek[name].cache_read += stats.cache_read || 0;
+                thisWeek[name].cache_write += stats.cache_write || 0;
+            }
+        }
+        const prevDays = weeklyData.slice(endIdx - 14, endIdx - 7);
+        const lastWeek = prevDays.length === 7 ? (() => {
+            const lw = {};
+            for (const day of prevDays) {
+                for (const [name, stats] of Object.entries(day.models || {})) {
+                    lw[name] = lw[name] || { total: 0, input: 0, output: 0, cache_read: 0, cache_write: 0 };
+                    lw[name].total += stats.total || 0;
+                    lw[name].input += stats.input || 0;
+                    lw[name].output += stats.output || 0;
+                    lw[name].cache_read += stats.cache_read || 0;
+                    lw[name].cache_write += stats.cache_write || 0;
+                }
+            }
+            return lw;
+        })() : null;
+        windows.push({ thisWeek, lastWeek, weekEndDay: weekDays[weekDays.length - 1]?.day || '' });
+    }
+    return windows;
+}
+
+/**
  * @param {any[]} weeklyData
  * @returns {object|null}
  */
@@ -343,14 +420,51 @@ export function buildWeeklyReportSummary(weeklyData) {
         ? ((totalTokensThisWeek - totalTokensLastWeek) / totalTokensLastWeek) * 100
         : null;
 
-    const cacheRate = (week) => {
-        const input = Object.values(week).reduce((s, m) => s + m.input, 0);
-        const cacheRead = Object.values(week).reduce((s, m) => s + m.cache_read, 0);
-        return (input + cacheRead) > 0 ? (cacheRead / (input + cacheRead)) * 100 : 0;
-    };
+    const cacheRate = (week) => cacheHitRatePct(Object.values(week).reduce((s, m) => s + m.input, 0), Object.values(week).reduce((s, m) => s + m.cache_read, 0));
 
     const dailyTokensThisWeek = dailyDeltas(weeklyData, weeklyData.length, 7) || [];
     const dailyTokensLastWeek = lastWeek ? dailyDeltas(weeklyData, weeklyData.length - 7, 7) : null;
+
+    // Multi-week baseline: collect per-week growth% and cache rates across all available trailing windows
+    const allWindows = computeAllWeekWindows(weeklyData);
+    const trailingWindows = allWindows.filter((w) => w.weekEndDay !== weekEndDay && w.lastWeek);
+
+    let weeklyBaselineGrowthMean = null;
+    let weeklyBaselineGrowthStddev = null;
+    let weeklyBaselineCacheMean = null;
+    let weeklyBaselineCacheStddev = null;
+
+    if (trailingWindows.length >= 2) {
+        const growths = trailingWindows.map((w) => {
+            const thisTotal = Object.values(w.thisWeek).reduce((s, m) => s + m.total, 0);
+            const lastTotal = Object.values(w.lastWeek).reduce((s, m) => s + m.total, 0);
+            return lastTotal > 0 ? ((thisTotal - lastTotal) / lastTotal) * 100 : 0;
+        });
+        weeklyBaselineGrowthMean = growths.reduce((s, v) => s + v, 0) / growths.length;
+        weeklyBaselineGrowthStddev = Math.sqrt(growths.reduce((s, v) => s + (v - weeklyBaselineGrowthMean) ** 2, 0) / growths.length);
+
+        const caches = trailingWindows.map((w) => cacheRate(w.thisWeek));
+        weeklyBaselineCacheMean = caches.reduce((s, v) => s + v, 0) / caches.length;
+        weeklyBaselineCacheStddev = Math.sqrt(caches.reduce((s, v) => s + (v - weeklyBaselineCacheMean) ** 2, 0) / caches.length);
+    }
+
+    // Daily position recurrence: for each of 7 positions, check if current day ≥2σ above trailing mean
+    const dailyPositionRecurrentFlags = [];
+    for (let pos = 0; pos < 7; pos++) {
+        const trailingValues = trailingWindows
+            .map((w) => {
+                const deltas = dailyDeltas(weeklyData, allWindows.indexOf(w) * 7 + 7, 7);
+                return deltas ? deltas[pos] : null;
+            })
+            .filter((v) => v !== null);
+        if (trailingValues.length >= 2 && dailyTokensThisWeek[pos] !== undefined) {
+            const mean = trailingValues.reduce((s, v) => s + v, 0) / trailingValues.length;
+            const stddev = Math.sqrt(trailingValues.reduce((s, v) => s + (v - mean) ** 2, 0) / trailingValues.length);
+            dailyPositionRecurrentFlags.push(stddev > 0 ? (dailyTokensThisWeek[pos] - mean) / stddev >= 2 : dailyTokensThisWeek[pos] > mean);
+        } else {
+            dailyPositionRecurrentFlags.push(false);
+        }
+    }
 
     const topModelThisWeek = Object.entries(thisWeek).sort((a, b) => b[1].total - a[1].total)[0]?.[0] || 'unknown';
     /** @type {Record<string, number>} */
@@ -364,10 +478,15 @@ export function buildWeeklyReportSummary(weeklyData) {
         totalTokensThisWeek,
         totalTokensLastWeek,
         growthPct,
+        weeklyBaselineGrowthMean,
+        weeklyBaselineGrowthStddev,
         cacheHitRateThisWeekPct: cacheRate(thisWeek),
         cacheHitRateLastWeekPct: lastWeek ? cacheRate(lastWeek) : null,
+        weeklyBaselineCacheMean,
+        weeklyBaselineCacheStddev,
         dailyTokensThisWeek,
         dailyTokensLastWeek,
+        dailyPositionRecurrentFlags,
         topModelThisWeek,
         modelShareThisWeek
     };
@@ -377,7 +496,7 @@ export function buildWeeklyReportSummary(weeklyData) {
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `bun test tests/unit/weekly-report.test.js`
-Expected: PASS (4 tests)
+Expected: PASS (6 tests)
 
 - [ ] **Step 5: Write the render/fetch half, section markup, and CSS**
 
@@ -385,88 +504,23 @@ Append to `dashboard/js/weekly-report.js`:
 
 ```js
 // dashboard/js/weekly-report.js (Part 2 of 2 — render/fetch)
+import { createTaskferryReportWidget } from './report-widget.js';
+import { formatMarkdownBoldToHtml } from './utils.js';
 
-/** @type {{weekEndDay: string, text: string}|null} */
-let cachedWeeklyReport = null;
-/** @type {string|null} */
-let inFlightForWeek = null;
-
-/** @param {HTMLElement} container */
-function build(container) {
-    container.innerHTML = `
-        <div class="field-report" id="weeklyFieldReport">
-            <div class="fr-date" id="weeklyFieldReportDate"></div>
-            <div id="weeklyFieldReportBody">Loading this week's field report…</div>
-        </div>
-    `;
-    container.dataset.weeklyReportBuilt = 'true';
-}
-
-/**
- * @param {HTMLElement} container
- * @param {object} summary
- */
-async function fetchAndRender(container, summary) {
-    inFlightForWeek = summary.weekEndDay;
-    const bodyEl = container.querySelector('#weeklyFieldReportBody');
-    bodyEl.textContent = "Loading this week's field report…";
-
-    try {
-        const res = await fetch('/api/insights/weekly-report', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(summary)
-        });
-        if (!res.ok) {
-            const errBody = await res.json().catch(() => ({}));
-            throw new Error(errBody.error || `Server error: ${res.status}`);
-        }
-        const data = await res.json();
-        cachedWeeklyReport = { weekEndDay: summary.weekEndDay, text: data.insights };
-        renderCached(container);
-    } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        bodyEl.innerHTML = `<span style="color: var(--mono-danger, #ef4444);">Report generation failed: ${message}</span> `
-            + `<button type="button" class="retry-btn" id="weeklyFieldReportRetry">↻ Retry</button>`;
-        container.querySelector('#weeklyFieldReportRetry')?.addEventListener('click', () => fetchAndRender(container, summary));
-    } finally {
-        inFlightForWeek = null;
-    }
-}
-
-/** @param {HTMLElement} container */
-function renderCached(container) {
-    if (!cachedWeeklyReport) return;
-    container.querySelector('#weeklyFieldReportDate').textContent = `FIELD REPORT // WEEK ENDING ${cachedWeeklyReport.weekEndDay}`;
-    container.querySelector('#weeklyFieldReportBody').innerHTML = cachedWeeklyReport.text.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
-}
-
-/**
- * @param {HTMLElement} container
- * @param {any[]} weeklyData
- */
-export function renderWeeklyFieldReport(container, weeklyData) {
-    if (container.dataset.weeklyReportBuilt !== 'true') build(container);
-
-    const summary = buildWeeklyReportSummary(weeklyData);
-    if (!summary) {
-        container.querySelector('#weeklyFieldReportBody').textContent = 'Not enough history yet for a weekly report.';
-        return;
-    }
-
-    if (cachedWeeklyReport?.weekEndDay === summary.weekEndDay) {
-        renderCached(container);
-        return;
-    }
-    if (inFlightForWeek === summary.weekEndDay) return;
-
-    fetchAndRender(container, summary);
-}
-
-export function resetWeeklyFieldReportForTest() {
-    cachedWeeklyReport = null;
-    inFlightForWeek = null;
-}
+const weeklyReport = createTaskferryReportWidget({
+    endpoint: '/api/insights/weekly-report',
+    cacheKeyField: 'weekEndDay',
+    bodyId: 'weeklyFieldReportBody',
+    dateLabelId: 'weeklyFieldReportDate',
+    retryId: 'weeklyFieldReportRetry',
+    containerId: 'weekly-field-report-container',
+    loadingText: "Loading this week's field report…",
+    headingFor: (d) => `FIELD REPORT // WEEK ENDING ${d}`,
+    notEnoughText: (summary) => summary ? null : 'Not enough history yet for a weekly report.',
+    buildFlag: 'weeklyReportBuilt'
+});
+export const renderWeeklyFieldReport = weeklyReport.render;
+export const resetWeeklyFieldReportForTest = weeklyReport.resetForTest;
 ```
 
 In `dashboard/index.html`, add the section inside `#analytics-tab-insights`, right after `#weekly-title-belt-container` (added by the weekly-title-belt plan):
@@ -524,7 +578,7 @@ describe('renderWeeklyFieldReport', () => {
 - [ ] **Step 7: Run tests to verify they pass**
 
 Run: `bun test tests/unit/weekly-report.test.js`
-Expected: PASS (7 tests total)
+Expected: PASS (9 tests total)
 
 - [ ] **Step 8: Wire into the Insights tab**
 
