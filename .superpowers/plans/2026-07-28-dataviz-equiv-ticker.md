@@ -71,11 +71,14 @@ describe('equiv-ticker', () => {
     initEquivTickers();
     await Promise.resolve(); // let the fetch microtask chain settle
     await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
     updateEquivTickers({ tokens: 100, cost: 5, burnRate: 1 });
 
     const tokensEl = document.querySelector('[data-equiv-category="tokens"]');
     expect(tokensEl._equivLines.some(l => l.includes('100 tokens sampled'))).toBe(true);
     expect(tokensEl._equivLines.some(l => l.includes('another 100 tokens line'))).toBe(true);
+    expect(tokensEl._equivLines.every(l => !l.includes('War and Peace'))).toBe(true);
   });
 
   it('falls back to curated-only lines forever when the corpus fetch fails, without throwing', async () => {
@@ -138,18 +141,25 @@ const CURATED_FALLBACK = {
 
 /** @type {any[]|null} */
 let corpus = null;
-let corpusFetchFailed = false;
+
 /** @type {Promise<void>|null} */
 let corpusFetchPromise = null;
 
-/** @param {any[]} arr @returns {any[]} */
-function shuffle(arr) {
+/**
+ * Partial Fisher-Yates: shuffles only the first k elements so we can
+ * stop early instead of shuffling the entire filtered set.
+ * @param {any[]} arr
+ * @param {number} k
+ * @returns {any[]}
+ */
+function partialShuffle(arr, k) {
     const copy = arr.slice();
-    for (let i = copy.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+    const n = Math.min(k, copy.length);
+    for (let i = 0; i < n; i++) {
+        const j = i + Math.floor(Math.random() * (copy.length - i));
         [copy[i], copy[j]] = [copy[j], copy[i]];
     }
-    return copy;
+    return copy.slice(0, n);
 }
 
 function ensureCorpusLoaded() {
@@ -161,11 +171,13 @@ function ensureCorpusLoaded() {
         })
         .then((data) => { corpus = data; })
         .catch((err) => {
-            corpusFetchFailed = true;
             console.warn('equivalence corpus fetch failed, staying on curated lines only', err);
         });
     return corpusFetchPromise;
 }
+
+/** @type {Record<string, {n: number, lines: string[]}>} */
+let _buildLinesCache = {};
 
 /**
  * @param {string} category
@@ -173,10 +185,15 @@ function ensureCorpusLoaded() {
  * @returns {string[]}
  */
 function buildLines(category, n) {
+    if (_buildLinesCache[category] && _buildLinesCache[category].n === n) {
+        return _buildLinesCache[category].lines;
+    }
     const curated = (CURATED_FALLBACK[category] || []).map((t) => formatFactoid(t, n));
-    if (!corpus || corpusFetchFailed) return curated;
-    const sample = shuffle(corpus.filter((f) => f.category === category)).slice(0, SAMPLE_SIZE);
-    return curated.concat(sample.map((f) => formatFactoid(f.copy, n)));
+    if (!corpus) return curated;
+    const sample = partialShuffle(corpus.filter((f) => f.category === category), SAMPLE_SIZE);
+    const lines = sample.map((f) => formatFactoid(f.copy, n));
+    _buildLinesCache[category] = { n, lines };
+    return lines;
 }
 
 /**
@@ -228,8 +245,8 @@ export function updateEquivTickers(values) {
 
 export function resetEquivTickersForTest() {
     corpus = null;
-    corpusFetchFailed = false;
     corpusFetchPromise = null;
+    _buildLinesCache = {};
     document.querySelectorAll('.equiv-ticker').forEach((el) => {
         if (/** @type {any} */ (el)._equivIntervalId) clearInterval(/** @type {any} */ (el)._equivIntervalId);
         /** @type {any} */ (el)._equivIntervalId = null;
@@ -241,7 +258,7 @@ export function resetEquivTickersForTest() {
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `bun test tests/unit/equiv-ticker.test.js`
-Expected: PASS (5 tests)
+Expected: PASS (4 tests)
 
 - [ ] **Step 5: Commit**
 
