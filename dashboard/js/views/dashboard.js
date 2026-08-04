@@ -1,6 +1,7 @@
 import { CHART_COLORS, getEmoji, getPricingForModel } from '../config.js';
 import { fmtNum, fmtCur, createSparkline, splitModelKey, displayModel, escapeHtml, parseModelKey, notify } from '../utils.js';
 import { currentData, historyData, fileHistoricalData } from '../state.js';
+import { updateEquivTickers } from '../equiv-ticker.js';
 
 /**
  * @typedef {{
@@ -77,6 +78,12 @@ export const renderDashboard = (fullRender = true) => {
 
     // Update burn rate gauge
     updateBurnRateGauge();
+
+    updateEquivTickers({
+        tokens: total_tokens,
+        cost: total_cost?.total || 0,
+        burnRate: calculateBurnRate().rate
+    });
 
     // Render top models over the last 48 hours (update in place unless full render)
     renderTopModels(getTokensByModelLast48h(tokens_by_model), fullRender);
