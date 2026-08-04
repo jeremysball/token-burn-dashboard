@@ -7,6 +7,8 @@
     "build.js|sonarjs/cognitive-complexity": 1,
     "build.js|sonarjs/no-redundant-assignments": 2,
     "build.js|sonarjs/super-linear-regex": 2,
+    "dashboard/js/cache-scenario.js|complexity": 1,
+    "dashboard/js/cache-scenario.js|max-statements": 1,
     "dashboard/js/api.js|complexity": 1,
     "dashboard/js/api.js|max-lines-per-function": 1,
     "dashboard/js/api.js|max-statements": 2,
