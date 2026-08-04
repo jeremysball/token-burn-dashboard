@@ -38,6 +38,11 @@ test.describe('no horizontal overflow on critical selectors', () => {
     await expectNoOverflow(page, '.equiv-ticker', 3);
   });
 
+  test('cache savings slider', async ({ page }) => {
+    await expect(page.locator('#cacheSlider')).toBeVisible({ timeout: 10000 });
+    await expectNoOverflow(page, '.cache-hero');
+  });
+
   test('scale tab', async ({ page }) => {
     await page.click('button:has-text("Analytics")');
     await page.click('button:has-text("Scale")');
