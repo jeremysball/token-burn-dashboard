@@ -111,6 +111,12 @@ export function computeWeekWindow(weeklyData) {
 /**
  * The effective $/M convention: every nonzero token dimension must have a
  * finite rate. Explicit zero rates are valid free pricing.
+ *
+ * When `stats` is supplied, only an actually finite zero token count
+ * (`tokens === 0`) allows a missing rate; a missing or non-finite token
+ * count is a malformed dimension and makes the model unpriced. When `stats`
+ * is omitted, this is a pricing-only call and every one of the five rates
+ * must be finite on its own.
  * @param {any|null|undefined} pricing
  * @param {any} [stats]
  * @returns {boolean}
@@ -126,7 +132,7 @@ export function hasUsableFullPricing(pricing, stats) {
         ['reasoning', pricing?.reasoning, usage.reasoning]
     ];
     return dimensions.every(([, rate, tokens]) => hasStats
-        ? tokens === 0 || tokens == null || Number.isFinite(rate)
+        ? Number.isFinite(tokens) && (tokens === 0 || Number.isFinite(rate))
         : Number.isFinite(rate));
 }
 
@@ -172,10 +178,15 @@ export function scoreTitleBelt(weekWindow, pricingByModel) {
     if (!weekWindow) return { volumeCrown: null, thriftKing: null, sommelier: null, mostImproved: null };
 
     const { thisWeek, lastWeek } = weekWindow;
-    const totalTokens = Object.values(thisWeek).reduce((sum, s) => sum + s.total, 0);
+    const totalTokens = Object.values(thisWeek).reduce(
+        (sum, s) => sum + (Number.isFinite(s?.total) ? s.total : 0),
+        0
+    );
     if (totalTokens <= 0) return { volumeCrown: null, thriftKing: null, sommelier: null, mostImproved: null };
 
-    const eligible = Object.entries(thisWeek).filter(([, s]) => s.total / totalTokens >= ELIGIBILITY_FLOOR);
+    const eligible = Object.entries(thisWeek).filter(
+        ([, s]) => Number.isFinite(s?.total) && s.total / totalTokens >= ELIGIBILITY_FLOOR
+    );
 
     const scored = eligible.map(([name, s]) => ({
         name,

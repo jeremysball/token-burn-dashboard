@@ -191,7 +191,11 @@ export const updateData = (data, opts = {}) => {
     };
     const byDay = new Map();
     for (const snapshot of snapshots) {
-        if (isCalendarDay(snapshot?.day)) byDay.set(snapshot.day, snapshot);
+        if (!isCalendarDay(snapshot?.day)) continue;
+        const existing = byDay.get(snapshot.day);
+        const newTokens = Number.isFinite(snapshot?.tokens) ? snapshot.tokens : -Infinity;
+        const existingTokens = existing && Number.isFinite(existing.tokens) ? existing.tokens : -Infinity;
+        if (!existing || newTokens > existingTokens) byDay.set(snapshot.day, snapshot);
     }
     const retained = [...byDay.values()]
         .sort((a, b) => a.day.localeCompare(b.day))
