@@ -39,6 +39,41 @@ function renderEvent(container, event) {
     /** @type {HTMLElement} */ (container.querySelector('#latestPillText')).textContent = text;
 }
 
+/** @param {HTMLElement} container */
+function restoreLastEvent(container) {
+    if (lastEventText) {
+        /** @type {HTMLElement} */ (container.querySelector('#latestPillText')).textContent = lastEventText;
+    }
+}
+
+/**
+ * @param {HTMLElement} container
+ * @param {Record<string, {total: number, input?: number, output?: number, cache_read?: number, cache_write?: number, reasoning?: number}>|null} prevTokens
+ * @param {Record<string, {total: number, input?: number, output?: number, cache_read?: number, cache_write?: number, reasoning?: number}>} currTokens
+ * @param {Record<string, any>|undefined} pricingByModel
+ */
+function renderGrowth(container, prevTokens, currTokens, pricingByModel) {
+    if (!prevTokens) return;
+    const events = computeGrowthEvents(prevTokens, currTokens);
+    const event = pickLatestEvent(events, pricingByModel);
+    if (event) renderEvent(container, event);
+}
+
+/** @param {number|undefined} revision */
+function isRepeatedRevision(revision) {
+    return revision !== undefined && revision === lastProcessedRevision;
+}
+
+/**
+ * @param {Record<string, {total: number, input?: number, output?: number, cache_read?: number, cache_write?: number, reasoning?: number}>} tokensByModel
+ * @param {number|undefined} revision
+ */
+function seedBaseline(tokensByModel, revision) {
+    prevTokensByModel = tokensByModel;
+    lastProcessedRevision = revision ?? null;
+    baselineReady = true;
+}
+
 /**
  * @param {HTMLElement} container
  * @param {any} currentData
@@ -51,32 +86,20 @@ export function renderLiveEventFeed(container, currentData, opts = {}) {
     const currTokensByModel = currentData?.tokens_by_model || {};
 
     if (source === 'cache') {
-        if (lastEventText) {
-            /** @type {HTMLElement} */ (container.querySelector('#latestPillText')).textContent = lastEventText;
-        }
+        restoreLastEvent(container);
         return;
     }
 
-    if (revision !== undefined && revision === lastProcessedRevision) {
+    if (isRepeatedRevision(revision)) {
         return;
     }
 
     if (!baselineReady) {
-        prevTokensByModel = currTokensByModel;
-        lastProcessedRevision = revision ?? null;
-        baselineReady = true;
+        seedBaseline(currTokensByModel, revision);
         return;
     }
 
-    if (prevTokensByModel) {
-        const events = computeGrowthEvents(prevTokensByModel, currTokensByModel);
-        const event = pickLatestEvent(events, currentData?.pricing_by_model);
-        if (event) {
-            renderEvent(container, event);
-        } else if (events.length === 0 && lastEventText) {
-            // No growth: leave the last event visible
-        }
-    }
+    renderGrowth(container, prevTokensByModel, currTokensByModel, currentData?.pricing_by_model);
 
     prevTokensByModel = currTokensByModel;
     lastProcessedRevision = revision ?? null;

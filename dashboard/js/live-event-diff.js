@@ -12,17 +12,44 @@ export function computeGrowthEvents(prevTokensByModel, currTokensByModel) {
         const prev = prevTokensByModel?.[model] || {};
         const s = /** @type {any} */ (stats);
         const p = /** @type {any} */ (prev);
-        const inputDelta = Math.max(0, (Number(s.input) || 0) - (Number(p.input) || 0));
-        const outputDelta = Math.max(0, (Number(s.output) || 0) - (Number(p.output) || 0));
-        const cacheReadDelta = Math.max(0, (Number(s.cache_read) || 0) - (Number(p.cache_read) || 0));
-        const cacheWriteDelta = Math.max(0, (Number(s.cache_write) || 0) - (Number(p.cache_write) || 0));
-        const reasoningDelta = Math.max(0, (Number(s.reasoning) || 0) - (Number(p.reasoning) || 0));
+        const inputDelta = growthDelta(s.input, p.input);
+        const outputDelta = growthDelta(s.output, p.output);
+        const cacheReadDelta = growthDelta(s.cache_read, p.cache_read);
+        const cacheWriteDelta = growthDelta(s.cache_write, p.cache_write);
+        const reasoningDelta = growthDelta(s.reasoning, p.reasoning);
         const delta = inputDelta + outputDelta + cacheReadDelta + cacheWriteDelta + reasoningDelta;
         if (delta > 0) {
             events.push({ model, delta, inputDelta, outputDelta, cacheReadDelta, cacheWriteDelta, reasoningDelta });
         }
     }
     return events;
+}
+
+/**
+ * @param {number|undefined} current
+ * @param {number|undefined} previous
+ * @returns {number}
+ */
+function growthDelta(current, previous) {
+    return Math.max(0, (Number(current) || 0) - (Number(previous) || 0));
+}
+
+/**
+ * @param {Record<string, any>} pricing
+ * @param {number[]} deltas
+ * @returns {number|null}
+ */
+function calculateCost(pricing, deltas) {
+    const dimensions = ['input', 'output', 'cacheRead', 'cacheWrite', 'reasoning'];
+    const rates = dimensions.map((dimension, index) => getUsablePricingRate(pricing, dimension, deltas[index]));
+    const hasMissingRate = deltas.some((delta, index) => delta > 0 && rates[index] === null);
+    if (hasMissingRate) return null;
+
+    return rates.reduce(
+        /** @param {number} cost @param {number|null} rate @param {number} index */
+        (cost, rate, index) => cost + (deltas[index] / 1e6) * (rate || 0),
+        0,
+    );
 }
 
 /**
@@ -40,27 +67,8 @@ export function pickLatestEvent(events, pricingByModel) {
     const totalCacheable = inputDelta + cacheReadDelta;
     const cachePct = totalCacheable > 0 ? (cacheReadDelta / totalCacheable) * 100 : 0;
 
-    let cost = null;
-    if (pricing && typeof pricing === 'object') {
-        const inputRate = getUsablePricingRate(pricing, 'input', inputDelta);
-        const outputRate = getUsablePricingRate(pricing, 'output', outputDelta);
-        const cacheReadRate = getUsablePricingRate(pricing, 'cacheRead', cacheReadDelta);
-        const cacheWriteRate = getUsablePricingRate(pricing, 'cacheWrite', cacheWriteDelta);
-        const reasoningRate = getUsablePricingRate(pricing, 'reasoning', reasoningDelta);
-
-        const rates = [inputRate, outputRate, cacheReadRate, cacheWriteRate, reasoningRate];
-        const deltas = [inputDelta, outputDelta, cacheReadDelta, cacheWriteDelta, reasoningDelta];
-        const hasMissingRate = deltas.some((d, i) => d > 0 && rates[i] === null);
-
-        if (!hasMissingRate) {
-            cost =
-                (inputDelta / 1e6) * (inputRate || 0) +
-                (outputDelta / 1e6) * (outputRate || 0) +
-                (cacheReadDelta / 1e6) * (cacheReadRate || 0) +
-                (cacheWriteDelta / 1e6) * (cacheWriteRate || 0) +
-                (reasoningDelta / 1e6) * (reasoningRate || 0);
-        }
-    }
+    const deltas = [inputDelta, outputDelta, cacheReadDelta, cacheWriteDelta, reasoningDelta];
+    const cost = pricing && typeof pricing === 'object' ? calculateCost(pricing, deltas) : null;
 
     return { model: biggest.model, delta: biggest.delta, cachePct, cost };
 }
