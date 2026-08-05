@@ -157,8 +157,8 @@ describe('API Module', () => {
         total_tokens: 1000,
         total_reasoning: 50,
         tokens_by_model: {
-          'gpt-4': { total: 1000, reasoning: 50 },
-          'claude-3': { total: 500 },
+          'gpt-4': { total: 1000, input: 950, output: 0, cache_read: 0, cache_write: 0, reasoning: 50 },
+          'claude-3': { total: 500, input: 500, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 },
         }
       });
       expect(currentData?.total_reasoning).toBe(50);

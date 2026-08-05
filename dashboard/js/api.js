@@ -91,20 +91,21 @@ export const updateData = (data, opts = {}) => {
     const tokensByModel = data?.tokens_by_model || {};
     const normalizedModels = {};
     for (const [k, v] of Object.entries(tokensByModel)) {
+        // Preserve missing and non-finite dimensions for strict consumers to reject.
         // @ts-ignore
         normalizedModels[k] = {
             // @ts-ignore
-            total: v?.total || 0,
+            total: v?.total,
             // @ts-ignore
-            input: v?.input || 0,
+            input: v?.input,
             // @ts-ignore
-            output: v?.output || 0,
+            output: v?.output,
             // @ts-ignore
-            cache_read: v?.cache_read || 0,
+            cache_read: v?.cache_read,
             // @ts-ignore
-            cache_write: v?.cache_write || 0,
+            cache_write: v?.cache_write,
             // @ts-ignore
-            reasoning: v?.reasoning || 0,
+            reasoning: v?.reasoning,
         };
     }
 

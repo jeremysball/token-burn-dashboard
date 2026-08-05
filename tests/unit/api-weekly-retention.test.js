@@ -30,7 +30,7 @@ describe('weeklyData retention', () => {
         };
         updateData({
           total_tokens: 1000 * (i + 1),
-          tokens_by_model: { 'a/model-1': { total: 1000 * (i + 1), input: 0, output: 0, cache_read: 0, cache_write: 0 } }
+          tokens_by_model: { 'a/model-1': { total: 1000 * (i + 1), input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 } }
         });
       }
     } finally {
