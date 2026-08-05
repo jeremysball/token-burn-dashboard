@@ -5,8 +5,6 @@ const path = require('path');
 /**
  * Reserve an ephemeral port by binding a listener and holding it open.
  * Returns { port, release } where release() closes the listener.
- * Holding the listener prevents the OS from reassigning the port before
- * the child process binds to it.
  */
 function reservePort() {
   return new Promise((resolve, reject) => {
@@ -20,33 +18,14 @@ function reservePort() {
 }
 
 /**
- * Probe a TCP port until a connection succeeds or timeout expires.
- */
-function probePort(port, host = '127.0.0.1', timeoutMs = 30000) {
-  return new Promise((resolve, reject) => {
-    const deadline = Date.now() + timeoutMs;
-    const attempt = () => {
-      if (Date.now() > deadline) {
-        reject(new Error(`port ${port} did not become available within ${timeoutMs}ms`));
-        return;
-      }
-      const sock = net.connect({ port, host }, () => {
-        sock.destroy();
-        resolve();
-      });
-      sock.on('error', () => {
-        sock.destroy();
-        setTimeout(attempt, 100);
-      });
-    };
-    attempt();
-  });
-}
-
-/**
  * Start the real Bun server on an ephemeral port.
  * Returns { baseUrl, port, child } after the server is listening.
- * On startup failure the child process is killed before rejecting.
+ *
+ * The reserved port is released before probing so that the TCP probe
+ * can only succeed once the child process has actually bound the port.
+ * The actual port is parsed from the server's stdout banner, which
+ * handles the case where server.js falls back to an adjacent port
+ * on EADDRINUSE.
  */
 async function startRealServer() {
   const { port, release } = await reservePort();
@@ -57,36 +36,90 @@ async function startRealServer() {
     env: { ...process.env, PORT: String(port) }
   });
 
+  let closed = false;
+  const childClosed = new Promise((resolve) => {
+    if (child.exitCode !== null) { closed = true; resolve(); return; }
+    child.on('close', () => { closed = true; resolve(); });
+  });
+
+  let stderr = '';
+  child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+
   try {
-    // Wait for the child to bind the port (TCP probe succeeds),
-    // then release the reserved listener so the port is fully owned by the child.
-    await probePort(port, '127.0.0.1', 30000);
+    // Release the reservation first so the probe can only succeed
+    // once the child actually binds the port.
     await release();
 
-    // Surface any early exit that raced past the probe
-    child.on('exit', (code) => {
-      if (code !== null && code !== 0) {
-        console.error(`server exited early with code ${code}`);
-      }
+    // Parse stdout for the actual listening URL from server.js banner.
+    // This handles the case where server.js falls back to an adjacent port.
+    const actualPort = await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error(`server did not emit listening URL within 30s. stderr: ${stderr.slice(0, 500)}`));
+      }, 30000);
+
+      let stdout = '';
+      const onData = (chunk) => {
+        stdout += chunk.toString();
+        // Match the banner line: http://HOST:PORT
+        const match = stdout.match(/https?:\/\/[^:]+:(\d+)/);
+        if (match) {
+          clearTimeout(timeout);
+          child.stdout.off('data', onData);
+          resolve(Number(match[1]));
+        }
+      };
+      child.stdout.on('data', onData);
+
+      // If the child exits before emitting the URL, reject immediately.
+      child.on('exit', (code) => {
+        clearTimeout(timeout);
+        reject(new Error(`server exited with code ${code} before emitting listening URL. stderr: ${stderr.slice(0, 500)}`));
+      });
     });
+
+    return {
+      baseUrl: `http://127.0.0.1:${actualPort}/`,
+      port: actualPort,
+      child,
+      childClosed,
+      _closed: () => closed
+    };
   } catch (err) {
-    await release();
-    if (!child.killed) child.kill('SIGTERM');
+    if (!closed) child.kill('SIGKILL');
+    await childClosed;
     throw err;
   }
-
-  return { baseUrl: `http://127.0.0.1:${port}/`, port, child };
 }
 
-async function stopRealServer(child) {
-  if (!child || child.killed) return;
-  return new Promise((resolve) => {
-    child.on('exit', resolve);
-    child.kill('SIGTERM');
-    setTimeout(() => {
-      if (!child.killed) child.kill('SIGKILL');
-    }, 5000);
-  });
+/**
+ * Stop a real server child process deterministically.
+ *
+ * Sends SIGTERM, waits up to 5s, then force-kills with SIGKILL.
+ * Uses the 'close' event (waits for stdio to flush) rather than
+ * 'exit'. Checks exitCode to handle an already-exited child.
+ */
+async function stopRealServer(server) {
+  if (!server) return;
+  const { child, childClosed } = server;
+
+  // Already exited and closed — nothing to do.
+  if (child.exitCode !== null) {
+    await childClosed;
+    return;
+  }
+
+  // Send SIGTERM and wait up to 5s for a clean exit.
+  child.kill('SIGTERM');
+  const exited = await Promise.race([
+    childClosed.then(() => 'done'),
+    new Promise((r) => setTimeout(() => r('timeout'), 5000))
+  ]);
+
+  // If still alive after SIGTERM, force-kill and wait for close.
+  if (exited === 'timeout' && child.exitCode === null) {
+    child.kill('SIGKILL');
+    await childClosed;
+  }
 }
 
 module.exports = { startRealServer, stopRealServer };
