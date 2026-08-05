@@ -29,7 +29,7 @@ describe('computeGrowthEvents', () => {
     expect(events[0].cacheReadDelta).toBe(20);
     expect(events[0].cacheWriteDelta).toBe(0);
     expect(events[0].reasoningDelta).toBe(22);
-    expect(events[0].delta).toBe(62);
+    expect(events[0].delta).toBe(50);
   });
 
   it('treats a brand-new model (absent from prev) as growth from 0 for all dimensions', () => {
@@ -57,13 +57,13 @@ describe('computeGrowthEvents', () => {
     expect(computeGrowthEvents(prev, curr)).toEqual([]);
   });
 
-  it('carries the positive total delta for event ordering while cost uses dimensional deltas', () => {
+  it('uses positive snapshot-total growth for display/order when dimensions do not sum to total growth', () => {
     const prev = { 'a/model-1': { total: 100, input: 50, output: 20, cache_read: 20, cache_write: 5, reasoning: 5 } };
-    const curr = { 'a/model-1': { total: 300, input: 100, output: 60, cache_read: 80, cache_write: 10, reasoning: 50 } };
+    const curr = { 'a/model-1': { total: 300, input: 70, output: 30, cache_read: 40, cache_write: 10, reasoning: 15 } };
     const events = computeGrowthEvents(prev, curr);
     expect(events).toHaveLength(1);
     expect(events[0].delta).toBe(200);
-    expect(events[0].inputDelta + events[0].outputDelta + events[0].cacheReadDelta + events[0].cacheWriteDelta + events[0].reasoningDelta).toBe(200);
+    expect(events[0].inputDelta + events[0].outputDelta + events[0].cacheReadDelta + events[0].cacheWriteDelta + events[0].reasoningDelta).toBe(65);
   });
 });
 
