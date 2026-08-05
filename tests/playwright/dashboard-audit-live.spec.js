@@ -10,7 +10,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  if (server) await stopRealServer(server.child);
+  if (server) await stopRealServer(server);
 });
 
 test.describe('real-server integrated audit exercise', () => {
