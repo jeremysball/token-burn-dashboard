@@ -19,13 +19,17 @@ function reservePort() {
 
 /**
  * Start the real Bun server on an ephemeral port.
- * Returns { baseUrl, port, child } after the server is listening.
+ * Returns { baseUrl, port, child, childClosed } after the server is listening.
  *
- * The reserved port is released before probing so that the TCP probe
- * can only succeed once the child process has actually bound the port.
- * The actual port is parsed from the server's stdout banner, which
- * handles the case where server.js falls back to an adjacent port
- * on EADDRINUSE.
+ * Child lifecycle handlers (close, error) are registered immediately after
+ * spawn, before the reserved port is released. The startup promise rejects
+ * on error or early close/exit, so a dead child or failed spawn never
+ * leaves the banner wait hanging for30 seconds.
+ *
+ * The reserved port is released before the banner-parsing promise starts,
+ * so the TCP probe can only succeed once the child actually binds the port.
+ * The actual port is parsed from the server's stdout banner, which handles
+ * the case where server.js falls back to an adjacent port on EADDRINUSE.
  */
 async function startRealServer() {
   const { port, release } = await reservePort();
@@ -36,14 +40,22 @@ async function startRealServer() {
     env: { ...process.env, PORT: String(port) }
   });
 
+  // Track whether the child has closed (stdio flushed).
+  // Check exitCode first in case the child already exited synchronously.
   let closed = false;
   const childClosed = new Promise((resolve) => {
     if (child.exitCode !== null) { closed = true; resolve(); return; }
     child.on('close', () => { closed = true; resolve(); });
   });
 
+  // Collect stderr for diagnostics in error messages.
   let stderr = '';
   child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+
+  // Register error handler immediately — covers spawn failures (ENOENT, EACCES)
+  // that emit 'error' without ever emitting 'exit'.
+  let spawnError = null;
+  child.on('error', (err) => { spawnError = err; });
 
   try {
     // Release the reservation first so the probe can only succeed
@@ -51,16 +63,48 @@ async function startRealServer() {
     await release();
 
     // Parse stdout for the actual listening URL from server.js banner.
-    // This handles the case where server.js falls back to an adjacent port.
+    // Rejects immediately on spawn error or early close/exit.
     const actualPort = await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
-        reject(new Error(`server did not emit listening URL within 30s. stderr: ${stderr.slice(0, 500)}`));
+        reject(new Error(
+          `server did not emit listening URL within 30s. stderr: ${stderr.slice(0, 500)}`
+        ));
       }, 30000);
 
+      // If spawn already failed before we got here, reject now.
+      if (spawnError) {
+        clearTimeout(timeout);
+        reject(new Error(`spawn failed: ${spawnError.message}`));
+        return;
+      }
+
+      // If the child already exited before we got here, reject now.
+      if (child.exitCode !== null) {
+        clearTimeout(timeout);
+        reject(new Error(
+          `server exited with code ${child.exitCode} before emitting listening URL. stderr: ${stderr.slice(0, 500)}`
+        ));
+        return;
+      }
+
+      // Listen for spawn error (may fire after release() if spawn was slow).
+      child.on('error', (err) => {
+        clearTimeout(timeout);
+        reject(new Error(`spawn failed: ${err.message}`));
+      });
+
+      // Listen for early exit/close before the banner arrives.
+      child.on('exit', (code) => {
+        clearTimeout(timeout);
+        reject(new Error(
+          `server exited with code ${code} before emitting listening URL. stderr: ${stderr.slice(0, 500)}`
+        ));
+      });
+
+      // Parse stdout for the banner URL.
       let stdout = '';
       const onData = (chunk) => {
         stdout += chunk.toString();
-        // Match the banner line: http://HOST:PORT
         const match = stdout.match(/https?:\/\/[^:]+:(\d+)/);
         if (match) {
           clearTimeout(timeout);
@@ -69,22 +113,16 @@ async function startRealServer() {
         }
       };
       child.stdout.on('data', onData);
-
-      // If the child exits before emitting the URL, reject immediately.
-      child.on('exit', (code) => {
-        clearTimeout(timeout);
-        reject(new Error(`server exited with code ${code} before emitting listening URL. stderr: ${stderr.slice(0, 500)}`));
-      });
     });
 
     return {
       baseUrl: `http://127.0.0.1:${actualPort}/`,
       port: actualPort,
       child,
-      childClosed,
-      _closed: () => closed
+      childClosed
     };
   } catch (err) {
+    // Kill only if the child is still alive.
     if (!closed) child.kill('SIGKILL');
     await childClosed;
     throw err;
