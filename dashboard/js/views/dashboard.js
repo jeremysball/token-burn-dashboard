@@ -1,6 +1,6 @@
 import { CHART_COLORS, getEmoji, getPricingForModel } from '../config.js';
 import { fmtNum, fmtInt, fmtCur, createSparkline, splitModelKey, displayModel, escapeHtml, parseModelKey, notify } from '../utils.js';
-import { currentData, historyData, fileHistoricalData } from '../state.js';
+import { currentData, historyData, fileHistoricalData, dataSource, dataRevision } from '../state.js';
 import { updateEquivTickers } from '../equiv-ticker.js';
 import { renderOdometer, updateOdometer } from '../odometer.js';
 import { renderCacheSlider } from '../cache-slider.js';
@@ -101,7 +101,7 @@ export const renderDashboard = (fullRender = true) => {
     if (cacheSection) renderCacheSlider(cacheSection, cd);
 
     const liveFeedSection = document.getElementById('live-feed-section');
-    if (liveFeedSection) renderLiveEventFeed(liveFeedSection, cd);
+    if (liveFeedSection) renderLiveEventFeed(liveFeedSection, cd, { source: dataSource ?? undefined, revision: dataRevision });
 
     // Render top models over the last 48 hours (update in place unless full render)
     renderTopModels(getTokensByModelLast48h(tokens_by_model), fullRender);

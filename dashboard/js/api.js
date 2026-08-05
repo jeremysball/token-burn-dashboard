@@ -1,5 +1,5 @@
 import { MAX_HISTORY_POINTS, WEEKLY_HISTORY_DAYS } from './config.js';
-import { setIsStale, setEventSource, currentData, setCurrentData, saveCache, getDataSignature, setLastDataSignature, lastDataSignature, historyData, setHistoryData, weeklyData, setWeeklyData, setFileHistoricalData, eventSource } from './state.js';
+import { setIsStale, setEventSource, currentData, setCurrentData, saveCache, getDataSignature, setLastDataSignature, lastDataSignature, historyData, setHistoryData, weeklyData, setWeeklyData, setFileHistoricalData, eventSource, setDataRevision, setDataSource, dataRevision } from './state.js';
 import { notify } from './utils.js';
 
 // ===== API =====
@@ -52,7 +52,7 @@ export const refreshData = async () => {
 
     try {
         tokens = await fetchTokens();
-        updateData(tokens);
+        updateData(tokens, { source: 'fresh-http' });
     } catch (err) {
         notify('Refresh failed: ' + (err instanceof Error ? err.message : String(err)), 'error');
         return;
@@ -80,8 +80,34 @@ export const refreshData = async () => {
 
 /**
  * @param {*} data
+ * @param {{source?: string}|undefined} opts
  */
-export const updateData = (data) => {
+export const updateData = (data, opts = {}) => {
+    const source = opts.source || 'fresh-http';
+
+    setDataRevision(dataRevision + 1);
+    setDataSource(source);
+
+    const tokensByModel = data?.tokens_by_model || {};
+    const normalizedModels = {};
+    for (const [k, v] of Object.entries(tokensByModel)) {
+        // @ts-ignore
+        normalizedModels[k] = {
+            // @ts-ignore
+            total: v?.total || 0,
+            // @ts-ignore
+            input: v?.input || 0,
+            // @ts-ignore
+            output: v?.output || 0,
+            // @ts-ignore
+            cache_read: v?.cache_read || 0,
+            // @ts-ignore
+            cache_write: v?.cache_write || 0,
+            // @ts-ignore
+            reasoning: v?.reasoning || 0,
+        };
+    }
+
     const safeData = {
         ...data,
         total_tokens: data?.total_tokens || 0,
@@ -89,7 +115,8 @@ export const updateData = (data) => {
         total_output: data?.total_output || 0,
         total_cache_read: data?.total_cache_read || 0,
         total_cache_write: data?.total_cache_write || 0,
-        tokens_by_model: data?.tokens_by_model || {},
+        total_reasoning: data?.total_reasoning || 0,
+        tokens_by_model: normalizedModels,
         costs_by_model: data?.costs_by_model || {},
         pricing_by_model: data?.pricing_by_model || {},
         total_cost: data?.total_cost || { total: 0 },
@@ -187,7 +214,7 @@ export const connectSSE = () => {
         try {
             setIsStale(false);
             const data = JSON.parse(e.data);
-            updateData(data);
+            updateData(data, { source: 'live-sse' });
         } catch {}
     };
     

@@ -293,7 +293,7 @@ const init = async () => {
     // Load cache
     const cached = loadCache();
     loadHistoryFromCache();
-    if (cached) updateData(cached);
+    if (cached) updateData(cached, { source: 'cache' });
 
     // Setup nav
     document.querySelectorAll('.nav-btn').forEach(el => {

@@ -23,6 +23,10 @@ export let currentView = 'overview';
 export let overviewDetailType = null;
 /** @type {string|null} */
 export let lastDataSignature = null;
+/** @type {number} */
+export let dataRevision = 0;
+/** @type {string|null} */
+export let dataSource = null;
 
 // Plotly chart data stores
 /** @type {any[]} */
@@ -74,6 +78,10 @@ export const setCurrentView = (view) => { currentView = view; };
 export const setOverviewDetailType = (type) => { overviewDetailType = type; };
 /** @param {string|null} sig */
 export const setLastDataSignature = (sig) => { lastDataSignature = sig; };
+/** @param {number} rev */
+export const setDataRevision = (rev) => { dataRevision = rev; };
+/** @param {string|null} src */
+export const setDataSource = (src) => { dataSource = src; };
 
 // ===== CACHE =====
 export const loadCache = () => {
