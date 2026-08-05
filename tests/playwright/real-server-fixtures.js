@@ -18,18 +18,42 @@ function reservePort() {
 }
 
 /**
+ * Format a child-termination reason into a diagnostic string.
+ * Handles every termination mode: spawn error, signal kill, normal exit.
+ */
+function formatTermination(prefix, reason, stderr) {
+  const tail = `stderr: ${stderr.slice(0, 500)}`;
+  if (!reason) return `${prefix}. ${tail}`;
+  if (reason.kind === 'spawn-error') {
+    return `${prefix}: spawn failed (${reason.error.message}). ${tail}`;
+  }
+  if (reason.kind === 'signal') {
+    return `${prefix}: terminated by signal ${reason.signal}. ${tail}`;
+  }
+  return `${prefix}: exited with code ${reason.code}. ${tail}`;
+}
+
+/**
  * Start the real Bun server on an ephemeral port.
  * Returns { baseUrl, port, child, childClosed } after the server is listening.
  *
- * Child lifecycle handlers (close, error) are registered immediately after
- * spawn, before the reserved port is released. The startup promise rejects
- * on error or early close/exit, so a dead child or failed spawn never
- * leaves the banner wait hanging for30 seconds.
+ * A single coherent lifecycle state (childClosed + the closed / terminationReason
+ * bindings) is established immediately after spawn — before the reserved port
+ * is released — so every way the child can die before banner arrival is
+ * captured:
+ *   - synchronous exit (exitCode already set when listeners attach)
+ *   - synchronous signal termination (signalCode already set)
+ *   - spawn failure (ENOENT, EACCES, …) that emits 'error' without 'exit'
+ *   - async exit/close/signal after release() returns
  *
- * The reserved port is released before the banner-parsing promise starts,
- * so the TCP probe can only succeed once the child actually binds the port.
- * The actual port is parsed from the server's stdout banner, which handles
- * the case where server.js falls back to an adjacent port on EADDRINUSE.
+ * The startup promise checks this state synchronously before scheduling its
+ * banner wait, so a child killed by signal before the reservation is released
+ * rejects immediately instead of letting the banner wait hit its 30s timeout.
+ *
+ * The reserved port is released before the banner-parsing promise starts, so
+ * the TCP probe can only succeed once the child actually binds the port. The
+ * actual port is parsed from the server's stdout banner, which handles the
+ * case where server.js falls back to an adjacent port on EADDRINUSE.
  */
 async function startRealServer() {
   const { port, release } = await reservePort();
@@ -40,22 +64,53 @@ async function startRealServer() {
     env: { ...process.env, PORT: String(port) }
   });
 
-  // Track whether the child has closed (stdio flushed).
-  // Check exitCode first in case the child already exited synchronously.
-  let closed = false;
-  const childClosed = new Promise((resolve) => {
-    if (child.exitCode !== null) { closed = true; resolve(); return; }
-    child.on('close', () => { closed = true; resolve(); });
-  });
-
   // Collect stderr for diagnostics in error messages.
   let stderr = '';
   child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
 
-  // Register error handler immediately — covers spawn failures (ENOENT, EACCES)
-  // that emit 'error' without ever emitting 'exit'.
-  let spawnError = null;
-  child.on('error', (err) => { spawnError = err; });
+  // Single coherent lifecycle state. Listeners for close / error / exit are
+  // attached immediately after spawn — before await release() — so a child
+  // that is signalled or exits before the reservation is released cannot
+  // slip past the banner wait. `closed` and `terminationReason` are updated
+  // synchronously by whichever event fires first.
+  let closed = false;
+  let terminationReason = null;
+  const childClosed = new Promise((resolve) => {
+    const finish = (reason) => {
+      if (closed) return;
+      closed = true;
+      terminationReason = reason;
+      resolve();
+    };
+
+    // Synchronous check: spawn may have already exited or been signalled
+    // before we could attach listeners (rare, but possible for fast-failing
+    // children).
+    if (child.exitCode !== null) {
+      finish({ kind: 'exit', code: child.exitCode, signal: child.signalCode });
+      return;
+    }
+    if (child.signalCode !== null) {
+      finish({ kind: 'signal', code: null, signal: child.signalCode });
+      return;
+    }
+
+    // 'close' is the canonical terminal event — it waits for stdio to flush.
+    child.on('close', (code, signal) => {
+      finish({ kind: signal ? 'signal' : 'exit', code, signal });
+    });
+    // Spawn failures (ENOENT, EACCES) emit 'error' without ever emitting
+    // 'exit' or 'close'.
+    child.on('error', (err) => {
+      finish({ kind: 'spawn-error', error: err });
+    });
+    // 'exit' may fire before 'close' on signal termination, where exitCode
+    // remains null and signalCode carries the signal name. Capturing it
+    // here ensures closed flips immediately rather than waiting for stdio.
+    child.on('exit', (code, signal) => {
+      finish({ kind: signal ? 'signal' : 'exit', code, signal });
+    });
+  });
 
   try {
     // Release the reservation first so the probe can only succeed
@@ -63,7 +118,7 @@ async function startRealServer() {
     await release();
 
     // Parse stdout for the actual listening URL from server.js banner.
-    // Rejects immediately on spawn error or early close/exit.
+    // Rejects immediately on any prior or concurrent termination.
     const actualPort = await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error(
@@ -71,33 +126,24 @@ async function startRealServer() {
         ));
       }, 30000);
 
-      // If spawn already failed before we got here, reject now.
-      if (spawnError) {
-        clearTimeout(timeout);
-        reject(new Error(`spawn failed: ${spawnError.message}`));
-        return;
-      }
-
-      // If the child already exited before we got here, reject now.
-      if (child.exitCode !== null) {
+      // Synchronous termination: reject before scheduling any listeners so
+      // the 30s timer is cleared immediately.
+      if (closed) {
         clearTimeout(timeout);
         reject(new Error(
-          `server exited with code ${child.exitCode} before emitting listening URL. stderr: ${stderr.slice(0, 500)}`
+          formatTermination('server terminated before emitting listening URL', terminationReason, stderr)
         ));
         return;
       }
 
-      // Listen for spawn error (may fire after release() if spawn was slow).
-      child.on('error', (err) => {
+      // Race later termination against the banner wait.
+      childClosed.then(() => {
         clearTimeout(timeout);
-        reject(new Error(`spawn failed: ${err.message}`));
-      });
-
-      // Listen for early exit/close before the banner arrives.
-      child.on('exit', (code) => {
-        clearTimeout(timeout);
+        // Guard against double-rejection if the banner already arrived or
+        // the synchronous check above already rejected.
+        if (!closed) return;
         reject(new Error(
-          `server exited with code ${code} before emitting listening URL. stderr: ${stderr.slice(0, 500)}`
+          formatTermination('server terminated before emitting listening URL', terminationReason, stderr)
         ));
       });
 
@@ -134,14 +180,14 @@ async function startRealServer() {
  *
  * Sends SIGTERM, waits up to 5s, then force-kills with SIGKILL.
  * Uses the 'close' event (waits for stdio to flush) rather than
- * 'exit'. Checks exitCode to handle an already-exited child.
+ * 'exit'. Checks exitCode and signalCode to handle an already-exited child.
  */
 async function stopRealServer(server) {
   if (!server) return;
   const { child, childClosed } = server;
 
-  // Already exited and closed — nothing to do.
-  if (child.exitCode !== null) {
+  // Already exited or signalled — nothing to do.
+  if (child.exitCode !== null || child.signalCode !== null) {
     await childClosed;
     return;
   }
@@ -154,7 +200,7 @@ async function stopRealServer(server) {
   ]);
 
   // If still alive after SIGTERM, force-kill and wait for close.
-  if (exited === 'timeout' && child.exitCode === null) {
+  if (exited === 'timeout' && child.exitCode === null && child.signalCode === null) {
     child.kill('SIGKILL');
     await childClosed;
   }
