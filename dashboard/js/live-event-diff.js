@@ -17,7 +17,7 @@ export function computeGrowthEvents(prevTokensByModel, currTokensByModel) {
         const cacheReadDelta = growthDelta(s.cache_read, p.cache_read);
         const cacheWriteDelta = growthDelta(s.cache_write, p.cache_write);
         const reasoningDelta = growthDelta(s.reasoning, p.reasoning);
-        const delta = inputDelta + outputDelta + cacheReadDelta + cacheWriteDelta + reasoningDelta;
+        const delta = growthDelta(s.total, p.total);
         if (delta > 0) {
             events.push({ model, delta, inputDelta, outputDelta, cacheReadDelta, cacheWriteDelta, reasoningDelta });
         }

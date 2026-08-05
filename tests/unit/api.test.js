@@ -1,5 +1,6 @@
 import { fetchTokens, fetchHistorical, refreshData, updateData, connectSSE, disconnectSSE } from '../../dashboard/js/api.js';
-import { setCurrentData, setHistoryData, setFileHistoricalData, setEventSource, historyData, setDataRevision, setDataSource, dataRevision, dataSource, currentData } from '../../dashboard/js/state.js';
+import { loadCache, setCurrentData, setHistoryData, setFileHistoricalData, setEventSource, historyData, setDataRevision, setDataSource, dataRevision, dataSource, currentData } from '../../dashboard/js/state.js';
+import { renderLiveEventFeed, resetLiveEventFeedForTest } from '../../dashboard/js/live-event-feed.js';
 
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 
@@ -15,6 +16,10 @@ describe('API Module', () => {
     setEventSource(null);
     setDataRevision(0);
     setDataSource(null);
+    resetLiveEventFeedForTest();
+    localStorage.clear();
+    window.renderAll = undefined;
+    document.body.innerHTML = '<section id="live-feed-section"></section>';
   });
 
   describe('fetchTokens', () => {
@@ -165,6 +170,56 @@ describe('API Module', () => {
       updateData({ total_tokens: 100 }, { source: 'cache' });
       expect(currentData?.source).toBeUndefined();
       expect(currentData?.revision).toBeUndefined();
+    });
+
+    it('processes cache, fresh HTTP, and SSE snapshots through the API/render path', async () => {
+      const container = /** @type {HTMLElement} */ (document.getElementById('live-feed-section'));
+      window.renderAll = () => renderLiveEventFeed(container, currentData, {
+        source: dataSource ?? undefined,
+        revision: dataRevision,
+      });
+
+      const snapshotA = {
+        total_tokens: 100,
+        tokens_by_model: { 'a/model-1': { total: 100, input: 50, cache_read: 50 } },
+      };
+      localStorage.setItem('tokenBurnCacheVersion', 'v2');
+      localStorage.setItem('tokenBurnCache', JSON.stringify(snapshotA));
+      const cached = loadCache();
+      updateData(cached, { source: 'cache' });
+      expect(dataSource).toBe('cache');
+      expect(container.querySelector('#latestPillText').textContent).toMatch(/waiting/i);
+
+      const snapshotB = {
+        total_tokens: 200,
+        tokens_by_model: { 'a/model-1': { total: 200, input: 100, cache_read: 100 } },
+      };
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(snapshotB),
+      }).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve([]),
+      });
+      await refreshData();
+      expect(dataSource).toBe('fresh-http');
+      expect(container.querySelector('#latestPillText').textContent).toMatch(/waiting/i);
+
+      const snapshotC = {
+        total_tokens: 350,
+        pricing_by_model: { 'a/model-1': { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75, reasoning: 0.05 } },
+        tokens_by_model: { 'a/model-1': { total: 350, input: 150, cache_read: 150 } },
+      };
+      connectSSE();
+      const esInstance = EventSource.mock.results[0].value;
+      esInstance.onmessage({ data: JSON.stringify(snapshotC) });
+      const eventText = container.querySelector('#latestPillText').textContent;
+      expect(dataSource).toBe('live-sse');
+      expect(eventText).toContain('model-1');
+      expect(eventText).toMatch(/150 tokens/i);
+
+      window.renderAll();
+      expect(container.querySelector('#latestPillText').textContent).toBe(eventText);
     });
   });
 
