@@ -56,10 +56,15 @@ function formatTermination(prefix, reason, stderr) {
  * the TCP probe can only succeed once the child actually binds the port. The
  * actual port is parsed from the server's stdout banner, which handles the
  * case where server.js falls back to an adjacent port on EADDRINUSE.
+ *
+ * The optional `options.serverPath` argument allows focused lifecycle probes
+ * to inject a deliberate target (e.g. a rogue child that holds an inherited
+ * stdio pipe via a surviving descendant) without altering the production
+ * path. The default is the repository's real server.js.
  */
-async function startRealServer() {
+async function startRealServer(options = {}) {
   const { port, release } = await reservePort();
-  const serverPath = path.resolve(__dirname, '..', '..', 'server.js');
+  const serverPath = options.serverPath || path.resolve(__dirname, '..', '..', 'server.js');
   const child = spawn('bun', [serverPath], {
     cwd: path.resolve(__dirname, '..', '..'),
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -201,10 +206,15 @@ async function startRealServer() {
   } catch (err) {
     // Kill only if the child is still alive (exit/signal not yet observed).
     if (!exited) child.kill('SIGKILL');
-    // Drain the stdio-flush promise so callers don't observe inherited pipes
-    // still held by a descendant. This is safe even when the child already
-    // exited, since childClosed resolves on 'error' too.
-    await childClosed;
+    // Do NOT await childClosed on the startup error path. A descendant
+    // holding an inherited stdio pipe (e.g. a SIGTERM'd child whose
+    // grandchild survived) keeps the canonical 'close' event pending for
+    // seconds, which would turn a millisecond-scale rejection into a
+    // multi-second delay. Startup rejection must remain prompt on both
+    // synchronous and asynchronous signal termination. Attach a no-op
+    // catch so the orphaned lifecycle promise can never surface as an
+    // unhandled rejection if it ever fails to settle.
+    childClosed.catch(() => {});
     throw err;
   }
 }
@@ -235,11 +245,20 @@ async function stopRealServer(server) {
     new Promise((r) => setTimeout(() => r('timeout'), 5000))
   ]);
 
-  // If still alive after SIGTERM, force-kill and wait for stdio to flush.
+  // After the timeout, force-kill only when the child still appears alive.
+  // Do NOT await childClosed inside this branch — the unconditional await
+  // below guarantees that this function never returns before stdio is fully
+  // flushed, even when a descendant still holds an inherited pipe after
+  // signal termination.
   if (raced === 'timeout' && child.exitCode === null && child.signalCode === null) {
     child.kill('SIGKILL');
-    await childClosed;
   }
+
+  // Always await childClosed before returning. When the 'done' branch
+  // already resolved it this is a no-op; when the timeout branch fired and
+  // a descendant holds the pipe, this blocks until the pipe drains so
+  // callers never observe inherited handles still in use.
+  await childClosed;
 }
 
 module.exports = { startRealServer, stopRealServer };
