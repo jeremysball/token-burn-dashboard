@@ -1,5 +1,4 @@
 // dashboard/js/title-belt.js
-import { WEEKLY_HISTORY_DAYS } from './config.js';
 import { calculateCostWithPricing } from './modelsdev-pricing.js';
 
 export const ELIGIBILITY_FLOOR = 0.01; // 1% of the week's total tokens
@@ -7,10 +6,10 @@ export const ELIGIBILITY_FLOOR = 0.01; // 1% of the week's total tokens
 /**
  * @param {Record<string, any>} currModels
  * @param {Record<string, any>} baseModels
- * @returns {Record<string, {total:number, input:number, output:number, cache_read:number, cache_write:number}>}
+ * @returns {Record<string, {total:number, input:number, output:number, cache_read:number, cache_write:number, reasoning:number}>}
  */
-function diffModelStats(currModels, baseModels) {
-    /** @type {Record<string, {total:number, input:number, output:number, cache_read:number, cache_write:number}>} */
+export function diffModelStats(currModels, baseModels) {
+    /** @type {Record<string, {total:number, input:number, output:number, cache_read:number, cache_write:number, reasoning:number}>} */
     const result = {};
     for (const [name, stats] of Object.entries(currModels || {})) {
         const base = baseModels?.[name] || {};
@@ -21,7 +20,8 @@ function diffModelStats(currModels, baseModels) {
             input: Math.max(0, (stats.input || 0) - (base.input || 0)),
             output: Math.max(0, (stats.output || 0) - (base.output || 0)),
             cache_read: Math.max(0, (stats.cache_read || 0) - (base.cache_read || 0)),
-            cache_write: Math.max(0, (stats.cache_write || 0) - (base.cache_write || 0))
+            cache_write: Math.max(0, (stats.cache_write || 0) - (base.cache_write || 0)),
+            reasoning: Math.max(0, (stats.reasoning || 0) - (base.reasoning || 0))
         };
     }
     return result;
@@ -31,33 +31,80 @@ function diffModelStats(currModels, baseModels) {
  * @param {Array<{day: string, models: Record<string, any>}>} weeklyData
  * @returns {{thisWeek: Record<string, any>, lastWeek: Record<string, any>|null, weekEndDay: string}|null}
  */
+// eslint-disable-next-line max-statements
 export function computeWeekWindow(weeklyData) {
-    if (!weeklyData || weeklyData.length < 8) return null;
-
-    const idxNow = weeklyData.length - 1;
-    const idxWeekAgo = weeklyData.length - 8;
-    const nowEntry = weeklyData[idxNow];
-    const weekAgoEntry = weeklyData[idxWeekAgo];
-    const thisWeek = diffModelStats(nowEntry.models, weekAgoEntry.models);
-
-    let lastWeek = null;
-    const idxTwoWeeksAgo = weeklyData.length - WEEKLY_HISTORY_DAYS;
-    if (idxTwoWeeksAgo >= 0) {
-        lastWeek = diffModelStats(weekAgoEntry.models, weeklyData[idxTwoWeeksAgo].models);
+    const valid = new Map();
+    for (const entry of weeklyData || []) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(entry?.day || '')) continue;
+        const parsed = new Date(`${entry.day}T00:00:00.000Z`);
+        if (parsed.toISOString().slice(0, 10) !== entry.day) continue;
+        valid.set(entry.day, entry);
     }
+    const days = [...valid.keys()].sort();
+    if (!days.length) return null;
 
-    return { thisWeek, lastWeek, weekEndDay: nowEntry.day };
+    /** @param {string} day */
+    const byDay = (day) => valid.get(day);
+    /** @param {string} day @param {number} amount */
+    const shiftDay = (day, amount) => {
+        const date = new Date(`${day}T00:00:00.000Z`);
+        date.setUTCDate(date.getUTCDate() + amount);
+        return date.toISOString().slice(0, 10);
+    };
+    const latest = days[days.length - 1];
+    const thisStart = shiftDay(latest, -7);
+    const currentKeys = Array.from({ length: 8 }, (_, i) => shiftDay(thisStart, i));
+    if (!currentKeys.every((day) => byDay(day))) return null;
+
+    const thisWeek = diffModelStats(byDay(latest).models, byDay(thisStart).models);
+    const priorEnd = thisStart;
+    const priorStart = shiftDay(latest, -14);
+    const priorKeys = Array.from({ length: 8 }, (_, i) => shiftDay(priorStart, i));
+    const lastWeek = priorKeys.every((day) => byDay(day))
+        ? diffModelStats(byDay(priorEnd).models, byDay(priorStart).models)
+        : null;
+
+    return { thisWeek, lastWeek, weekEndDay: latest };
 }
 
 /**
- * The effective $/M convention: all four rates must be finite before
- * a model is allowed to participate in effective-rate-per-million calculations.
+ * The effective $/M convention: every nonzero token dimension must have a
+ * finite rate. Explicit zero rates are valid free pricing.
  * @param {any|null|undefined} pricing
+ * @param {any} [stats]
  * @returns {boolean}
  */
-export function hasUsableFullPricing(pricing) {
-    const r = [pricing?.input, pricing?.output, pricing?.cacheRead, pricing?.cacheWrite].map(Number);
-    return r.every(Number.isFinite);
+export function hasUsableFullPricing(pricing, stats) {
+    const hasStats = stats !== undefined;
+    const usage = stats || {};
+    const dimensions = [
+        ['input', pricing?.input, usage.input],
+        ['output', pricing?.output, usage.output],
+        ['cacheRead', pricing?.cacheRead, usage.cache_read],
+        ['cacheWrite', pricing?.cacheWrite, usage.cache_write],
+        ['reasoning', pricing?.reasoning, usage.reasoning]
+    ];
+    return dimensions.every(([, rate, tokens]) => hasStats
+        ? tokens === 0 || tokens == null || Number.isFinite(rate)
+        : Number.isFinite(rate));
+}
+
+/** @param {any} pricing */
+function pricingWithPresence(pricing) {
+    /** @param {*} rate */
+    const finite = (rate) => Number.isFinite(rate) ? rate : 0;
+    return pricing && {
+        input: finite(pricing.input),
+        output: finite(pricing.output),
+        cacheRead: finite(pricing.cacheRead),
+        cacheWrite: finite(pricing.cacheWrite),
+        reasoning: finite(pricing.reasoning),
+        hasInput: pricing.hasInput ?? Number.isFinite(pricing.input),
+        hasOutput: pricing.hasOutput ?? Number.isFinite(pricing.output),
+        hasCacheRead: pricing.hasCacheRead ?? Number.isFinite(pricing.cacheRead),
+        hasCacheWrite: pricing.hasCacheWrite ?? Number.isFinite(pricing.cacheWrite),
+        hasReasoning: pricing.hasReasoning ?? Number.isFinite(pricing.reasoning)
+    };
 }
 
 /**
@@ -66,11 +113,12 @@ export function hasUsableFullPricing(pricing) {
  * @returns {number|null}
  */
 function effectiveRatePerMillion(stats, pricing) {
-    if (!hasUsableFullPricing(pricing)) return null;
-    if (stats.total <= 0) return null;
-    const { total: cost, priced } = calculateCostWithPricing(stats, pricing);
+    if (!hasUsableFullPricing(pricing, stats)) return null;
+    if (!Number.isFinite(stats.total) || stats.total <= 0) return null;
+    const { total: cost, priced } = calculateCostWithPricing(stats, pricingWithPresence(pricing));
     if (!priced) return null;
-    return cost / (stats.total / 1e6);
+    const rate = (cost * 1e6) / stats.total;
+    return Number.isFinite(rate) ? rate : null;
 }
 
 /**

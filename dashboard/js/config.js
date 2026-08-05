@@ -45,7 +45,7 @@ export const CHART_COLORS = [
 // Single source of truth: lib/pricing.js on the server.
 // This module caches the pricing table fetched from GET /api/pricing.
 
-/** @type {Array<{pattern: RegExp, input: number, output: number, cacheRead: number, cacheWrite: number}>} */
+/** @type {Array<{pattern: RegExp, input: number, output: number, reasoning?: number, cacheRead: number, cacheWrite: number}>} */
 let _pricing = [];
 
 const DEFAULT_PRICING = { input: 2.5, output: 10, cacheRead: 1.25, cacheWrite: 0 };
@@ -69,11 +69,12 @@ export async function loadPricing() {
     try {
         const res = await fetch('/api/pricing');
         if (!res.ok) throw new Error(`Failed to load pricing: ${res.status}`);
-        const data = /** @type {Array<{pattern: string, input: number, output: number, cacheRead: number, cacheWrite: number}>} */ (await res.json());
+        const data = /** @type {Array<{pattern: string, input: number, output: number, reasoning?: number, cacheRead: number, cacheWrite: number}>} */ (await res.json());
         _pricing = data.map(p => ({
             pattern: _parsePattern(p.pattern),
             input: p.input,
             output: p.output,
+            reasoning: p.reasoning,
             cacheRead: p.cacheRead,
             cacheWrite: p.cacheWrite
         }));
@@ -85,13 +86,13 @@ export async function loadPricing() {
 
 /**
  * Set pricing data directly (for testing).
- * @param {Array<{pattern: RegExp, input: number, output: number, cacheRead: number, cacheWrite: number}>} data
+ * @param {Array<{pattern: RegExp, input: number, output: number, reasoning?: number, cacheRead: number, cacheWrite: number}>} data
  */
 export function setPricing(data) {
-    _pricing = data;
+    _pricing = data.map(p => ({ ...p }));
 }
 
-/** @returns {Array<{pattern: RegExp, input: number, output: number, cacheRead: number, cacheWrite: number}>} */
+/** @returns {Array<{pattern: RegExp, input: number, output: number, reasoning?: number, cacheRead: number, cacheWrite: number}>} */
 export function getModelPricing() {
     return _pricing;
 }
@@ -120,7 +121,7 @@ export const getPricingForModel = (name, pricing_by_model) => {
 export const getPricingForModelWrapper = getPricingForModel;
 export const formatModelPrice = formatModelPriceFromUtils;
 
-/** @param {Record<string, number>} tokens @param {string} modelName @returns {{input: number, output: number, cache_read: number, cache_write: number, total: number}} */
+/** @param {Record<string, number>} tokens @param {string} modelName @returns {{input: number, output: number, cache_read: number, cache_write: number, reasoning: number, total: number}} */
 export const calculateCost = (tokens, modelName) => {
     const p = getPricing(modelName);
     
@@ -133,12 +134,15 @@ export const calculateCost = (tokens, modelName) => {
     const outputCost = (output / 1_000_000) * p.output;
     const cacheReadCost = (cacheRead / 1_000_000) * p.cacheRead;
     const cacheWriteCost = (cacheWrite / 1_000_000) * p.cacheWrite;
+    const reasoningRate = 'reasoning' in p ? p.reasoning : undefined;
+    const reasoningCost = ((tokens.reasoning || 0) / 1_000_000) * (reasoningRate ?? 0);
     
     return {
         input: inputCost,
         output: outputCost,
         cache_read: cacheReadCost,
         cache_write: cacheWriteCost,
-        total: inputCost + outputCost + cacheReadCost + cacheWriteCost
+        reasoning: reasoningCost,
+        total: inputCost + outputCost + cacheReadCost + cacheWriteCost + reasoningCost
     };
 };
