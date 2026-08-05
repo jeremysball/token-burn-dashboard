@@ -13,6 +13,7 @@
     "coverage:check": "bun scripts/check-coverage.mjs",
     "test:watch": "bun test tests/unit --watch",
     "test:e2e": "bunx playwright test tests/playwright/overflow.spec.js --reporter=list",
+    "test:e2e:audit": "bunx playwright test tests/playwright/dashboard-audit-live.spec.js --reporter=list",
     "lint": "bunx eslint .",
     "lint:fix": "bunx eslint . --fix",
     "lint:json": "bunx eslint . --format json --output-file .lint-report.json",
