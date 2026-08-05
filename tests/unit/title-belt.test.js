@@ -98,6 +98,23 @@ describe('computeWeekWindow', () => {
     expect(scored.sommelier).toBeNull();
   });
 
+  it('does not score a model whose token dimension is null at the boundary', () => {
+    const scored = scoreTitleBelt({
+      thisWeek: {
+        'a/null': { total: 1_000_000, input: 1_000_000, output: 0, cache_read: 0, cache_write: 0, reasoning: null },
+        'a/valid': { total: 1, input: 1, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 }
+      },
+      lastWeek: null,
+      weekEndDay: '2026-01-08'
+    }, {
+      'a/null': { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75, reasoning: 0 },
+      'a/valid': { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75, reasoning: 0 }
+    });
+    expect(scored.volumeCrown?.name).toBe('a/null');
+    expect(scored.thriftKing).toBeNull();
+    expect(scored.sommelier).toBeNull();
+  });
+
   it('rejects an incomplete base snapshot instead of fabricating zero deltas', () => {
     expect(diffModelStats({
       'a/model': { total: 100, input: 100, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 }
