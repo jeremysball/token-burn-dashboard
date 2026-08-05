@@ -2177,3 +2177,24 @@ input:focus-visible,
     transition-duration: 0.01ms !important;
   }
 }
+
+.title-belt {
+  background: var(--mono-surface);
+  border: 1px solid var(--mono-border);
+  border-radius: var(--radius-lg);
+  border-top: 3px solid var(--mono-border-accent);
+  padding: 22px 24px;
+  margin-bottom: 24px;
+}
+.title-belt .fr-date { color: var(--mono-text-muted); font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 16px; }
+.belt-row { display: flex; align-items: baseline; gap: 12px; padding: 10px 0; border-top: 1px dashed var(--fieldbook-rule); flex-wrap: wrap; }
+.belt-row:first-of-type { border-top: 0; padding-top: 0; }
+.belt-badge {
+  flex: none; display: flex; align-items: center; justify-content: center;
+  padding: 7px; border: 1px solid var(--mono-border-accent); color: var(--mono-accent);
+  background: var(--mono-accent-dim); min-width: 34px; min-height: 34px;
+}
+.belt-badge svg { width: 18px; height: 18px; color: currentColor; fill: none; }
+.belt-title { flex: none; color: var(--mono-text-muted); font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; min-width: 130px; }
+.belt-model { color: var(--mono-accent); font-weight: 700; font-size: 0.92rem; }
+.belt-detail { color: var(--mono-text-muted); font-size: 0.82rem; }
