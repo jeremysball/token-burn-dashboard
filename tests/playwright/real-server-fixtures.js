@@ -37,18 +37,20 @@ function formatTermination(prefix, reason, stderr) {
  * Start the real Bun server on an ephemeral port.
  * Returns { baseUrl, port, child, childClosed } after the server is listening.
  *
- * A single coherent lifecycle state (childClosed + the closed / terminationReason
- * bindings) is established immediately after spawn — before the reserved port
- * is released — so every way the child can die before banner arrival is
- * captured:
- *   - synchronous exit (exitCode already set when listeners attach)
- *   - synchronous signal termination (signalCode already set)
- *   - spawn failure (ENOENT, EACCES, …) that emits 'error' without 'exit'
- *   - async exit/close/signal after release() returns
+ * Two distinct lifecycle promises are established immediately after spawn —
+ * before the reserved port is released — so every way the child can die
+ * before banner arrival is captured without weakening either guarantee:
  *
- * The startup promise checks this state synchronously before scheduling its
- * banner wait, so a child killed by signal before the reservation is released
- * rejects immediately instead of letting the banner wait hit its 30s timeout.
+ *   childExited — resolves on the earliest termination signal ('exit' or
+ *     'error', plus a synchronous exitCode/signalCode check). The startup
+ *     promise races against childExited so synchronous and asynchronous
+ *     signal termination reject the banner wait immediately rather than
+ *     waiting for stdio to flush or hitting the 30s timeout.
+ *
+ *   childClosed — resolves only on the canonical 'close' event (stdio
+ *     flushed) or on a spawn 'error'. stopRealServer awaits this so it
+ *     never returns while inherited stdio pipes remain held by a
+ *     descendant.
  *
  * The reserved port is released before the banner-parsing promise starts, so
  * the TCP probe can only succeed once the child actually binds the port. The
@@ -68,47 +70,74 @@ async function startRealServer() {
   let stderr = '';
   child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
 
-  // Single coherent lifecycle state. Listeners for close / error / exit are
-  // attached immediately after spawn — before await release() — so a child
-  // that is signalled or exits before the reservation is released cannot
-  // slip past the banner wait. `closed` and `terminationReason` are updated
-  // synchronously by whichever event fires first.
+  // Two distinct lifecycle promises sharing a single terminationReason:
+  //   childExited — prompt, used by startup rejection.
+  //   childClosed — canonical 'close' (stdio flushed), used by cleanup.
+  let exited = false;
   let closed = false;
   let terminationReason = null;
-  const childClosed = new Promise((resolve) => {
-    const finish = (reason) => {
-      if (closed) return;
-      closed = true;
+
+  const childExited = new Promise((resolve) => {
+    const finishExit = (reason) => {
+      if (exited) return;
+      exited = true;
       terminationReason = reason;
       resolve();
     };
 
     // Synchronous check: spawn may have already exited or been signalled
-    // before we could attach listeners (rare, but possible for fast-failing
-    // children).
+    // before we could attach listeners.
     if (child.exitCode !== null) {
-      finish({ kind: 'exit', code: child.exitCode, signal: child.signalCode });
+      finishExit({ kind: 'exit', code: child.exitCode, signal: child.signalCode });
       return;
     }
     if (child.signalCode !== null) {
-      finish({ kind: 'signal', code: null, signal: child.signalCode });
+      finishExit({ kind: 'signal', code: null, signal: child.signalCode });
+      return;
+    }
+
+    // 'exit' may fire before 'close' on signal termination; this is what
+    // gives childExited its prompt signal-detection guarantee.
+    child.on('exit', (code, signal) => {
+      finishExit({ kind: signal ? 'signal' : 'exit', code, signal });
+    });
+    // Spawn failures (ENOENT, EACCES) emit 'error' without ever emitting
+    // 'exit' or 'close'.
+    child.on('error', (err) => {
+      finishExit({ kind: 'spawn-error', error: err });
+    });
+  });
+
+  const childClosed = new Promise((resolve) => {
+    const finishClose = (reason) => {
+      if (closed) return;
+      closed = true;
+      // Don't clobber terminationReason if childExited already populated it.
+      // On 'error' both finishers would record the same reason; on 'close'
+      // the exit/signal info matches what 'exit' would have carried.
+      if (terminationReason === null) terminationReason = reason;
+      resolve();
+    };
+
+    // Synchronous check: same as above for the stdio-flush path.
+    if (child.exitCode !== null) {
+      finishClose({ kind: 'exit', code: child.exitCode, signal: child.signalCode });
+      return;
+    }
+    if (child.signalCode !== null) {
+      finishClose({ kind: 'signal', code: null, signal: child.signalCode });
       return;
     }
 
     // 'close' is the canonical terminal event — it waits for stdio to flush.
     child.on('close', (code, signal) => {
-      finish({ kind: signal ? 'signal' : 'exit', code, signal });
+      finishClose({ kind: signal ? 'signal' : 'exit', code, signal });
     });
-    // Spawn failures (ENOENT, EACCES) emit 'error' without ever emitting
-    // 'exit' or 'close'.
+    // Spawn failures emit 'error' without 'close', so resolve childClosed
+    // here too — otherwise stopRealServer would hang on a never-emitted
+    // 'close'.
     child.on('error', (err) => {
-      finish({ kind: 'spawn-error', error: err });
-    });
-    // 'exit' may fire before 'close' on signal termination, where exitCode
-    // remains null and signalCode carries the signal name. Capturing it
-    // here ensures closed flips immediately rather than waiting for stdio.
-    child.on('exit', (code, signal) => {
-      finish({ kind: signal ? 'signal' : 'exit', code, signal });
+      finishClose({ kind: 'spawn-error', error: err });
     });
   });
 
@@ -128,7 +157,7 @@ async function startRealServer() {
 
       // Synchronous termination: reject before scheduling any listeners so
       // the 30s timer is cleared immediately.
-      if (closed) {
+      if (exited) {
         clearTimeout(timeout);
         reject(new Error(
           formatTermination('server terminated before emitting listening URL', terminationReason, stderr)
@@ -136,12 +165,14 @@ async function startRealServer() {
         return;
       }
 
-      // Race later termination against the banner wait.
-      childClosed.then(() => {
+      // Race later termination against the banner wait. childExited resolves
+      // on 'exit' or 'error' (or the synchronous check above) so signal
+      // kills reject promptly without waiting for stdio to flush.
+      childExited.then(() => {
         clearTimeout(timeout);
         // Guard against double-rejection if the banner already arrived or
         // the synchronous check above already rejected.
-        if (!closed) return;
+        if (!exited) return;
         reject(new Error(
           formatTermination('server terminated before emitting listening URL', terminationReason, stderr)
         ));
@@ -168,8 +199,11 @@ async function startRealServer() {
       childClosed
     };
   } catch (err) {
-    // Kill only if the child is still alive.
-    if (!closed) child.kill('SIGKILL');
+    // Kill only if the child is still alive (exit/signal not yet observed).
+    if (!exited) child.kill('SIGKILL');
+    // Drain the stdio-flush promise so callers don't observe inherited pipes
+    // still held by a descendant. This is safe even when the child already
+    // exited, since childClosed resolves on 'error' too.
     await childClosed;
     throw err;
   }
@@ -179,28 +213,30 @@ async function startRealServer() {
  * Stop a real server child process deterministically.
  *
  * Sends SIGTERM, waits up to 5s, then force-kills with SIGKILL.
- * Uses the 'close' event (waits for stdio to flush) rather than
- * 'exit'. Checks exitCode and signalCode to handle an already-exited child.
+ * Awaits the canonical 'close' event (stdio flushed) via childClosed
+ * rather than 'exit', so this function never returns while inherited
+ * stdio pipes remain held by a descendant. Checks exitCode and
+ * signalCode to handle an already-exited child.
  */
 async function stopRealServer(server) {
   if (!server) return;
   const { child, childClosed } = server;
 
-  // Already exited or signalled — nothing to do.
+  // Already exited or signalled — wait for stdio to flush, then return.
   if (child.exitCode !== null || child.signalCode !== null) {
     await childClosed;
     return;
   }
 
-  // Send SIGTERM and wait up to 5s for a clean exit.
+  // Send SIGTERM and wait up to 5s for a clean exit (and stdio flush).
   child.kill('SIGTERM');
-  const exited = await Promise.race([
+  const raced = await Promise.race([
     childClosed.then(() => 'done'),
     new Promise((r) => setTimeout(() => r('timeout'), 5000))
   ]);
 
-  // If still alive after SIGTERM, force-kill and wait for close.
-  if (exited === 'timeout' && child.exitCode === null && child.signalCode === null) {
+  // If still alive after SIGTERM, force-kill and wait for stdio to flush.
+  if (raced === 'timeout' && child.exitCode === null && child.signalCode === null) {
     child.kill('SIGKILL');
     await childClosed;
   }
