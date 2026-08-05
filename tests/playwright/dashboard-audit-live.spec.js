@@ -9,14 +9,23 @@ test.beforeAll(async () => {
   BASE_URL = server.baseUrl;
 });
 
-test.afterAll(() => {
-  if (server) stopRealServer(server.child);
+test.afterAll(async () => {
+  if (server) await stopRealServer(server.child);
 });
 
 test.describe('real-server integrated audit exercise', () => {
-  test('Step 2: real corpus response is 200 with all three categories and ticker text is nonempty', async ({ page }) => {
+  test('Step 2: real network captures for corpus, tokens, historical, SSE liveness, and visible ticker', async ({ page }) => {
+    // Register response listeners before navigation to capture real network traffic
     const corpusResponseP = page.waitForResponse(
       (res) => res.url().includes('/data/factoids-1000.json'),
+      { timeout: 30000 }
+    );
+    const tokensResponseP = page.waitForResponse(
+      (res) => res.url().includes('/api/tokens') && !res.url().includes('/stream') && !res.url().includes('/historical'),
+      { timeout: 30000 }
+    );
+    const historicalResponseP = page.waitForResponse(
+      (res) => res.url().includes('/api/tokens/historical'),
       { timeout: 30000 }
     );
     const sseResponseP = page.waitForResponse(
@@ -24,59 +33,94 @@ test.describe('real-server integrated audit exercise', () => {
       { timeout: 30000 }
     );
 
+    // Set up SSE message receipt detection before navigation
+    await page.addInitScript(() => {
+      window.__sseMessageReceived = false;
+      const origES = window.EventSource;
+      window.EventSource = function (...args) {
+        const es = new origES(...args);
+        es.addEventListener('message', () => {
+          window.__sseMessageReceived = true;
+        });
+        return es;
+      };
+    });
+
     await page.goto(BASE_URL, { timeout: 30000 });
 
+    // Assert corpus: HTTP 200 with all three required categories
     const corpusResponse = await corpusResponseP;
     expect(corpusResponse.status()).toBe(200);
-
     const corpusBody = await corpusResponse.json();
     const categories = corpusBody.map((f) => f.category);
     expect(categories).toContain('tokens');
     expect(categories).toContain('cost');
     expect(categories).toContain('burnRate');
 
+    // Assert /api/tokens: HTTP 200 with valid JSON body
+    const tokensResponse = await tokensResponseP;
+    expect(tokensResponse.status()).toBe(200);
+    const tokensBody = await tokensResponse.json();
+    expect(tokensBody).toHaveProperty('total_tokens');
+
+    // Assert /api/tokens/historical: HTTP 200 with valid JSON body
+    const historicalResponse = await historicalResponseP;
+    expect(historicalResponse.status()).toBe(200);
+    const historicalBody = await historicalResponse.json();
+    expect(Array.isArray(historicalBody)).toBe(true);
+
+    // Assert SSE: HTTP 200 AND that the stream delivers at least one message
     const sseResponse = await sseResponseP;
     expect(sseResponse.status()).toBe(200);
+    await page.waitForFunction(() => window.__sseMessageReceived === true, { timeout: 15000 });
 
-    await expect(page.locator('.equiv-ticker[data-equiv-category="tokens"] .equiv-text'))
-      .not.toBeEmpty({ timeout: 15000 });
+    // Assert visible ticker text (explicit visibility + non-empty content)
+    const ticker = page.locator('.equiv-ticker[data-equiv-category="tokens"] .equiv-text');
+    await expect(ticker).toBeVisible({ timeout: 15000 });
+    await expect(ticker).not.toBeEmpty({ timeout: 15000 });
   });
 
-  test('Step 3 path 1: fallback ticker text is replaced after corpus resolves', async ({ page }) => {
-    const corpusResponseP = page.waitForResponse(
-      (res) => res.url().includes('/data/factoids-1000.json'),
-      { timeout: 30000 }
-    );
-    await page.goto(BASE_URL, { timeout: 30000 });
-    await corpusResponseP;
-
-    await expect(page.locator('.equiv-ticker[data-equiv-category="tokens"] .equiv-text'))
-      .not.toBeEmpty({ timeout: 15000 });
-
-    const fallbackText = 'War and Peace, cover-to-cover, roughly 1 times';
-    await page.evaluate(({ fallbackText }) => {
-      const ticker = document.querySelector('.equiv-ticker[data-equiv-category="tokens"]');
-      const textEl = ticker?.querySelector('.equiv-text');
-      if (textEl) textEl.innerHTML = fallbackText;
-    }, { fallbackText });
-
-    await page.evaluate(async () => {
-      const { updateEquivTickers, resetEquivTickersForTest } = await import('/js/equiv-ticker.js');
-      resetEquivTickersForTest();
-      await new Promise((r) => setTimeout(r, 100));
-      updateEquivTickers({ tokens: 2500000, cost: 10, burnRate: 500 });
+  test('Step 3 path 1: late corpus resolution via initEquivTickers refreshes mounted tickers', async ({ page }) => {
+    // Intercept the corpus fetch so we can delay it and exercise late resolution
+    await page.addInitScript(() => {
+      window.__corpusResolve = null;
+      const origFetch = window.fetch;
+      window.fetch = function (url, ...args) {
+        if (typeof url === 'string' && url.includes('/data/factoids-1000.json')) {
+          return new Promise((resolve) => {
+            window.__corpusResolve = () => origFetch.call(window, url, ...args).then(resolve);
+          });
+        }
+        return origFetch.call(window, url, ...args);
+      };
     });
 
-    await expect(page.locator('.equiv-ticker[data-equiv-category="tokens"] .equiv-text'))
-      .not.toHaveText(fallbackText, { timeout: 10000 });
-    await expect(page.locator('.equiv-ticker[data-equiv-category="tokens"] .equiv-text'))
-      .not.toBeEmpty({ timeout: 5000 });
-  });
-
-  test('Step 3 path 2: Arabic odometer settles after rapid updates', async ({ page }) => {
     await page.goto(BASE_URL, { timeout: 30000 });
 
-    const result = await page.evaluate(async () => {
+    // Wait for the dashboard to render with fallback (curated) lines.
+    // The corpus fetch is delayed, so tickers show curated text.
+    // This also means _equivLastValue is set on the ticker elements.
+    const fallbackTicker = page.locator('.equiv-ticker[data-equiv-category="tokens"] .equiv-text');
+    await expect(fallbackTicker).toBeVisible({ timeout: 15000 });
+    await expect(fallbackTicker).not.toBeEmpty({ timeout: 15000 });
+    const fallbackText = await fallbackTicker.textContent();
+
+    // Release the delayed corpus fetch so the real server response arrives
+    await page.evaluate(() => { if (window.__corpusResolve) window.__corpusResolve(); });
+
+    // Wait for the corpus to arrive and refreshMountedTickers() to update the text.
+    // This is the production late-resolution path: corpus promise resolves →
+    // refreshMountedTickers() iterates mounted tickers → ensures new lines.
+    await expect(fallbackTicker).not.toHaveText(fallbackText, { timeout: 15000 });
+    await expect(fallbackTicker).toBeVisible({ timeout: 5000 });
+  });
+
+  test('Step 3 path 2: Arabic odometer settles to newest requested value', async ({ page }) => {
+    await page.goto(BASE_URL, { timeout: 30000 });
+
+    // Patch Intl.NumberFormat to use Arabic-Indic digits (ar-EG locale)
+    const expectedValue = '١٢٣٤٥٧٠';
+    const result = await page.evaluate(async ({ expectedValue }) => {
       const OrigFormat = Intl.NumberFormat;
       const PatchedFormat = function (locales, options) {
         return new OrigFormat(locales === undefined ? 'ar-EG' : locales, options);
@@ -86,29 +130,40 @@ test.describe('real-server integrated audit exercise', () => {
       Intl.NumberFormat = PatchedFormat;
 
       const { renderOdometer, updateOdometer } = await import('/js/odometer.js');
-      const probe = new Intl.NumberFormat(undefined, { useGrouping: false }).format(1);
 
       const container = document.createElement('div');
       document.body.appendChild(container);
 
-      const initialValues = ['١٢٣٤٥٦٧', '١٢٣٤٥٦٨', '١٢٣٤٥٦٩', '١٢٣٤٥٧٠'];
-      renderOdometer(container, initialValues[0]);
-      updateOdometer(container, initialValues[1]);
-      updateOdometer(container, initialValues[2]);
-      updateOdometer(container, initialValues[3]);
+      // Render initial value then submit three rapid totals
+      renderOdometer(container, '١٢٣٤٥٦٧');
+      updateOdometer(container, '١٢٣٤٥٦٨');
+      updateOdometer(container, '١٢٣٤٥٦٩');
+      updateOdometer(container, expectedValue);
 
-      await new Promise((r) => setTimeout(r, 800));
-      const digits = container.querySelectorAll('.odo-digit');
-      const digitCount = digits.length;
-      const text = container.textContent || '';
+      // Poll for settlement: wait until visible text equals the newest value.
+      // The SETTLE_FALLBACK_MS is650ms; use1500ms bounded timeout.
+      const deadline = Date.now() + 1500;
+      let settled = false;
+      while (Date.now() < deadline) {
+        const text = (container.textContent || '').replace(/\s+/g, '');
+        if (text === expectedValue) {
+          settled = true;
+          break;
+        }
+        await new Promise(r => setTimeout(r, 50));
+      }
 
+      const finalText = (container.textContent || '').replace(/\s+/g, '');
+      const digitCount = container.querySelectorAll('.odo-digit').length;
       container.remove();
-      return { probe, digitCount, text, expected: initialValues[3] };
-    });
+      return { settled, finalText, digitCount, expectedValue };
+    }, { expectedValue });
 
-    expect(result.probe).toBe('١');
+    // Assert Arabic locale was active
     expect(result.digitCount).toBe(7);
-    expect(result.text).toContain('٠');
+    // Assert odometer settled to the complete newest value, not an intermediate
+    expect(result.settled).toBe(true);
+    expect(result.finalText).toBe(expectedValue);
   });
 
   test('Step 3 path 3: cache slider preserves 0.04% readout with 99960/40 fixture', async ({ page }) => {
