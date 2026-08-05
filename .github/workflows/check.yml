@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        leg: [lint, typecheck, unit]
+        leg: [lint, typecheck, unit, lifecycle]
     steps:
       - uses: actions/checkout@v5
 
@@ -33,3 +33,7 @@ jobs:
       - name: unit
         if: matrix.leg == 'unit'
         run: bun test tests/unit --coverage --coverage-reporter=lcov && bun run coverage:check
+
+      - name: lifecycle
+        if: matrix.leg == 'lifecycle'
+        run: bun run test:lifecycle
