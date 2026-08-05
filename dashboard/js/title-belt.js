@@ -154,6 +154,7 @@ function pricingWithPresence(pricing) {
  * @returns {number|null}
  */
 function effectiveRatePerMillion(stats, pricing) {
+    if (!hasFiniteTokenDimensions(stats)) return null;
     if (!hasUsableFullPricing(pricing, stats)) return null;
     if (!Number.isFinite(stats.total) || stats.total <= 0) return null;
     const { total: cost, priced } = calculateCostWithPricing(stats, pricingWithPresence(pricing));
