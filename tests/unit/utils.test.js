@@ -504,8 +504,8 @@ describe('ensureWidgetBuilt', () => {
 });
 
 describe('hasUsableFullPricing', () => {
-  it('returns true when all four rates are finite', () => {
-    expect(hasUsableFullPricing({ input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 })).toBe(true);
+  it('returns true when all five rates are finite', () => {
+    expect(hasUsableFullPricing({ input: 3, output: 15, reasoning: 0, cacheRead: 0.3, cacheWrite: 3.75 })).toBe(true);
   });
   it('returns false when a rate is NaN', () => {
     expect(hasUsableFullPricing({ input: NaN, output: 15, cacheRead: 0.3, cacheWrite: 3.75 })).toBe(false);
@@ -515,6 +515,9 @@ describe('hasUsableFullPricing', () => {
   });
   it('returns false when cacheRead is missing', () => {
     expect(hasUsableFullPricing({ input: 3, output: 15, cacheWrite: 3.75 })).toBe(false);
+  });
+  it('requires reasoning pricing when stats are omitted', () => {
+    expect(hasUsableFullPricing({ input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 })).toBe(false);
   });
   it('returns false for null pricing', () => {
     expect(hasUsableFullPricing(null)).toBe(false);

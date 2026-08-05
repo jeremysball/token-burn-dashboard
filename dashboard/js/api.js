@@ -176,23 +176,26 @@ export const updateData = (data, opts = {}) => {
     
     // Update weekly data
     const dayKey = new Date().toISOString().split('T')[0];
-    const existingDay = weeklyData.find(d => d.day === dayKey);
-    
-    if (existingDay) {
-        if (safeData.total_tokens > existingDay.tokens) {
-            existingDay.tokens = safeData.total_tokens;
-            existingDay.models = safeData.tokens_by_model;
-        }
-    } else {
-        weeklyData.push({
-            day: dayKey,
-            tokens: safeData.total_tokens,
-            models: safeData.tokens_by_model
-        });
-        if (weeklyData.length > WEEKLY_HISTORY_DAYS) {
-            setWeeklyData(weeklyData.slice(-WEEKLY_HISTORY_DAYS));
-        }
+    const snapshots = [...weeklyData, {
+        day: dayKey,
+        tokens: safeData.total_tokens,
+        models: safeData.tokens_by_model
+    }];
+    /** @param {*} day */
+    const isCalendarDay = (day) => {
+        if (typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return false;
+        const parsed = new Date(`${day}T00:00:00.000Z`);
+        if (!Number.isFinite(parsed.getTime())) return false;
+        return parsed.toISOString().slice(0, 10) === day;
+    };
+    const byDay = new Map();
+    for (const snapshot of snapshots) {
+        if (isCalendarDay(snapshot?.day)) byDay.set(snapshot.day, snapshot);
     }
+    const retained = [...byDay.values()]
+        .sort((a, b) => a.day.localeCompare(b.day))
+        .slice(-WEEKLY_HISTORY_DAYS);
+    setWeeklyData(retained);
     
     setCurrentData(safeData);
     saveCache(safeData);

@@ -12,7 +12,8 @@ function fixtureWeeklyData(days, perDayGrowth) {
       cumulative[name] += growth;
       models[name] = { total: cumulative[name], input: cumulative[name], output: 0, cache_read: 0, cache_write: 0 };
     }
-    out.push({ day: `d${d}`, tokens: 0, models });
+    const day = new Date(Date.UTC(2026, 0, 1 + d)).toISOString().slice(0, 10);
+    out.push({ day, tokens: 0, models });
   }
   return out;
 }
@@ -39,10 +40,10 @@ describe('renderTitleBelt', () => {
     expect(container.textContent).toContain('Most Improved');
   });
 
-  it('shows only 3 belts plus a "not enough history" note with 8-14 daily snapshots', () => {
+  it('shows only 3 belts plus a prior-week note with 8-14 daily snapshots', () => {
     renderTitleBelt(container, fixtureWeeklyData(8, { 'a/model-1': 1000 }), pricingByModel);
     expect(container.querySelectorAll('.belt-row').length).toBe(4); // 3 real rows + 1 placeholder row
-    expect(container.textContent.toLowerCase()).toContain('not enough history');
+    expect(container.textContent.toLowerCase()).toContain('prior calendar week is incomplete');
   });
 
   it('shows an empty-state message instead of a broken widget with fewer than 8 snapshots', () => {
