@@ -1,4 +1,4 @@
-import { MAX_HISTORY_POINTS } from './config.js';
+import { MAX_HISTORY_POINTS, WEEKLY_HISTORY_DAYS } from './config.js';
 import { setIsStale, setEventSource, currentData, setCurrentData, saveCache, getDataSignature, setLastDataSignature, lastDataSignature, historyData, setHistoryData, weeklyData, setWeeklyData, setFileHistoricalData, eventSource } from './state.js';
 import { notify } from './utils.js';
 
@@ -162,8 +162,8 @@ export const updateData = (data) => {
             tokens: safeData.total_tokens,
             models: safeData.tokens_by_model
         });
-        if (weeklyData.length > 7) {
-            setWeeklyData(weeklyData.slice(-7));
+        if (weeklyData.length > WEEKLY_HISTORY_DAYS) {
+            setWeeklyData(weeklyData.slice(-WEEKLY_HISTORY_DAYS));
         }
     }
     

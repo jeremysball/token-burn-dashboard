@@ -1,4 +1,5 @@
 import { CHART_COLORS, historyData, fileHistoricalData, isCompactViewport, getPlotlyLayout, getCutoffTime, analyticsRange, setAnalyticsRange, resolveAvailableRange } from './shared.js';
+import { detectDeadAirBands } from '../../../dead-air.js';
 
 /**
  * @param {HTMLElement|null|undefined} container
@@ -36,6 +37,27 @@ export function renderTimelineTab(container) {
     }
 
     const mobile = isCompactViewport();
+    const deadAirBands = detectDeadAirBands(filtered);
+    const deadAirShapes = deadAirBands.map((band) => ({
+        type: 'rect',
+        xref: 'x',
+        yref: 'paper',
+        x0: new Date(band.start),
+        x1: new Date(band.end),
+        y0: 0,
+        y1: 1,
+        fillcolor: 'rgba(163, 163, 163, 0.12)',
+        line: { width: 0 }
+    }));
+    const deadAirAnnotations = deadAirBands.map((band) => ({
+        x: new Date((band.start + band.end) / 2),
+        y: 1,
+        yref: 'paper',
+        yanchor: 'top',
+        text: '— operator offline —',
+        showarrow: false,
+        font: { size: 9, color: 'rgba(163, 163, 163, 0.9)' }
+    }));
     const traces = [{
         x: filtered.map(d => new Date(d.time)),
         y: filtered.map(d => d.total || 0),
@@ -50,6 +72,8 @@ export function renderTimelineTab(container) {
     Plotly.newPlot('timeline-chart-container', traces, {
         ...getPlotlyLayout(),
         margin: mobile ? { t: 16, r: 16, b: 40, l: 52 } : { t: 20, r: 20, b: 40, l: 60 },
-        yaxis: { title: 'Tokens', automargin: true }
+        yaxis: { title: 'Tokens', automargin: true },
+        shapes: deadAirShapes,
+        annotations: deadAirAnnotations
     }, { displayModeBar: false });
 }
