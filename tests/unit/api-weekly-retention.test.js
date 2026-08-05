@@ -71,6 +71,55 @@ describe('weeklyData retention', () => {
     expect(weeklyData.at(-1).tokens).toBe(350);
   });
 
+  it('preserves the existing same-day snapshot when a later update does not advance the cumulative', () => {
+    // A later same-day update with a lower or equal cumulative must not
+    // overwrite the previously stored, monotonically advancing day/model
+    // data, or the weekly deltas will silently regress.
+    const realDateNow = Date.now;
+    const RealDate = Date;
+    const setDay = (day) => {
+      const time = new RealDate(`${day}T00:00:00Z`).getTime();
+      Date.now = () => time;
+      globalThis.Date = class extends RealDate {
+        constructor(...args) {
+          if (args.length === 0) super(time); else super(...args);
+        }
+        static now() { return time; }
+      };
+    };
+    try {
+      setDay('2026-03-01');
+      updateData({
+        total_tokens: 500,
+        tokens_by_model: { 'a/advancing': { total: 500, input: 500, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 } }
+      });
+      setDay('2026-03-01');
+      updateData({
+        total_tokens: 700, // advances cumulative — should replace the stored day
+        tokens_by_model: { 'a/advancing': { total: 700, input: 700, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 } }
+      });
+      setDay('2026-03-01');
+      updateData({
+        total_tokens: 650, // stale, lower than the stored 700 — must NOT replace
+        tokens_by_model: { 'a/advancing': { total: 650, input: 650, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 } }
+      });
+      setDay('2026-03-01');
+      updateData({
+        total_tokens: 700, // equal to stored — must NOT regress the model total
+        tokens_by_model: { 'a/advancing': { total: 50, input: 50, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 } }
+      });
+      setDay('2026-03-02');
+      updateData({ total_tokens: 900, tokens_by_model: {} });
+    } finally {
+      globalThis.Date = RealDate;
+      Date.now = realDateNow;
+    }
+    expect(weeklyData.map((entry) => entry.day)).toEqual(['2026-03-01', '2026-03-02']);
+    const marchFirst = weeklyData.find((entry) => entry.day === '2026-03-01');
+    expect(marchFirst.tokens).toBe(700);
+    expect(marchFirst.models['a/advancing'].total).toBe(700);
+  });
+
   it('drops calendar-invalid ISO day keys (2026-02-30, 2026-13-01, 2026-02-29 in a non-leap year)', () => {
     // 2026 is not a leap year; February has 28 days. Syntactically matching but
     // calendar-invalid days must be discarded, not treated as real snapshots.

@@ -1,6 +1,6 @@
 // tests/unit/title-belt.test.js
 import { describe, expect, it } from 'bun:test';
-import { computeWeekWindow, diffModelStats, scoreTitleBelt } from '../../dashboard/js/title-belt.js';
+import { computeWeekWindow, diffModelStats, hasUsableFullPricing, scoreTitleBelt } from '../../dashboard/js/title-belt.js';
 import { getModelPricing, getPricing, setPricing } from '../../dashboard/js/config.js';
 
 /** Build a weeklyData-shaped fixture: n daily snapshots, each model's
@@ -300,5 +300,40 @@ describe('scoreTitleBelt', () => {
     expect(window.thisWeek['a/model-1'].total).toBe(2800);
     expect(window.lastWeek['a/model-1'].total).toBe(7000);
     expect(scored.mostImproved).toBeNull();
+  });
+});
+
+describe('hasUsableFullPricing contract', () => {
+  const fullPricing = { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75, reasoning: 5 };
+  it('rejects supplied stats with a missing (undefined) token dimension', () => {
+    expect(hasUsableFullPricing(fullPricing, { total: 1, input: 1, output: 0, cache_read: 0, cache_write: 0 })).toBe(false);
+  });
+  it('rejects supplied stats with a null token dimension', () => {
+    expect(hasUsableFullPricing(fullPricing, { total: 1, input: 1, output: 0, cache_read: 0, cache_write: 0, reasoning: null })).toBe(false);
+  });
+  it('rejects supplied stats with a non-finite token dimension', () => {
+    expect(hasUsableFullPricing(fullPricing, { total: 1, input: 1, output: 0, cache_read: NaN, cache_write: 0, reasoning: 0 })).toBe(false);
+  });
+  it('accepts an actually finite zero token dimension that omits its rate', () => {
+    const pricingNoReasoning = { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 };
+    expect(hasUsableFullPricing(pricingNoReasoning, { total: 1000, input: 1000, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 })).toBe(true);
+  });
+  it('still requires all five finite rates for a pricing-only call (no stats supplied)', () => {
+    const complete = { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75, reasoning: 5 };
+    const missingReasoning = { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 };
+    expect(hasUsableFullPricing(complete)).toBe(true);
+    expect(hasUsableFullPricing(missingReasoning)).toBe(false);
+  });
+});
+
+describe('scoreTitleBelt non-finite total handling', () => {
+  const pricing = { 'a/bad': { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75, reasoning: 0 }, 'a/good': { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75, reasoning: 0 } };
+  it('does not let a NaN-total model poison a valid sibling in the same week', () => {
+    const thisWeek = { 'a/bad': { total: NaN, input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 }, 'a/good': { total: 1_000_000, input: 1_000_000, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 } };
+    const scored = scoreTitleBelt({ thisWeek, lastWeek: null, weekEndDay: '2026-01-08' }, pricing);
+    expect(scored.volumeCrown?.name).toBe('a/good');
+    expect(scored.volumeCrown?.tokens).toBe(1_000_000);
+    expect(scored.thriftKing?.name).toBe('a/good');
+    expect(scored.sommelier?.name).toBe('a/good');
   });
 });
