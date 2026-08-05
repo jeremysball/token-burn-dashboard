@@ -10,7 +10,7 @@ function fixtureWeeklyData(days, perDayGrowth) {
     const models = {};
     for (const [name, growth] of Object.entries(perDayGrowth)) {
       cumulative[name] += growth;
-      models[name] = { total: cumulative[name], input: cumulative[name], output: 0, cache_read: 0, cache_write: 0 };
+      models[name] = { total: cumulative[name], input: cumulative[name], output: 0, cache_read: 0, cache_write: 0, reasoning: 0 };
     }
     const day = new Date(Date.UTC(2026, 0, 1 + d)).toISOString().slice(0, 10);
     out.push({ day, tokens: 0, models });

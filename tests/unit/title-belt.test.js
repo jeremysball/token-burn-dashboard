@@ -1,6 +1,6 @@
 // tests/unit/title-belt.test.js
 import { describe, expect, it } from 'bun:test';
-import { computeWeekWindow, scoreTitleBelt } from '../../dashboard/js/title-belt.js';
+import { computeWeekWindow, diffModelStats, scoreTitleBelt } from '../../dashboard/js/title-belt.js';
 import { getModelPricing, getPricing, setPricing } from '../../dashboard/js/config.js';
 
 /** Build a weeklyData-shaped fixture: n daily snapshots, each model's
@@ -14,7 +14,7 @@ function fixtureWeeklyData(days, perDayGrowth) {
     const models = {};
     for (const [name, growth] of Object.entries(perDayGrowth)) {
       cumulative[name] += growth;
-      models[name] = { total: cumulative[name], input: cumulative[name] * 0.5, output: cumulative[name] * 0.5, cache_read: 0, cache_write: 0 };
+      models[name] = { total: cumulative[name], input: cumulative[name] * 0.5, output: cumulative[name] * 0.5, cache_read: 0, cache_write: 0, reasoning: 0 };
     }
     const day = new Date(Date.UTC(2026, 0, 1 + d)).toISOString().slice(0, 10);
     out.push({ day, tokens: Object.values(cumulative).reduce((a, b) => a + b, 0), models });
@@ -43,12 +43,70 @@ describe('computeWeekWindow', () => {
     const fixture = fixtureWeeklyData(15, { 'a/model-1': 100 });
     const shuffled = [...fixture.slice(0, 7).reverse(), fixture[7], fixture[8], fixture[8], ...fixture.slice(9)];
     shuffled[shuffled.length - 1] = { ...shuffled[shuffled.length - 1], day: 'not-a-day' };
-    const window = computeWeekWindow([...shuffled, { ...fixture[14], models: { 'a/model-1': { total: 9999 } } }]);
+    const window = computeWeekWindow([...shuffled, { ...fixture[14], models: {
+      'a/model-1': { total: 9999, input: 9999, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 }
+    } }]);
     expect(window.weekEndDay).toBe('2026-01-15');
     expect(window.thisWeek['a/model-1'].total).toBe(9199);
   });
 
-  it('returns null when a current-window calendar day is missing', () => {
+  it('returns null for syntactically shaped but calendar-invalid dates', () => {
+    const fixture = fixtureWeeklyData(15, { 'a/model-1': 100 });
+    expect(() => computeWeekWindow([
+      ...fixture,
+      { ...fixture.at(-1), day: '2026-02-30' },
+      { ...fixture.at(-1), day: '2026-13-01' },
+      { ...fixture.at(-1), day: '2026-02-29' }
+    ])).not.toThrow();
+    expect(computeWeekWindow([
+      { ...fixture[0], day: '2026-02-30' },
+      { ...fixture[1], day: '2026-13-01' },
+      { ...fixture[2], day: '2026-02-29' }
+    ])).toBeNull();
+  });
+
+  it('excludes models with non-finite or missing token dimensions from deltas', () => {
+    expect(diffModelStats({
+      'a/bad': { total: 100, input: NaN, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 },
+      'a/missing': { total: 100, input: 100, output: 0, cache_read: 0, cache_write: 0 },
+      'a/null': { total: 100, input: 100, output: 0, cache_read: 0, cache_write: 0, reasoning: null },
+      'a/good': { total: 100, input: 100, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 }
+    }, {
+      'a/bad': { total: 0, input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 },
+      'a/missing': { total: 0, input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 },
+      'a/null': { total: 0, input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 },
+      'a/good': { total: 0, input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 }
+    })).toEqual({
+      'a/good': { total: 100, input: 100, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 }
+    });
+  });
+
+  it('does not score a model with incomplete token dimensions', () => {
+    const scored = scoreTitleBelt({
+      thisWeek: {
+        'a/missing': { total: 1_000_000, input: 1_000_000, output: 0, cache_read: 0, cache_write: 0 },
+        'a/valid': { total: 1, input: 1, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 }
+      },
+      lastWeek: null,
+      weekEndDay: '2026-01-08'
+    }, {
+      'a/missing': { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75, reasoning: 0 },
+      'a/valid': { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75, reasoning: 0 }
+    });
+    expect(scored.volumeCrown?.name).toBe('a/missing');
+    expect(scored.thriftKing).toBeNull();
+    expect(scored.sommelier).toBeNull();
+  });
+
+  it('rejects an incomplete base snapshot instead of fabricating zero deltas', () => {
+    expect(diffModelStats({
+      'a/model': { total: 100, input: 100, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 }
+    }, {
+      'a/model': { total: 0, input: 0, output: 0, cache_read: 0, cache_write: 0 }
+    })).toEqual({});
+  });
+
+  it('keeps calendar-invalid dates out of a current window', () => {
     const fixture = fixtureWeeklyData(15, { 'a/model-1': 100 });
     expect(computeWeekWindow(fixture.filter((entry) => entry.day !== '2026-01-12'))).toBeNull();
   });
@@ -189,8 +247,8 @@ describe('scoreTitleBelt', () => {
         day: new Date(Date.UTC(2026, 0, 1 + d)).toISOString().slice(0, 10),
         tokens: cum1 + cum2,
         models: {
-          'a/model-1': { total: cum1, input: cum1, output: 0, cache_read: 0, cache_write: 0 },
-          'a/model-2': { total: cum2, input: cum2, output: 0, cache_read: 0, cache_write: 0 }
+          'a/model-1': { total: cum1, input: cum1, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 },
+          'a/model-2': { total: cum2, input: cum2, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 }
         }
       });
     }
@@ -217,7 +275,7 @@ describe('scoreTitleBelt', () => {
       out.push({
         day: new Date(Date.UTC(2026, 0, 1 + d)).toISOString().slice(0, 10),
         tokens: cum,
-        models: { 'a/model-1': { total: cum, input: cum, output: 0, cache_read: 0, cache_write: 0 } }
+        models: { 'a/model-1': { total: cum, input: cum, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 } }
       });
     }
     const window = computeWeekWindow(out);

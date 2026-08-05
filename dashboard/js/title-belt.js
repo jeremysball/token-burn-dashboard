@@ -3,6 +3,31 @@ import { calculateCostWithPricing } from './modelsdev-pricing.js';
 
 export const ELIGIBILITY_FLOOR = 0.01; // 1% of the week's total tokens
 
+const TOKEN_DIMENSIONS = [
+    'total',
+    'input',
+    'output',
+    'cache_read',
+    'cache_write',
+    'reasoning'
+];
+
+/** @param {*} model */
+const hasFiniteTokenDimensions = (model) =>
+    Boolean(model) &&
+    typeof model === 'object' &&
+    TOKEN_DIMENSIONS.every((dimension) => {
+        const value = model[dimension];
+        return Number.isFinite(value);
+    });
+
+/** @param {string} day */
+const isValidIsoDay = (day) => {
+    const parsed = new Date(`${day}T00:00:00.000Z`);
+    return Number.isFinite(parsed.getTime()) &&
+        parsed.toISOString().slice(0, 10) === day;
+};
+
 /**
  * @param {Record<string, any>} currModels
  * @param {Record<string, any>} baseModels
@@ -11,8 +36,21 @@ export const ELIGIBILITY_FLOOR = 0.01; // 1% of the week's total tokens
 export function diffModelStats(currModels, baseModels) {
     /** @type {Record<string, {total:number, input:number, output:number, cache_read:number, cache_write:number, reasoning:number}>} */
     const result = {};
-    for (const [name, stats] of Object.entries(currModels || {})) {
-        const base = baseModels?.[name] || {};
+    const models = Object.entries(currModels || {}).filter(([name, stats]) => {
+        const base = baseModels?.[name];
+        return hasFiniteTokenDimensions(stats) &&
+            (base === undefined || hasFiniteTokenDimensions(base));
+    });
+
+    for (const [name, stats] of models) {
+        const base = baseModels?.[name] || {
+            total: 0,
+            input: 0,
+            output: 0,
+            cache_read: 0,
+            cache_write: 0,
+            reasoning: 0
+        };
         const total = Math.max(0, (stats.total || 0) - (base.total || 0));
         if (total <= 0) continue;
         result[name] = {
@@ -35,9 +73,12 @@ export function diffModelStats(currModels, baseModels) {
 export function computeWeekWindow(weeklyData) {
     const valid = new Map();
     for (const entry of weeklyData || []) {
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(entry?.day || '')) continue;
-        const parsed = new Date(`${entry.day}T00:00:00.000Z`);
-        if (parsed.toISOString().slice(0, 10) !== entry.day) continue;
+        if (
+            !/^\d{4}-\d{2}-\d{2}$/.test(entry?.day || '') ||
+            !isValidIsoDay(entry.day)
+        ) {
+            continue;
+        }
         valid.set(entry.day, entry);
     }
     const days = [...valid.keys()].sort();
