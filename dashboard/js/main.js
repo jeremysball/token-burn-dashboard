@@ -285,7 +285,9 @@ const init = async () => {
     window.addEventListener('resize', positionNotifications);
 
     // Kick off the equivalence-corpus fetch early so it's ready by the time
-    // the first render calls updateEquivTickers().
+    // the first render calls updateEquivTickers(). The returned promise
+    // resolves after a valid corpus is installed or the fetch/parse has
+    // failed, and mounted fallback tickers refresh in place once it succeeds.
     initEquivTickers();
 
     // Load cache
