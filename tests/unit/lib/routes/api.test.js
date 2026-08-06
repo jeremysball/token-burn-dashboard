@@ -360,6 +360,28 @@ describe('createInsightsHandler taskferry analysis', () => {
 
     expect(cancelArgs).toEqual(['cancel', 'oc_test_cancel']);
   });
+
+  // Final-review fix: the shared runTaskferryAnalysis now rejects blank /
+  // non-string results. The deep-insights route (createInsightsHandler) was
+  // also vulnerable to the same "200 with empty insights" bug as the
+  // daily-report route, so we lock in the same 503 behavior here.
+  it('returns 503 (not 200 with empty insights) when taskferry result message is an empty string', async () => {
+    const fsImpl = createScratchFs();
+    const execFileImpl = mock((file, args, options, callback) => {
+      if (args[0] === 'dispatch') process.nextTick(() => callback(null, 'id: oc_blank\nstatus: running\n', ''));
+      else if (args[0] === 'wait') process.nextTick(() => callback(null, 'id: oc_blank\nstatus: done\nexitCode: 0\n', ''));
+      else if (args[0] === 'result') process.nextTick(() => callback(null, `taskId: oc_blank\nstatus: done\nmessage: ${JSON.stringify('')}\n`, ''));
+      else process.nextTick(() => callback(null, '', ''));
+    });
+    const consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await submitSummary(createInsightsHandler({ execFileImpl, fsImpl }), validSummary);
+
+    expect(res.statusCode).toBe(503);
+    expect(JSON.parse(res.body)).toEqual({ error: 'AI analysis service unavailable' });
+    expect(res.body).not.toMatch(/"insights"/);
+    consoleErrorSpy.mockRestore();
+  });
 });
 
 describe('handleDailyReportRoute', () => {
@@ -431,6 +453,148 @@ describe('handleDailyReportRoute', () => {
     expect(parsed.error).not.toContain('TASKFERRY_INTERNAL_FAILURE_SENTINEL');
     expect(res.body).not.toMatch(/quota|daily|hour|model/i);
     consoleErrorSpy.mockRestore();
+  });
+
+  // Final-review fix: a taskferry task that completed with status: done but
+  // emitted an empty/whitespace-only message used to be passed through as a
+  // 200 with insights: '' — the widget's renderCached would then render a
+  // blank body with no error and no Retry. The shared runTaskferryAnalysis
+  // now rejects blank/non-string results so the existing try/catch surfaces
+  // it as 503, matching the AI-report-generation-unavailable error path
+  // the widget already knows how to handle.
+  it('returns 503 (not 200 with empty insights) when taskferry result message is an empty string', async () => {
+    const fsImpl = createScratchFs();
+    const execFileImpl = mock((file, args, options, callback) => {
+      if (args[0] === 'dispatch') process.nextTick(() => callback(null, 'id: task-blank\nstatus: running\n', ''));
+      else if (args[0] === 'wait') process.nextTick(() => callback(null, 'id: task-blank\nstatus: done\nexitCode: 0\n', ''));
+      else if (args[0] === 'result') process.nextTick(() => callback(null, `taskId: task-blank\nstatus: done\nmessage: ${JSON.stringify('')}\n`, ''));
+      else process.nextTick(() => callback(null, '', ''));
+    });
+    const consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await submitDailyReport(createDailyReportHandler({ execFileImpl, fsImpl }), validDailyReportSummary);
+
+    expect(res.statusCode).toBe(503);
+    const parsed = JSON.parse(res.body);
+    expect(parsed).toEqual({ error: 'AI report generation unavailable' });
+    expect(res.body).not.toMatch(/"insights"/);
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('returns 503 when taskferry result message is whitespace-only', async () => {
+    const fsImpl = createScratchFs();
+    const execFileImpl = mock((file, args, options, callback) => {
+      if (args[0] === 'dispatch') process.nextTick(() => callback(null, 'id: task-ws\nstatus: running\n', ''));
+      else if (args[0] === 'wait') process.nextTick(() => callback(null, 'id: task-ws\nstatus: done\nexitCode: 0\n', ''));
+      else if (args[0] === 'result') process.nextTick(() => callback(null, `taskId: task-ws\nstatus: done\nmessage: ${JSON.stringify('   \n\t  ')}\n`, ''));
+      else process.nextTick(() => callback(null, '', ''));
+    });
+    const consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await submitDailyReport(createDailyReportHandler({ execFileImpl, fsImpl }), validDailyReportSummary);
+
+    expect(res.statusCode).toBe(503);
+    expect(JSON.parse(res.body)).toEqual({ error: 'AI report generation unavailable' });
+    consoleErrorSpy.mockRestore();
+  });
+});
+
+describe('handleDailyReportRoute request validation tightening', () => {
+  // Final-review fix: validateDailyReportSummary used to accept any value
+  // with `typeof === 'number'`, which lets NaN, Infinity, -Infinity, and
+  // negative counts through — and dispatched the taskferry worker against
+  // nonsensical numeric data. It now requires Number.isFinite plus range
+  // checks on hour fields and non-negativity on the count/sum fields.
+  const validDailyReportSummary = {
+    date: '2026-07-28',
+    totalTokensToday: 500000,
+    totalCostToday: 4.2,
+    topModelToday: 'anthropic/claude-sonnet-5',
+    peakHour: {
+      hour: 14,
+      totalTokens: 200000,
+      tokenShareByModel: { 'anthropic/claude-sonnet-5': 0.76, 'kimi/k2p5': 0.24 },
+      costShareByModel: { 'anthropic/claude-sonnet-5': 0.6, 'kimi/k2p5': 0.4 }
+    },
+    baseline: { meanHourlyTokens: 90000, stddevHourlyTokens: 30000 },
+    hourlyBuckets: [{ hour: 13, totalTokens: 80000 }, { hour: 14, totalTokens: 200000 }]
+  };
+
+  const rejection = async (mutator) => {
+    const execFileImpl = mock();
+    const handler = createDailyReportHandler({ execFileImpl });
+    const res = await submitDailyReport(handler, mutator(structuredClone(validDailyReportSummary)));
+    return { res, execFileImpl };
+  };
+
+  it('rejects NaN totalTokensToday with 400 and never dispatches', async () => {
+    const { res, execFileImpl } = await rejection((s) => { s.totalTokensToday = NaN; return s; });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Invalid request body.*totalTokensToday/);
+    expect(execFileImpl).not.toHaveBeenCalled();
+  });
+
+  it('rejects Infinity baseline.meanHourlyTokens with 400 and never dispatches', async () => {
+    const { res, execFileImpl } = await rejection((s) => { s.baseline.meanHourlyTokens = Infinity; return s; });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Invalid request body.*meanHourlyTokens/);
+    expect(execFileImpl).not.toHaveBeenCalled();
+  });
+
+  it('rejects -Infinity baseline.stddevHourlyTokens with 400 and never dispatches', async () => {
+    const { res, execFileImpl } = await rejection((s) => { s.baseline.stddevHourlyTokens = -Infinity; return s; });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Invalid request body.*stddevHourlyTokens/);
+    expect(execFileImpl).not.toHaveBeenCalled();
+  });
+
+  it('rejects peakHour.hour = 24 with 400 and never dispatches', async () => {
+    const { res, execFileImpl } = await rejection((s) => { s.peakHour.hour = 24; return s; });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Invalid request body.*peakHour\.hour/);
+    expect(execFileImpl).not.toHaveBeenCalled();
+  });
+
+  it('rejects peakHour.hour = -1 with 400 and never dispatches', async () => {
+    const { res, execFileImpl } = await rejection((s) => { s.peakHour.hour = -1; return s; });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Invalid request body.*peakHour\.hour/);
+    expect(execFileImpl).not.toHaveBeenCalled();
+  });
+
+  it('rejects an out-of-range hourlyBuckets[i].hour with 400 and never dispatches', async () => {
+    const { res, execFileImpl } = await rejection((s) => { s.hourlyBuckets[0].hour = 25; return s; });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Invalid request body.*hourlyBuckets\[0\]\.hour/);
+    expect(execFileImpl).not.toHaveBeenCalled();
+  });
+
+  it('rejects a negative hourlyBuckets[i].totalTokens with 400 and never dispatches', async () => {
+    const { res, execFileImpl } = await rejection((s) => { s.hourlyBuckets[0].totalTokens = -1; return s; });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Invalid request body.*hourlyBuckets\[0\]\.totalTokens/);
+    expect(execFileImpl).not.toHaveBeenCalled();
+  });
+
+  it('rejects a negative totalTokensToday with 400 and never dispatches', async () => {
+    const { res, execFileImpl } = await rejection((s) => { s.totalTokensToday = -1; return s; });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Invalid request body.*totalTokensToday/);
+    expect(execFileImpl).not.toHaveBeenCalled();
+  });
+
+  it('rejects a negative totalCostToday with 400 and never dispatches', async () => {
+    const { res, execFileImpl } = await rejection((s) => { s.totalCostToday = -0.01; return s; });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Invalid request body.*totalCostToday/);
+    expect(execFileImpl).not.toHaveBeenCalled();
+  });
+
+  it('rejects a negative peakHour.totalTokens with 400 and never dispatches', async () => {
+    const { res, execFileImpl } = await rejection((s) => { s.peakHour.totalTokens = -100; return s; });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Invalid request body.*peakHour\.totalTokens/);
+    expect(execFileImpl).not.toHaveBeenCalled();
   });
 });
 
