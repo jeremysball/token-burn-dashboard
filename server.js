@@ -22,8 +22,15 @@ let currentPort = Number(PORT);
 const server = http.createServer(async (req, res) => {
   const startTime = Date.now();
   const host = String(req.headers.host || '') || `localhost:${currentPort}`;
-  const url = new URL(req.url || '/', `http://${host}`);
-  
+  let url;
+  try {
+    url = new URL(req.url || '/', `http://${host}`);
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'text/plain' });
+    res.end('Bad Request');
+    return;
+  }
+
   // Log request
   console.log(`[${new Date().toISOString()}] ${req.method} ${url.pathname}`);
   

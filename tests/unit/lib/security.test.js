@@ -5,7 +5,7 @@
 
 const path = require('path');
 
-import { beforeAll, describe, expect, it, mock, test } from 'bun:test';
+import { beforeAll, describe, expect, it, mock, spyOn, test } from 'bun:test';
 
 describe('Security: isValidCommitHash', () => {
   let gitBlame;
@@ -167,6 +167,27 @@ describe('isAuthorized', () => {
 
   it('accepts a case-insensitive Bearer prefix', () => {
     expect(isAuthorized({ headers: { authorization: 'bearer secret' } }, 'secret')).toBe(true);
+  });
+
+  it('rejects a token that differs only in length (no timingSafeEqual length-mismatch throw)', () => {
+    expect(isAuthorized({ headers: { authorization: 'Bearer secre' } }, 'secret')).toBe(false);
+    expect(isAuthorized({ headers: { authorization: 'Bearer secretlonger' } }, 'secret')).toBe(false);
+  });
+
+  it('uses a constant-time comparison rather than plain string equality', () => {
+    // Asserting the source text merely *contains* "timingSafeEqual" doesn't
+    // prove the real comparison uses it — security.js also has a length-
+    // mismatch burn-cost call to the same function, so a regression that
+    // swapped the actual comparison (same-length case) for `===` while
+    // leaving the burn-cost call in place would still match that regex.
+    // Spy on the real function instead and exercise a same-length mismatch,
+    // which only reaches the genuine comparison call, not the burn-cost one.
+    const crypto = require('crypto');
+    const timingSafeEqualSpy = spyOn(crypto, 'timingSafeEqual');
+    const result = isAuthorized({ headers: { authorization: 'Bearer wrongg1' } }, 'secret1');
+    expect(result).toBe(false);
+    expect(timingSafeEqualSpy).toHaveBeenCalled();
+    timingSafeEqualSpy.mockRestore();
   });
 });
 
