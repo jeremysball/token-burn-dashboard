@@ -23,3 +23,11 @@ Task 2: NEXT ACTION dispatched — fix round 2/5, RESUME implementer session ses
 Task 2: fix round 2/5 (1 addressed, 0 open — split rowHtml into topRowHtml/otherRowHtml, otherRowHtml now always applies class="league-other-row" with only inline style controlling visibility, so the toggle handler's querySelectorAll always finds the rows regardless of render state; commits a2d0e71..72ae6b2). Real verification: bun run test 602/602, tsc clean, league-table-render.test.js 8/8, overflow.spec.js 9/10 (1 known pre-existing). NEXT ACTION: sdd-review-package over a2d0e71..72ae6b2, dispatch scoped re-review on openai/gpt-5.6-luna --executor opencode --variant max.
 Task 2: re-review oc_mshxece8_058ab92d (openai/gpt-5.6-luna, max) on fix round 2 — finding ADDRESSED, no new breakage, Approved.
 Task 2: complete (commits cdce888..72ae6b2, review clean after 2 fix rounds)
+
+## Final whole-branch review
+Final review oc_mshxir11_99f6462f (openai/gpt-5.6-luna, max) over fb5956f..8d2389e — Ready to merge: Yes. No Critical/Important findings. 4 Minor items, all explicitly triaged non-blocking:
+  - Reference-based weeklyData/pricingByModel memoization is effectively always a cache miss in the live SSE path (api.js's updateData creates a new weeklyData array every tick) — verified real via direct code read, correctness-safe but a performance no-op. Deferred.
+  - eslint-baseline suppressions instead of resolving warnings — deferred.
+  - No real Playwright test for keyboard (Enter/Space) toggle activation — deferred.
+  - Unrelated stale eslint-baseline cleanup bundled into Task 1 — harmless, deferred.
+FINAL REVIEW CLEAN. Ready for finishing-a-development-branch.
