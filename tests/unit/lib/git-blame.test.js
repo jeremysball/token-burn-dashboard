@@ -51,7 +51,7 @@ describe('lib/git-blame getCommitLOC integration shape', () => {
   });
 });
 
-describe('lib/git-blame getSessionTimeWindow (delegates to session-parser cache, #67)', () => {
+describe('lib/git-blame getSessionTimeWindow', () => {
   const tmpFiles = [];
   afterEach(() => {
     while (tmpFiles.length) {
