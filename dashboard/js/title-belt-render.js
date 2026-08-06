@@ -51,7 +51,7 @@ export function renderTitleBelt(container, weeklyData, pricingByModel) {
             <div class="belt-row">
                 <span class="belt-badge"><svg aria-hidden="true"><use href="#icon-improved"></use></svg></span>
                 <span class="belt-title">Most Improved</span>
-                <span class="belt-detail">Not enough history yet for a week-over-week comparison.</span>
+                 <span class="belt-detail">${window.lastWeek ? 'No positive week-over-week change yet.' : 'Prior calendar week is incomplete.'}</span>
             </div>
         `);
     }

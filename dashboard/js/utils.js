@@ -309,15 +309,49 @@ export function cacheHitRatePct(input, cacheRead) {
 }
 
 /**
+ * Strict numeric-rate contract shared across dataviz pricing decisions.
+ * True only for a JavaScript number that is finite; numeric `0` is a valid
+ * rate, while `null`, strings (even "0"), `NaN`, and infinities are not.
+ * @param {*} value
+ * @returns {boolean}
+ */
+export function isFiniteNumericRate(value) {
+    return typeof value === 'number' && Number.isFinite(value);
+}
+
+/**
+ * Resolve a single pricing field into a usable rate under the strict contract.
+ * Returns a finite numeric field (including an explicit zero). Returns null
+ * when the field is missing/invalid, or when an explicit `has<Field>` presence
+ * flag says the rate is absent for a nonzero token count. A zero-token
+ * dimension never requires a published rate.
+ * @param {any|null|undefined} pricing
+ * @param {string} field
+ * @param {number} [tokenCount]
+ * @returns {number|null}
+ */
+export function getUsablePricingRate(pricing, field, tokenCount = 0) {
+    if (!pricing || typeof pricing !== 'object') return null;
+
+    const value = pricing[field];
+    if (!isFiniteNumericRate(value)) return null;
+
+    const flagField = `has${field.charAt(0).toUpperCase()}${field.slice(1)}`;
+    const presence = pricing[flagField];
+    if (presence === false && tokenCount !== 0) return null;
+
+    return value;
+}
+
+/**
  * "Skip a model with unusable pricing rather than fabricate a number" —
  * the cache-savings convention shared by cache-slider and live-event-feed.
  * @param {any|null|undefined} pricing
  * @returns {boolean}
  */
 export function hasUsableCacheReadPricing(pricing) {
-    const inputRate = Number(pricing?.input);
-    const cacheReadRate = Number(pricing?.cacheRead);
-    return Number.isFinite(inputRate) && Number.isFinite(cacheReadRate);
+    return getUsablePricingRate(pricing, 'input') !== null
+        && getUsablePricingRate(pricing, 'cacheRead') !== null;
 }
 
 /**

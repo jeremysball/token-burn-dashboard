@@ -30,3 +30,4 @@ examples/
 !.superpowers/plans/
 !.superpowers/specs/
 !.superpowers/.completed/
+!.superpowers/**

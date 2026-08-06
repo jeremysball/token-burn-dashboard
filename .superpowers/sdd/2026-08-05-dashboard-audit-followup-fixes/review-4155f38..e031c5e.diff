@@ -1,0 +1,130 @@
+# Review package: 4155f3815cfdec73b238d65d69d1bf8685567da3..e031c5e
+
+## Commits
+e031c5e fix(dashboard): render actual cache rate before slider interaction
+
+## Files changed
+ dashboard/js/cache-slider.js    |  9 +++++--
+ tests/unit/cache-slider.test.js | 52 +++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 59 insertions(+), 2 deletions(-)
+
+## Diff
+diff --git a/dashboard/js/cache-slider.js b/dashboard/js/cache-slider.js
+index b1d6e4e..c8d60ac 100644
+--- a/dashboard/js/cache-slider.js
++++ b/dashboard/js/cache-slider.js
+@@ -79,24 +79,29 @@ function buildSection(container) {
+  * @param {HTMLElement} container
+  * @param {number} hitRatePct
+  * @param {{step: number, decimals: number}|null} precision
+  */
+ function renderReadout(container, hitRatePct, precision) {
+     const scenario = computeCacheScenario(latestData, hitRatePct);
+     const savedEl = /** @type {HTMLElement} */ (container.querySelector('#cacheSavedValue'));
+     const paidEl = /** @type {HTMLElement} */ (container.querySelector('#cachePaidValue'));
+     const readout = /** @type {HTMLElement} */ (container.querySelector('#cacheReadout'));
+     const barWrap = /** @type {HTMLElement} */ (container.querySelector('#cacheBarWrap'));
++    const slider = /** @type {HTMLInputElement} */ (container.querySelector('#cacheSlider'));
++
++    const userMoved = slider.dataset.userMoved === 'true';
++    const savedValue = userMoved ? scenario.savedVsNoCache : scenario.actualSavedVsNoCache;
++    const paidValue = userMoved ? scenario.requestedPaid : scenario.actualPaid;
+ 
+     const decimals = precision ? precision.decimals : 1;
+-    savedEl.innerHTML = `${fmtCur(scenario.savedVsNoCache)}<small>at ${formatCacheRatePct(hitRatePct, decimals)}% hit rate</small>`;
+-    paidEl.textContent = fmtCur(scenario.paid);
++    savedEl.innerHTML = `${fmtCur(savedValue)}<small>at ${formatCacheRatePct(hitRatePct, decimals)}% hit rate</small>`;
++    paidEl.textContent = fmtCur(paidValue);
+     readout.textContent = `${formatCacheRatePct(hitRatePct, decimals)}% hit rate`;
+     barWrap.style.setProperty('--paid-pct', `${scenario.paidPct.toFixed(1)}%`);
+ }
+ 
+ /**
+  * @param {HTMLElement} container
+  * @param {any} currentData
+  */
+ /**
+  * @param {HTMLInputElement} slider
+diff --git a/tests/unit/cache-slider.test.js b/tests/unit/cache-slider.test.js
+index 01accf1..460bc6d 100644
+--- a/tests/unit/cache-slider.test.js
++++ b/tests/unit/cache-slider.test.js
+@@ -1,13 +1,15 @@
+ // tests/unit/cache-slider.test.js
+ import { beforeEach, describe, expect, it } from 'bun:test';
+ import { renderCacheSlider, getCacheSliderPrecision, formatCacheRatePct } from '../../dashboard/js/cache-slider.js';
++import { computeCacheScenario, getRealCacheHitRatePct } from '../../dashboard/js/cache-scenario.js';
++import { fmtCur } from '../../dashboard/js/utils.js';
+ 
+ const dataAt = (hitRatePct) => {
+     const cacheRead = hitRatePct * 1_000_000;
+     const input = (100 - hitRatePct) * 1_000_000;
+     return {
+         total_input: input,
+         total_cache_read: cacheRead,
+         tokens_by_model: {
+             'anthropic/claude-sonnet-5': { input, cache_read: cacheRead, output: 0, cache_write: 0, reasoning: 0, total: input + cacheRead }
+         },
+@@ -134,11 +136,61 @@ describe('renderCacheSlider', () => {
+         expect(Number(slider.value)).toBeGreaterThan(0);
+     });
+ 
+     it('uses appropriate precision for a normal hit rate', () => {
+         renderCacheSlider(container, dataAt(50));
+         const slider = /** @type {HTMLInputElement} */ (container.querySelector('#cacheSlider'));
+         expect(Number(slider.max)).toBeCloseTo(50, 0);
+         expect(Number(slider.value)).toBeCloseTo(50, 0);
+         expect(Number(slider.step)).toBeGreaterThan(0);
+     });
++
++    const heterogeneousData = () => ({
++        total_input: 500_000,
++        total_cache_read: 500_000,
++        tokens_by_model: {
++            'high-cache/model': { input: 100_000, cache_read: 900_000, output: 0, cache_write: 0, reasoning: 0, total: 1_000_000 },
++            'low-cache/model': { input: 800_000, cache_read: 200_000, output: 0, cache_write: 0, reasoning: 0, total: 1_000_000 }
++        },
++        pricing_by_model: {
++            'high-cache/model': { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
++            'low-cache/model': { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 }
++        }
++    });
++
++    it('renders the actual-rate baseline on an untouched initial render', () => {
++        renderCacheSlider(container, heterogeneousData());
++        const paidEl = container.querySelector('#cachePaidValue');
++        // Actual per-model mix differs from the uniform blended-rate what-if,
++        // so actualPaid and requestedPaid render different numbers here.
++        const scenario = computeCacheScenario(heterogeneousData(), 50);
++        expect(scenario.actualPaid).not.toBeCloseTo(scenario.requestedPaid, 2);
++        expect(paidEl.textContent).toBe(fmtCur(scenario.actualPaid));
++    });
++
++    it('renders the requested (what-if) baseline after the user drags the slider', () => {
++        renderCacheSlider(container, heterogeneousData());
++        const slider = /** @type {HTMLInputElement} */ (container.querySelector('#cacheSlider'));
++        const paidEl = container.querySelector('#cachePaidValue');
++
++        slider.value = '50';
++        slider.dispatchEvent(new Event('input'));
++
++        const scenario = computeCacheScenario(heterogeneousData(), 50);
++        expect(paidEl.textContent).toBe(fmtCur(scenario.requestedPaid));
++    });
++
++    it('keeps rendering the requested baseline if the user drags back to the real rate', () => {
++        renderCacheSlider(container, heterogeneousData());
++        const slider = /** @type {HTMLInputElement} */ (container.querySelector('#cacheSlider'));
++        const realRate = getRealCacheHitRatePct(heterogeneousData());
++        const paidEl = container.querySelector('#cachePaidValue');
++
++        slider.value = '10';
++        slider.dispatchEvent(new Event('input'));
++        slider.value = String(realRate);
++        slider.dispatchEvent(new Event('input'));
++
++        const scenario = computeCacheScenario(heterogeneousData(), realRate);
++        expect(paidEl.textContent).toBe(fmtCur(scenario.requestedPaid));
++    });
+ });
+\ No newline at end of file

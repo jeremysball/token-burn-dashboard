@@ -3,6 +3,34 @@ import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import { renderDashboard } from '../../dashboard/js/views/dashboard.js';
 import { setCurrentData, setHistoryData } from '../../dashboard/js/state.js';
 
+/**
+ * Capture globalThis.setTimeout so odometer transition fallbacks (650 ms)
+ * can be driven synchronously via runAll() instead of waiting in real time.
+ */
+function captureTimers() {
+  const real = { setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout };
+  let nextId = 1;
+  /** @type {Map<number, Function>} */
+  const scheduled = new Map();
+  globalThis.setTimeout = (cb) => { const id = nextId++; scheduled.set(id, cb); return id; };
+  globalThis.clearTimeout = (id) => { scheduled.delete(id); };
+  return {
+    /** Fire every scheduled callback, including any scheduled during firing. */
+    runAll() {
+      let guard = 0;
+      while (scheduled.size > 0 && guard++ < 100) {
+        const pending = [...scheduled.values()];
+        scheduled.clear();
+        pending.forEach((cb) => cb());
+      }
+    },
+    restore() {
+      globalThis.setTimeout = real.setTimeout;
+      globalThis.clearTimeout = real.clearTimeout;
+    }
+  };
+}
+
 const data = (total) => ({
   total_tokens: total,
   total_cost: { total: 0 },
@@ -56,5 +84,34 @@ describe('dashboard hero-tokens odometer', () => {
 
     const lastStrip = document.getElementById('hero-tokens').querySelectorAll('.odo-digit-strip');
     expect(lastStrip[lastStrip.length - 1].children.length).toBe(2);
+  });
+
+  it('drains the newest of three rapid totals after the transition fallback settles, without restarting on a repeat', () => {
+    const timers = captureTimers();
+    try {
+      setCurrentData(data(1001));
+      renderDashboard(true);
+
+      setCurrentData(data(1002));
+      renderDashboard(false);
+
+      setCurrentData(data(1003));
+      renderDashboard(false);
+
+      timers.runAll();
+
+      const heroTokens = document.getElementById('hero-tokens');
+      expect(heroTokens.textContent).toContain('1,003');
+      expect(heroTokens.dataset.value).toBe('1003');
+
+      // A repeated render of the same requested total must not start another roll.
+      setCurrentData(data(1003));
+      renderDashboard(false);
+      heroTokens.querySelectorAll('.odo-digit-strip').forEach((strip) => {
+        expect(strip.children).toHaveLength(1);
+      });
+    } finally {
+      timers.restore();
+    }
   });
 });

@@ -11,6 +11,8 @@ import {
   show,
   getPlotlyLayout,
   cacheHitRatePct,
+  isFiniteNumericRate,
+  getUsablePricingRate,
   hasUsableCacheReadPricing,
   ensureWidgetBuilt,
   splitModelKey,
@@ -421,6 +423,39 @@ describe('cacheHitRatePct', () => {
   });
 });
 
+describe('isFiniteNumericRate', () => {
+  it('rejects null, strings, NaN, and infinity but accepts numeric zero', () => {
+    expect(isFiniteNumericRate(0)).toBe(true);
+    expect(isFiniteNumericRate(null)).toBe(false);
+    expect(isFiniteNumericRate('0')).toBe(false);
+    expect(isFiniteNumericRate(Number.NaN)).toBe(false);
+    expect(isFiniteNumericRate(Number.POSITIVE_INFINITY)).toBe(false);
+  });
+});
+
+describe('getUsablePricingRate', () => {
+  it('requires a published rate only for a nonzero token dimension', () => {
+    const pricing = { input: 3, reasoning: 0, hasReasoning: true };
+    expect(getUsablePricingRate(pricing, 'reasoning', 1_000_000)).toBe(0);
+    expect(getUsablePricingRate({ input: 3, reasoning: null }, 'reasoning', 1)).toBeNull();
+    expect(getUsablePricingRate({}, 'reasoning', 0)).toBeNull();
+  });
+
+  it('returns a finite field value, including explicit zero', () => {
+    expect(getUsablePricingRate({ input: 2.5 }, 'input')).toBe(2.5);
+    expect(getUsablePricingRate({ cacheRead: 0 }, 'cacheRead')).toBe(0);
+  });
+
+  it('returns null when a presence flag says the rate is absent for nonzero tokens', () => {
+    expect(getUsablePricingRate({ reasoning: 0, hasReasoning: false }, 'reasoning', 1_000_000)).toBeNull();
+    expect(getUsablePricingRate({ input: 3, cacheRead: 0, hasCacheRead: false }, 'cacheRead', 10)).toBeNull();
+  });
+
+  it('does not gate a zero-token dimension on a presence flag', () => {
+    expect(getUsablePricingRate({ reasoning: 0, hasReasoning: false }, 'reasoning', 0)).toBe(0);
+  });
+});
+
 describe('hasUsableCacheReadPricing', () => {
   it('returns true when both input and cacheRead are finite numbers', () => {
     expect(hasUsableCacheReadPricing({ input: 3, cacheRead: 0.3 })).toBe(true);
@@ -434,6 +469,11 @@ describe('hasUsableCacheReadPricing', () => {
   it('returns false for null/undefined pricing', () => {
     expect(hasUsableCacheReadPricing(null)).toBe(false);
     expect(hasUsableCacheReadPricing(undefined)).toBe(false);
+  });
+
+  it('does not treat null cache pricing as free', () => {
+    expect(hasUsableCacheReadPricing({ input: 3, cacheRead: null })).toBe(false);
+    expect(hasUsableCacheReadPricing({ input: 0, cacheRead: 0 })).toBe(true);
   });
 });
 
@@ -464,8 +504,8 @@ describe('ensureWidgetBuilt', () => {
 });
 
 describe('hasUsableFullPricing', () => {
-  it('returns true when all four rates are finite', () => {
-    expect(hasUsableFullPricing({ input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 })).toBe(true);
+  it('returns true when all five rates are finite', () => {
+    expect(hasUsableFullPricing({ input: 3, output: 15, reasoning: 0, cacheRead: 0.3, cacheWrite: 3.75 })).toBe(true);
   });
   it('returns false when a rate is NaN', () => {
     expect(hasUsableFullPricing({ input: NaN, output: 15, cacheRead: 0.3, cacheWrite: 3.75 })).toBe(false);
@@ -475,6 +515,9 @@ describe('hasUsableFullPricing', () => {
   });
   it('returns false when cacheRead is missing', () => {
     expect(hasUsableFullPricing({ input: 3, output: 15, cacheWrite: 3.75 })).toBe(false);
+  });
+  it('requires reasoning pricing when stats are omitted', () => {
+    expect(hasUsableFullPricing({ input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 })).toBe(false);
   });
   it('returns false for null pricing', () => {
     expect(hasUsableFullPricing(null)).toBe(false);
