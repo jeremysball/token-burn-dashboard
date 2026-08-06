@@ -17,3 +17,6 @@ Final review oc_mshxhs85_adcea90f (openai/gpt-5.6-luna, max) over fb5956f..ab92b
   - validateDailyReportSummary only checks typeof === 'number', not Number.isFinite or range — NaN/Infinity/negative/out-of-range values pass through. Docstring's stated "keep it lightweight" rationale doesn't cover this gap (it's about not requiring extra fields, not about skipping finiteness checks on required ones).
   1 deferred Minor: playwright-fixtures.js's mock uses `models` not `tokens_by_model`, so the daily report gets empty shares in the e2e test — separate from the known pre-existing dashboard failure, non-blocking.
 NEXT ACTION dispatched — ONE final-review fix wave (task oc_mshydluq_7d78f1ae, opencode-go/minimax-m3, fresh dispatch not a resume since this is Task 1 code from a prior session) covering both findings.
+Final review fix wave: ONE fix dispatch (task oc_mshydluq_7d78f1ae) covering both findings; commits ab92bd1..e1fb4b3. Real verification: bun run test 631/631, tsc clean, overflow.spec.js 9/10 (1 known pre-existing).
+Final review fix re-review oc_mshymuh3_56ccb0ab (openai/gpt-5.6-luna, max) — both findings ADDRESSED, no new breakage, Approved.
+FINAL REVIEW CLEAN (after 1 fix wave). Ready for finishing-a-development-branch.
