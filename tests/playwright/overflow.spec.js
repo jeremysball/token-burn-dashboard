@@ -88,6 +88,40 @@ test.describe('no horizontal overflow on critical selectors', () => {
     await expect(page.locator('.daily-heatmap-val').first()).toBeVisible({ timeout: 10000 });
     await expectNoOverflow(page, '.daily-heatmap-val');
   });
+
+  test('league table (Analytics > Compare) allows horizontal scroll on narrow viewports instead of clipping', async ({ page }) => {
+    // The Compare tab is intentionally wide (~5 columns); on a narrow
+    // viewport the container's design-v2 CSS sets overflow-x: auto so the
+    // user can scroll horizontally to see every column. Asserting
+    // expectNoOverflow here would directly contradict that. mobile.spec.js
+    // already covers the correct behavior at 360px; here we assert the
+    // same intent at the default viewport (so a future regression that
+    // re-flips the container to overflow:hidden is caught) by checking
+    // the page itself never overflows the viewport while the container
+    // is allowed to be wider than the viewport.
+    await page.setViewportSize({ width: 360, height: 740 });
+    await page.click('button:has-text("Analytics")');
+    await page.click('button:has-text("Compare")');
+    await expect(page.locator('#compare-chart-container table')).toBeVisible({ timeout: 10000 });
+
+    // Page must never overflow the viewport.
+    const body = page.locator('body');
+    const scrollWidth = await body.evaluate((el) => el.scrollWidth);
+    const clientWidth = await body.evaluate((el) => el.clientWidth);
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 2);
+
+    // The container must be allowed to overflow-scroll: its scrollWidth
+    // exceeds clientWidth (the table is wider than 360px) and the
+    // computed overflow-x is 'auto', not 'hidden'.
+    const container = page.locator('#compare-chart-container');
+    const sizes = await container.evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+      overflowX: getComputedStyle(el).overflowX
+    }));
+    expect(sizes.scrollWidth).toBeGreaterThan(sizes.clientWidth);
+    expect(sizes.overflowX).toBe('auto');
+  });
 });
 
 test.describe('overflow screenshots', () => {

@@ -33,6 +33,34 @@ test.describe('Mobile Responsive Tests', () => {
     await expect(page.locator('#models-tbody tr')).toHaveCount(2);
   });
 
+  test('Samsung Galaxy S8+ - Compare-tab league table does not clip at 360px', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto(`http://localhost:${process.env.PORT || 7071}/`);
+    await page.click('button:has-text("Analytics")');
+    await expect(page.locator('.subnav-btn[data-tab="compare"]')).toBeVisible({ timeout: 10000 });
+    await page.click('button:has-text("Compare")');
+    await expect(page.locator('#compare-chart-container table.mono-table')).toBeVisible({ timeout: 10000 });
+
+    // The page itself must never overflow horizontally at 360px.
+    const body = page.locator('body');
+    const scrollWidth = await body.evaluate(el => el.scrollWidth);
+    const clientWidth = await body.evaluate(el => el.clientWidth);
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 2);
+
+    // The 5-column table is wider than the viewport, so the container
+    // must allow horizontal scrolling instead of clipping the trailing
+    // columns. scrollWidth > clientWidth proves the content is scrollable,
+    // and computed overflow-x must be 'auto' (not 'hidden').
+    const container = page.locator('#compare-chart-container');
+    const sizes = await container.evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+      overflowX: getComputedStyle(el).overflowX
+    }));
+    expect(sizes.scrollWidth).toBeGreaterThan(sizes.clientWidth);
+    expect(sizes.overflowX).toBe('auto');
+  });
+
   test('iPad Mini - chart tabs render on tablet', async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 1024 });
     await page.goto(`http://localhost:${process.env.PORT || 7071}/`);
@@ -40,7 +68,7 @@ test.describe('Mobile Responsive Tests', () => {
     await expect(page.locator('.subnav-btn[data-tab="compare"]')).toBeVisible({ timeout: 10000 });
 
     await page.click('button:has-text("Compare")');
-    await expect(page.locator('#compare-chart-container svg.main-svg').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#compare-chart-container table.mono-table')).toBeVisible({ timeout: 10000 });
 
     await page.click('button:has-text("Distribution")');
     await expect(page.locator('#distribution-chart-container svg.main-svg').first()).toBeVisible({ timeout: 10000 });

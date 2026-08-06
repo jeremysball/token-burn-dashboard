@@ -12,14 +12,14 @@ test.describe('Chart Rendering Tests', () => {
     await expect(page.locator('.sparkline')).toHaveCount(4);
   });
 
-  test('compare chart renders horizontal bars', async ({ page }) => {
+  test('compare tab renders the league table', async ({ page }) => {
     await page.click('button:has-text("Analytics")');
     await expect(page.locator('.subnav-btn[data-tab="compare"]')).toBeVisible({ timeout: 10000 });
     await page.click('button:has-text("Compare")');
 
-    await expect(page.locator('#compare-chart-container svg.main-svg').first()).toBeVisible({ timeout: 10000 });
-    const bars = await page.locator('#compare-chart-container .barlayer path').count();
-    expect(bars).toBeGreaterThan(0);
+    await expect(page.locator('#compare-chart-container table.mono-table')).toBeVisible({ timeout: 10000 });
+    const rows = await page.locator('#compare-chart-container tbody tr').count();
+    expect(rows).toBeGreaterThan(0);
   });
 
   test('distribution chart renders a donut chart', async ({ page }) => {
