@@ -67,4 +67,51 @@ describe('renderCompareTab (league table)', () => {
         expect(container.textContent).toContain('<img');
         expect(container.querySelector('img')).toBeNull();
     });
+
+    it('preserves the expanded toggle state across an ambient re-render (SSE-driven rebuild)', () => {
+        setCurrentData(fixtureCurrentData(10));
+        renderCompareTab(container);
+
+        // User expands the "others" section.
+        const toggle = container.querySelector('.league-others-toggle');
+        toggle.dispatchEvent(new Event('click', { bubbles: true }));
+        expect(toggle.dataset.expanded).toBe('true');
+        expect(container.textContent).toContain('Hide');
+        const othersRowsAfterExpand = container.querySelectorAll('.league-other-row');
+        expect(othersRowsAfterExpand[0].style.display).not.toBe('none');
+
+        // Ambient SSE-driven refresh: renderCompareTab fires again with the
+        // same data. The toggle's expanded state must survive the rebuild
+        // — otherwise the user's "Hide" silently flips back to "Show".
+        renderCompareTab(container);
+
+        const toggleAfterRerender = container.querySelector('.league-others-toggle');
+        expect(toggleAfterRerender).not.toBeNull();
+        expect(toggleAfterRerender.dataset.expanded).toBe('true');
+        expect(container.textContent).toContain('Hide');
+        // After an expanded re-render, all 10 model rows (8 top + 2 others)
+        // must be visible — the others rows are no longer tagged with
+        // .league-other-row because they aren't hidden, so count everything
+        // except the toggle row itself.
+        const visibleDataRows = container.querySelectorAll('tbody tr:not(.league-others-toggle)');
+        expect(visibleDataRows.length).toBe(10);
+    });
+
+    it('a re-render on a previously-collapsed toggle stays collapsed', () => {
+        setCurrentData(fixtureCurrentData(10));
+        renderCompareTab(container);
+
+        // Sanity: the toggle starts collapsed.
+        const toggle = container.querySelector('.league-others-toggle');
+        expect(toggle.dataset.expanded).toBe('false');
+
+        // Ambient refresh.
+        renderCompareTab(container);
+
+        const toggleAfterRerender = container.querySelector('.league-others-toggle');
+        expect(toggleAfterRerender.dataset.expanded).toBe('false');
+        expect(container.textContent).toContain('+2 others');
+        const othersRowsAfterRerender = container.querySelectorAll('.league-other-row');
+        expect(othersRowsAfterRerender[0].style.display).toBe('none');
+    });
 });

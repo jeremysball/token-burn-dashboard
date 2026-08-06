@@ -2207,3 +2207,11 @@ input:focus-visible,
 .league-others-toggle { cursor: pointer; color: var(--mono-text-muted); }
 .league-others-toggle:hover { background: var(--mono-surface-hover); }
 .league-others-toggle td { text-align: center; font-size: 0.78rem; letter-spacing: 0.04em; }
+
+/* The 5-column league table is wider than the narrowest tested viewport
+   (Samsung Galaxy S8+, 360px). .models-table-container sets overflow:hidden
+   above, which would clip the trailing "Cache %" column. Override only
+   the Compare-tab container (id-scoped, so other tables using the same
+   .models-table-container class are untouched) to allow horizontal
+   scroll, matching the plan's documented fallback for wide tables. */
+#compare-chart-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }

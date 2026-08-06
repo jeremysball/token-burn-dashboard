@@ -32,6 +32,13 @@ export function renderCompareTab(container) {
     if (!container) return;
     if (!currentData) return;
 
+    // Ambient (SSE-driven) refreshes re-render this container on every
+    // tick, so preserve the user's expanded/collapsed state across
+    // re-renders — otherwise the "Hide N others" label silently flips
+    // back to "+N others" every few seconds.
+    const previousToggle = /** @type {HTMLElement|null} */ (container.querySelector?.('.league-others-toggle'));
+    const wasExpanded = previousToggle?.dataset.expanded === 'true';
+
     /** @type {any} */
     const data = currentData;
     const { tokens_by_model, costs_by_model, pricing_by_model } = data;
@@ -45,7 +52,7 @@ export function renderCompareTab(container) {
     const { top, others } = buildLeagueTable(tokens_by_model, costs_by_model, weeklyData, pricing_by_model);
 
     const toggleRow = others.length
-        ? `<tr class="league-others-toggle" tabindex="0" role="button" data-expanded="false"><td colspan="5">+${others.length} others</td></tr>`
+        ? `<tr class="league-others-toggle" tabindex="0" role="button" data-expanded="${wasExpanded ? 'true' : 'false'}"><td colspan="5">${wasExpanded ? `− Hide ${others.length} others` : `+${others.length} others`}</td></tr>`
         : '';
 
     container.innerHTML = `
@@ -56,7 +63,7 @@ export function renderCompareTab(container) {
             <tbody>
                 ${top.map((row) => rowHtml(row, false)).join('')}
                 ${toggleRow}
-                ${others.map((row) => rowHtml(row, true)).join('')}
+                ${others.map((row) => rowHtml(row, !wasExpanded)).join('')}
             </tbody>
         </table>
     `;
