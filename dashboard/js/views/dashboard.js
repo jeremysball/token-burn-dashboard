@@ -301,7 +301,12 @@ const renderTopModels = (tokens_by_model, fullRender = true) => {
         if (!card) return;
         
         const valueEl = /** @type {HTMLElement|null} */ (card.querySelector('.top-model-value'));
+        // .top-model-price now only carries the tooltip; its text lives in the
+        // .top-model-price-text child (see createTopModelCard) so the source
+        // badge can share the same line. Both elements must exist together —
+        // an in-place update silently no-ops if priceTextEl is missing.
         const priceEl = /** @type {HTMLElement|null} */ (card.querySelector('.top-model-price'));
+        const priceTextEl = /** @type {HTMLElement|null} */ (card.querySelector('.top-model-price-text'));
         const sourceEl = /** @type {HTMLElement|null} */ (card.querySelector('.pricing-source-badge'));
         const providerEl = /** @type {HTMLElement|null} */ (card.querySelector('.provider-badge'));
         const sparkEl = /** @type {HTMLElement|null} */ (card.querySelector('.top-model-spark'));
@@ -325,15 +330,17 @@ const renderTopModels = (tokens_by_model, fullRender = true) => {
         }
         
         if (priceEl) {
-            if (priceEl.textContent.trim() !== priceSummary) {
-                priceEl.textContent = priceSummary;
-            }
             priceEl.title = priceDetails;
         }
 
+        if (priceTextEl && priceTextEl.textContent !== priceSummary) {
+            priceTextEl.textContent = priceSummary;
+        }
+
+        const sourceText = `via ${sourceLabel}`;
         if (sourceEl) {
-            if (sourceEl.textContent !== sourceLabel || !sourceEl.classList.contains(sourceClass)) {
-                sourceEl.textContent = sourceLabel;
+            if (sourceEl.textContent !== sourceText || !sourceEl.classList.contains(sourceClass)) {
+                sourceEl.textContent = sourceText;
                 sourceEl.className = `pricing-source-badge ${sourceClass}`;
             }
             sourceEl.title = sourceTitle;
@@ -392,10 +399,10 @@ const createTopModelCard = (name, stats, i) => {
                 <span class="top-model-emoji">${getEmoji(name)}</span>
                 <span class="top-model-name" title="${fullTitle}">${modelDisplay}</span>
                 ${providerBadge}
-                <span class="pricing-source-badge ${sourceClass}" title="${sourceTitle}">${sourceLabel}</span>
             </div>
-            <div class="top-model-price" title="${priceDetails}" style="font-size: 0.72rem; color: var(--mono-text-muted); margin-top: 2px;">
-                ${priceSummary}
+            <div class="top-model-price" title="${priceDetails}" style="font-size: 0.72rem; color: var(--mono-text-muted); margin-top: 2px; display: flex; align-items: baseline; gap: 5px;">
+                <span class="top-model-price-text">${priceSummary}</span>
+                <span class="pricing-source-badge ${sourceClass}" title="${sourceTitle}">via ${sourceLabel}</span>
             </div>
             <div class="top-model-value" style="color: ${color}">
                 ${fmtNum(stats.total)}

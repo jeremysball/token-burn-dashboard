@@ -535,14 +535,16 @@ body {
 }
 
 .pricing-source-badge {
-  font-size: 0.58rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  padding: 2px 6px;
-  border-radius: var(--radius-full);
-  text-transform: uppercase;
-  border: 1px solid;
+  font-size: 0.52rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  padding: 0;
+  border-radius: 0;
+  text-transform: lowercase;
+  border: none;
+  background: none;
   line-height: 1;
+  opacity: 0.75;
 }
 
 .model-provider-badge {
@@ -560,15 +562,11 @@ body {
 }
 
 .pricing-source-badge.openrouter {
-  background: rgba(251, 191, 36, 0.1);
-  color: var(--mono-accent);
-  border-color: rgba(251, 191, 36, 0.25);
+  color: var(--mono-text-dim);
 }
 
 .pricing-source-badge.local {
-  background: var(--mono-surface-active);
-  color: var(--mono-text-muted);
-  border-color: var(--mono-border);
+  color: var(--mono-text-dim);
 }
 
 /* Source breakdown mini */
