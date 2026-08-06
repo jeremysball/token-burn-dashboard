@@ -8,9 +8,13 @@ import { cacheHitRatePct } from './utils.js';
 /** @type {ReadonlyArray<keyof ReturnType<typeof scoreTitleBelt>>} */
 const BADGE_PRIORITY = ['volumeCrown', 'thriftKing', 'sommelier', 'mostImproved'];
 
-/** Memoization guard for weekly belt scoring — weeklyData changes at most once per calendar day. */
+/** Memoization guard for weekly belt scoring — invalidates when either
+ *  weeklyData or pricingByModel changes (pricing updates don't change the
+ *  weeklyData reference but do change which model holds thriftKing/sommelier). */
 /** @type {any[]|null} */
 let _lastWeeklyRef = null;
+/** @type {Record<string, any>|null|undefined} */
+let _lastPricingRef = null;
 /** @type {ReturnType<typeof scoreTitleBelt>|null} */
 let _cachedBelts = null;
 
@@ -37,11 +41,15 @@ export function buildLeagueTable(tokensByModel, costsByModel, weeklyData, pricin
     const sorted = Object.entries(tokensByModel || {}).sort((a, b) => b[1].total - a[1].total);
     if (sorted.length === 0) return { top: [], others: [] };
 
-    // C19: Only recompute weekly belt scoring when weeklyData has actually changed.
-    // weeklyData changes at most once per calendar day; SSE triggers this every 5s.
-    if (weeklyData !== _lastWeeklyRef) {
+    // C19: Only recompute weekly belt scoring when either input has actually
+    // changed. weeklyData changes at most once per calendar day; SSE triggers
+    // this every 5s. pricingByModel can change independently of weeklyData
+    // (e.g. when the Models.dev catalog refreshes), and thriftKing/sommelier
+    // depend on it, so it must also invalidate the cache.
+    if (weeklyData !== _lastWeeklyRef || pricingByModel !== _lastPricingRef) {
         _cachedBelts = scoreTitleBelt(computeWeekWindow(weeklyData), pricingByModel);
         _lastWeeklyRef = weeklyData;
+        _lastPricingRef = pricingByModel;
     }
     const belts = /** @type {ReturnType<typeof scoreTitleBelt>} */ (_cachedBelts);
 

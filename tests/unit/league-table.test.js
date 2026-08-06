@@ -92,4 +92,38 @@ describe('buildLeagueTable', () => {
         const byName = Object.fromEntries(top.map((r) => [r.name, r.badge]));
         expect(byName['a/negligible']).toBeNull();
     });
+
+    it('invalidates the belt cache when pricingByModel changes but weeklyData is the same reference', () => {
+        // model-1 still leads on tokens (so volumeCrown is stable across calls),
+        // but thriftKing and sommelier flip with the per-token price order.
+        // Reusing the same weeklyData reference exercises the pricing-only
+        // cache-invalidation path.
+        const tokensByModel = {
+            'a/model-1': { total: 10500, input: 5250, output: 5250, cache_read: 0, cache_write: 0 },
+            'a/model-2': { total: 3000, input: 1500, output: 1500, cache_read: 0, cache_write: 0 },
+            'a/model-3': { total: 1500, input: 750, output: 750, cache_read: 0, cache_write: 0 }
+        };
+        const weeklyData = fixtureWeeklyData({ 'a/model-1': 700, 'a/model-2': 200, 'a/model-3': 100 });
+
+        const pricingA = {
+            'a/model-1': { input: 1, output: 5, cacheRead: 0.1, cacheWrite: 1.25 },
+            'a/model-2': { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.125 },
+            'a/model-3': { input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5 }
+        };
+        const pricingB = {
+            'a/model-1': { input: 1, output: 5, cacheRead: 0.1, cacheWrite: 1.25 },
+            'a/model-2': { input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5 },
+            'a/model-3': { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.125 }
+        };
+
+        const { top: top1 } = buildLeagueTable(tokensByModel, {}, weeklyData, pricingA);
+        const { top: top2 } = buildLeagueTable(tokensByModel, {}, weeklyData, pricingB);
+
+        const byName1 = Object.fromEntries(top1.map((r) => [r.name, r.badge]));
+        const byName2 = Object.fromEntries(top2.map((r) => [r.name, r.badge]));
+        expect(byName1['a/model-2']).toBe('thriftKing');
+        expect(byName1['a/model-3']).toBe('sommelier');
+        expect(byName2['a/model-2']).toBe('sommelier');
+        expect(byName2['a/model-3']).toBe('thriftKing');
+    });
 });

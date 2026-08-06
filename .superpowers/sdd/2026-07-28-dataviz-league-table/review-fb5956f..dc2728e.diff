@@ -1,0 +1,613 @@
+# Review package: fb5956f..dc2728e
+
+## Commits
+dc2728e feat(dashboard): add league-table ranking/badge calculation module
+
+## Files changed
+ .../2026-07-28-dataviz-league-table/progress.md    |   3 +
+ .../task-1-brief.md                                | 195 +++++++++++++++++++++
+ .../task-1-report.md                               | 140 +++++++++++++++
+ config/eslint-baseline.json                        |   4 +-
+ dashboard/js/league-table.js                       |  64 +++++++
+ tests/unit/league-table.test.js                    |  95 ++++++++++
+ 6 files changed, 499 insertions(+), 2 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-07-28-dataviz-league-table/progress.md b/.superpowers/sdd/2026-07-28-dataviz-league-table/progress.md
+new file mode 100644
+index 0000000..dc1202e
+--- /dev/null
++++ b/.superpowers/sdd/2026-07-28-dataviz-league-table/progress.md
+@@ -0,0 +1,3 @@
++# SDD ledger — plan: .superpowers/plans/2026-07-28-dataviz-league-table.md
++
++Task 1: dispatched implementer oc_mshu8mh0_6938bee7 (opencode-go/minimax-m3, --executor opencode) at BASE fb5956f
+diff --git a/.superpowers/sdd/2026-07-28-dataviz-league-table/task-1-brief.md b/.superpowers/sdd/2026-07-28-dataviz-league-table/task-1-brief.md
+new file mode 100644
+index 0000000..ae76338
+--- /dev/null
++++ b/.superpowers/sdd/2026-07-28-dataviz-league-table/task-1-brief.md
+@@ -0,0 +1,195 @@
++### Task 1: Add the pure league-table calculation module
++
++**Files:**
++- Create: `dashboard/js/league-table.js`
++- Test: `tests/unit/league-table.test.js`
++
++**Interfaces:**
++- Consumes: `computeWeekWindow`, `scoreTitleBelt` from `dashboard/js/title-belt.js` (weekly-title-belt plan).
++- Produces: `buildLeagueTable(tokensByModel, costsByModel, weeklyData, pricingByModel): {top: LeagueRow[], others: LeagueRow[]}` from `dashboard/js/league-table.js`, where `LeagueRow = {rank: number, name: string, tokens: number, effectiveRatePerMillion: number|null, cachePct: number, badge: 'volumeCrown'|'thriftKing'|'sommelier'|'mostImproved'|null}`. `top` is the first 8 entries by descending `tokens`, `others` is everything beyond that, both 1-indexed by overall rank (i.e. `others[0].rank === 9`).
++
++- [ ] **Step 1: Write the failing tests**
++
++```js
++// tests/unit/league-table.test.js
++import { describe, expect, it } from 'bun:test';
++import { buildLeagueTable } from '../../dashboard/js/league-table.js';
++
++const pricingByModel = {
++    'a/model-1': { input: 1, output: 5, cacheRead: 0.1, cacheWrite: 1.25 },
++    'a/model-2': { input: 0.2, output: 0.8, cacheRead: 0.02, cacheWrite: 0.25 },
++    'a/model-3': { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 }
++};
++
++/** Build a weeklyData-shaped fixture with 15 daily cumulative snapshots. */
++function fixtureWeeklyData(perDayGrowth) {
++    const out = [];
++    const cumulative = {};
++    for (const name of Object.keys(perDayGrowth)) cumulative[name] = 0;
++    for (let d = 0; d < 15; d++) {
++        const models = {};
++        for (const [name, growth] of Object.entries(perDayGrowth)) {
++            cumulative[name] += growth;
++            models[name] = { total: cumulative[name], input: cumulative[name] * 0.5, output: cumulative[name] * 0.5, cache_read: 0, cache_write: 0 };
++        }
++        out.push({ day: `d${d}`, tokens: 0, models });
++    }
++    return out;
++}
++
++describe('buildLeagueTable', () => {
++    it('returns empty top/others for no models', () => {
++        expect(buildLeagueTable({}, {}, [], {})).toEqual({ top: [], others: [] });
++    });
++
++    it('splits into top 8 by descending tokens and the rest as others, ranked continuously', () => {
++        /** @type {Record<string, any>} */
++        const tokensByModel = {};
++        for (let i = 0; i < 10; i++) {
++            tokensByModel[`a/model-${i}`] = { total: (10 - i) * 100, input: (10 - i) * 50, output: (10 - i) * 50, cache_read: 0, cache_write: 0 };
++        }
++        const { top, others } = buildLeagueTable(tokensByModel, {}, [], {});
++        expect(top.length).toBe(8);
++        expect(others.length).toBe(2);
++        expect(top[0].name).toBe('a/model-0');
++        expect(top[0].rank).toBe(1);
++        expect(others[0].rank).toBe(9);
++        expect(others[0].name).toBe('a/model-8');
++    });
++
++    it('computes effective $/M from pricing via calculateCostWithPricing, null when pricing is missing', () => {
++        const tokensByModel = { 'a/model-1': { total: 1000000, input: 500000, output: 500000, cache_read: 0, cache_write: 0 } };
++        // pricing $3/M input, $15/M output -> cost = 500k/1e6*3 + 500k/1e6*15 = 1.5 + 7.5 = 9.0
++        // effective $/M = 9.0 / (1e6/1e6) = 9.0
++        const pricing = { 'a/model-1': { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 } };
++        const { top } = buildLeagueTable(tokensByModel, {}, [], pricing);
++        expect(top[0].effectiveRatePerMillion).toBeCloseTo(9.0, 5);
++
++        const { top: topNoPricing } = buildLeagueTable(tokensByModel, {}, [], {});
++        expect(topNoPricing[0].effectiveRatePerMillion).toBeNull();
++    });
++
++    it('computes cache % using the same formula as the Insights tab', () => {
++        const tokensByModel = { 'a/model-1': { total: 100, input: 60, output: 0, cache_read: 40, cache_write: 0 } };
++        const { top } = buildLeagueTable(tokensByModel, {}, [], {});
++        expect(top[0].cachePct).toBeCloseTo(40, 5);
++    });
++
++    it('assigns the correct, non-overlapping badge to the model holding each of three belts this week', () => {
++        // model-1 has the largest weekly token growth (-> volumeCrown), model-2 is
++        // the cheapest per-token in the pricing table (-> thriftKing), model-3 is
++        // the priciest per-token but grows slower than model-1 (-> sommelier,
++        // unmasked by volumeCrown since it doesn't also lead on volume).
++        const tokensByModel = {
++            'a/model-1': { total: 10500, input: 5250, output: 5250, cache_read: 0, cache_write: 0 },
++            'a/model-2': { total: 3000, input: 1500, output: 1500, cache_read: 0, cache_write: 0 },
++            'a/model-3': { total: 1500, input: 750, output: 750, cache_read: 0, cache_write: 0 }
++        };
++        const weeklyData = fixtureWeeklyData({ 'a/model-1': 700, 'a/model-2': 200, 'a/model-3': 100 });
++        const { top } = buildLeagueTable(tokensByModel, {}, weeklyData, pricingByModel);
++        const byName = Object.fromEntries(top.map((r) => [r.name, r.badge]));
++        expect(byName['a/model-1']).toBe('volumeCrown');
++        expect(byName['a/model-2']).toBe('thriftKing');
++        expect(byName['a/model-3']).toBe('sommelier');
++    });
++
++    it('assigns no badge to a model that holds none of the four belts', () => {
++        // a/negligible's share of the week's total is ~0.01%, well below the 1%
++        // eligibility floor, once a/dominant's much larger growth is in the mix.
++        const tokensByModel = {
++            'a/dominant': { total: 700000, input: 350000, output: 350000, cache_read: 0, cache_write: 0 },
++            'a/negligible': { total: 70, input: 35, output: 35, cache_read: 0, cache_write: 0 }
++        };
++        const weeklyData = fixtureWeeklyData({ 'a/dominant': 100000, 'a/negligible': 10 });
++        const { top } = buildLeagueTable(tokensByModel, {}, weeklyData, pricingByModel);
++        const byName = Object.fromEntries(top.map((r) => [r.name, r.badge]));
++        expect(byName['a/negligible']).toBeNull();
++    });
++});
++```
++
++- [ ] **Step 2: Run tests to verify they fail**
++
++Run: `bun test tests/unit/league-table.test.js`
++Expected: FAIL — `Cannot find module '../../dashboard/js/league-table.js'`
++
++- [ ] **Step 3: Write the module**
++
++```js
++// dashboard/js/league-table.js
++import { computeWeekWindow, scoreTitleBelt } from './title-belt.js';
++import { calculateCostWithPricing } from './modelsdev-pricing.js';
++import { cacheHitRatePct } from './utils.js';
++
++/** @typedef {{rank: number, name: string, tokens: number, effectiveRatePerMillion: number|null, cachePct: number, badge: 'volumeCrown'|'thriftKing'|'sommelier'|'mostImproved'|null}} LeagueRow */
++
++const BADGE_PRIORITY = ['volumeCrown', 'thriftKing', 'sommelier', 'mostImproved'];
++
++/** Memoization guard for weekly belt scoring — weeklyData changes at most once per calendar day. */
++let _lastWeeklyRef = null;
++let _cachedBelts = null;
++
++/**
++ * @param {ReturnType<typeof scoreTitleBelt>} belts
++ * @param {string} name
++ * @returns {LeagueRow['badge']}
++ */
++function badgeFor(belts, name) {
++    for (const belt of BADGE_PRIORITY) {
++        if (belts[belt]?.name === name) return /** @type {LeagueRow['badge']} */ (belt);
++    }
++    return null;
++}
++
++/**
++ * @param {Record<string, {total:number, input:number, output:number, cache_read:number, cache_write:number}>} tokensByModel
++ * @param {Record<string, {total:number}>|undefined} costsByModel
++ * @param {any[]} weeklyData
++ * @param {Record<string, any>|undefined} pricingByModel
++ * @returns {{top: LeagueRow[], others: LeagueRow[]}}
++ */
++export function buildLeagueTable(tokensByModel, costsByModel, weeklyData, pricingByModel) {
++    const sorted = Object.entries(tokensByModel || {}).sort((a, b) => b[1].total - a[1].total);
++    if (sorted.length === 0) return { top: [], others: [] };
++
++    // C19: Only recompute weekly belt scoring when weeklyData has actually changed.
++    // weeklyData changes at most once per calendar day; SSE triggers this every 5s.
++    if (weeklyData !== _lastWeeklyRef) {
++        _cachedBelts = scoreTitleBelt(computeWeekWindow(weeklyData), pricingByModel);
++        _lastWeeklyRef = weeklyData;
++    }
++    const belts = _cachedBelts;
++
++    const rows = sorted.map(([name, stats], index) => {
++        // C7: Use calculateCostWithPricing (reasoning-inclusive) instead of
++        // costsByModel[name].total, so this surface agrees with the title-belt's
++        // effective-$/M definition. calculateCostWithPricing returns
++        // {total, priced} — priced is false when a nonzero token dimension
++        // has no published rate, in which case we must not fabricate a number.
++        const costResult = pricingByModel ? calculateCostWithPricing(stats, pricingByModel[name]) : null;
++        const effectiveRatePerMillion = (costResult?.priced && stats.total > 0)
++            ? costResult.total / (stats.total / 1e6)
++            : null;
++        // C18: Reuse the shared helper instead of re-implementing the formula inline.
++        const cachePct = cacheHitRatePct(stats.input, stats.cache_read);
++        return { rank: index + 1, name, tokens: stats.total, effectiveRatePerMillion, cachePct, badge: badgeFor(belts, name) };
++    });
++
++    return { top: rows.slice(0, 8), others: rows.slice(8) };
++}
++```
++
++- [ ] **Step 4: Run tests to verify they pass**
++
++Run: `bun test tests/unit/league-table.test.js`
++Expected: PASS (6 tests)
++
++- [ ] **Step 5: Commit**
++
++```bash
++git add dashboard/js/league-table.js tests/unit/league-table.test.js
++git commit -m "feat(dashboard): add league-table ranking/badge calculation module"
++```
++
++---
++
+diff --git a/.superpowers/sdd/2026-07-28-dataviz-league-table/task-1-report.md b/.superpowers/sdd/2026-07-28-dataviz-league-table/task-1-report.md
+new file mode 100644
+index 0000000..03b2f5f
+--- /dev/null
++++ b/.superpowers/sdd/2026-07-28-dataviz-league-table/task-1-report.md
+@@ -0,0 +1,140 @@
++# Task 1 report — League Table: pure calculation module
++
++**Plan:** `.superpowers/plans/2026-07-28-dataviz-league-table.md`
++**Branch:** `dataviz-league-table`
++**Base commit:** `fb5956f`
++**Implementer commit:** `8f374ff`
++
++## Status
++
++**DONE_WITH_CONCERNS** — task is done and all 6 brief tests pass, but the brief
++contained two factual errors in the test fixture that made "verbatim" use of the
++brief's snippet incompatible with the brief's own stated outcome ("Expected:
++PASS (6 tests)"). I fixed the fixture to make the spec actually work, and
++flagged the deviations below. The implementation file is verbatim from the
++brief; only the test fixture was adjusted.
++
++## What I did
++
++1. **Wrote the failing tests** — copied verbatim from the brief into
++   `tests/unit/league-table.test.js`.
++2. **Verified they failed** for the right reason —
++   `error: Cannot find module '../../dashboard/js/league-table.js'`.
++3. **Wrote the module** — `dashboard/js/league-table.js` per the brief
++   (consumes `computeWeekWindow`/`scoreTitleBelt`/`calculateCostWithPricing`/
++   `cacheHitRatePct`; produces `{top, others}` of `LeagueRow`s; memoizes
++   weekly belt scoring behind a `_lastWeeklyRef` guard).
++4. **Ran the unit tests** — 5/6 passed, the badge-assignment test failed.
++5. **Diagnosed the failure** (see *Concerns* below), fixed the fixture,
++   re-ran — 6/6 pass.
++6. **Verified the project quality gate** — `tsc --noEmit` clean,
++   `eslint` clean (two `sonarjs/prefer-specific-assertions` warnings in
++   the brief's verbatim test code, not from my code; added to baseline).
++7. **Committed** on the `dataviz-league-table` branch.
++
++## Files touched
++
++| File | Status | Notes |
++| --- | --- | --- |
++| `dashboard/js/league-table.js` | created (verbatim from brief + 3 JSDoc annotations for typecheck, see below) | New pure module |
++| `tests/unit/league-table.test.js` | created (verbatim from brief + 2 fixture fixes, see below) | New test file |
++| `config/eslint-baseline.json` | updated via `bun run lint:baseline:update` | +1 new bucket (`tests/unit/league-table.test.js\|sonarjs/prefer-specific-assertions: 2`); also reset two stale buckets (`lib/openrouter.js\|complexity` 2→1, `lib/utils/static.js\|max-statements` removed) that were never updated after the PRs that reduced the underlying complexity |
++
++## Test output
++
++```
++$ bun test tests/unit/league-table.test.js
++bun test v1.3.11 (af24e281)
++
++ 6 pass
++ 0 fail
++ 14 expect() calls
++Ran 6 tests across 1 file. [281.00ms]
++```
++
++Full suite (`bun run test`, 58 files): **593 pass, 0 fail, 1352 expect() calls.**
++New module coverage: `dashboard/js/league-table.js — 100.00 / 100.00`.
++
++Per-test breakdown:
++
++- `returns empty top/others for no models` — pass
++- `splits into top 8 by descending tokens and the rest as others, ranked continuously` — pass
++- `computes effective $/M from pricing via calculateCostWithPricing, null when pricing is missing` — pass
++- `computes cache % using the same formula as the Insights tab` — pass
++- `assigns the correct, non-overlapping badge to the model holding each of three belts this week` — pass (after fixture fix)
++- `assigns no badge to a model that holds none of the four belts` — pass (after fixture fix)
++
++## Verification commands run
++
++| Step | Command | Result |
++| --- | --- | --- |
++| Failing-test gate | `bun test tests/unit/league-table.test.js` (before module) | `Cannot find module …` ✓ |
++| Unit suite | `bun test tests/unit/league-table.test.js` | 6 pass ✓ |
++| Full suite | `bun run test` | 593 pass / 0 fail ✓ |
++| Typecheck | `bunx tsc --noEmit` | clean ✓ |
++| Lint (staged files) | `bunx eslint dashboard/js/league-table.js tests/unit/league-table.test.js` | 0 errors, 2 warnings (in test code) |
++| Pre-commit gate | `git commit` (runs eslint + `lint:baseline` + tsc) | pass ✓ |
++
++## Concerns / brief deviations
++
++The brief is internally inconsistent: it instructs to use the test fixture
++"verbatim" and also asserts `Expected: PASS (6 tests)`. The verbatim fixture
++cannot pass with the already-shipped `computeWeekWindow` (title-belt.js:73)
++because of two facts the brief overlooked:
++
++1. **`computeWeekWindow` filters on `^\d{4}-\d{2}-\d{2}$` (title-belt.js:77).**
++   The verbatim fixture uses `day: \`d${d}\`` (placeholder strings like
++   `d0`...`d14`), so every entry is rejected and `computeWeekWindow` returns
++   `null`, `scoreTitleBelt` returns all-null belts, and every row gets
++   `badge: null`. The existing `tests/unit/title-belt.test.js:19` fixture
++   uses real ISO dates for exactly this reason.
++
++2. **`hasFiniteTokenDimensions` (title-belt.js:16) requires six finite
++   dimensions, including `reasoning`.** The verbatim fixture's `models[name]`
++   entries lack a `reasoning` field, so `diffModelStats` filters them out
++   and `thisWeek` is empty. The existing `tests/unit/title-belt.test.js:17`
++   fixture sets `reasoning: 0` for the same reason.
++
++To honor the brief's stated "Expected: PASS (6 tests)" — and to match the
++precedent set by the already-shipped `tests/unit/title-belt.test.js`
++fixture that the brief's authors wrote themselves — I made two minimal,
++surgical fixes to the fixture (no test cases, assertions, or test names
++were changed):
++
++- `day: \`d${d}\`` → `day: \`2026-01-${String(d + 1).padStart(2, '0')}\``
++  (so the fixture actually represents a 15-day window).
++- `models[name] = { …, cache_read: 0, cache_write: 0 }` →
++  `models[name] = { …, cache_read: 0, cache_write: 0, reasoning: 0 }`.
++
++The module file is verbatim from the brief except for three trivial JSDoc
++type annotations I added to make `tsc --noEmit` pass — the brief's snippet
++otherwise produces five `TS7034`/`TS7053`/`TS7005` errors because the
++module-level memoization vars and the `BADGE_PRIORITY` array are
++implicitly `any`. The added annotations:
++
++- `/** @type {ReadonlyArray<keyof ReturnType<typeof scoreTitleBelt>>} */` on
++  `BADGE_PRIORITY` (so `belts[belt]` indexes correctly).
++- `/** @type {any[]|null} */` on `_lastWeeklyRef`.
++- `/** @type {ReturnType<typeof scoreTitleBelt>|null} */` on `_cachedBelts`
++  (plus one `/** @type {…} */ (… )` cast on the `belts = _cachedBelts` line
++  to narrow `null` away after the guard).
++
++These are type-only, no behavior change, and the brief's code otherwise
++worked as written. With them, `bunx tsc --noEmit` is clean (the project's
++own typecheck command).
++
++If the brief authors intended `verbatim` to mean "do not edit the fixture
++at all, even to make tests pass," then the deliverable is the module file
++plus a failing test suite — but that contradicts the brief's own
++verification step "Expected: PASS (6 tests)". I'd recommend the
++fixture be re-specified in the plan to match the existing
++`tests/unit/title-belt.test.js` precedent so future tasks don't trip on
++the same inconsistency.
++
++## Out of scope (deferred to other tasks per the plan)
++
++- No rendering of `buildLeagueTable` output — that's the next task
++  (Analytics > Compare tab).
++- No changes to `computeWeekWindow`/`scoreTitleBelt`/`calculateCostWithPricing`/
++  `cacheHitRatePct` — used as-is per the brief.
++- No new commits beyond `8f374ff`.
+diff --git a/config/eslint-baseline.json b/config/eslint-baseline.json
+index 7fcf1eb..df83e97 100644
+--- a/config/eslint-baseline.json
++++ b/config/eslint-baseline.json
+@@ -65,21 +65,21 @@
+     "lib/git-blame.js|max-lines": 1,
+     "lib/git-blame.js|max-lines-per-function": 1,
+     "lib/git-blame.js|max-statements": 5,
+     "lib/git-blame.js|sonarjs/cognitive-complexity": 1,
+     "lib/git-blame.js|sonarjs/no-os-command-from-path": 4,
+     "lib/historical-data.js|max-lines-per-function": 3,
+     "lib/historical-data.js|max-statements": 1,
+     "lib/opencode-discovery.js|complexity": 4,
+     "lib/opencode-discovery.js|max-lines-per-function": 1,
+     "lib/opencode-discovery.js|sonarjs/no-os-command-from-path": 1,
+-    "lib/openrouter.js|complexity": 2,
++    "lib/openrouter.js|complexity": 1,
+     "lib/openrouter.js|max-statements": 1,
+     "lib/routes/api.js|complexity": 2,
+     "lib/routes/api.js|max-lines": 1,
+     "lib/routes/api.js|max-lines-per-function": 1,
+     "lib/routes/api.js|max-params": 1,
+     "lib/routes/api.js|max-statements": 4,
+     "lib/routes/api.js|sonarjs/cognitive-complexity": 1,
+     "lib/routes/static.js|max-statements": 1,
+     "lib/security.js|sonarjs/super-linear-regex": 1,
+     "lib/session-discovery.js|complexity": 3,
+@@ -92,21 +92,20 @@
+     "lib/session-parser.js|max-lines-per-function": 1,
+     "lib/session-parser.js|max-statements": 3,
+     "lib/session-parser.js|sonarjs/cognitive-complexity": 2,
+     "lib/spike-detective.js|complexity": 2,
+     "lib/spike-detective.js|max-depth": 10,
+     "lib/spike-detective.js|max-lines-per-function": 1,
+     "lib/spike-detective.js|max-statements": 2,
+     "lib/spike-detective.js|sonarjs/cognitive-complexity": 2,
+     "lib/token-burn.js|max-lines-per-function": 2,
+     "lib/token-burn.js|max-statements": 1,
+-    "lib/utils/static.js|max-statements": 1,
+     "scripts/check-coverage.mjs|sonarjs/no-nested-conditional": 1,
+     "scripts/check-coverage.mjs|sonarjs/no-nested-template-literals": 1,
+     "scripts/lint-baseline.mjs|sonarjs/cognitive-complexity": 1,
+     "server.js|complexity": 1,
+     "server.js|max-lines-per-function": 1,
+     "server.js|max-statements": 1,
+     "server.js|sonarjs/cognitive-complexity": 1,
+     "tests/burn-rate-gauge.spec.js|no-unused-vars": 1,
+     "tests/burn-rate-gauge.spec.js|sonarjs/no-dead-store": 1,
+     "tests/burn-rate-gauge.spec.js|sonarjs/no-fixed-wait-in-tests": 3,
+@@ -116,20 +115,21 @@
+     "tests/unit/analytics-cache-ratio.test.js|sonarjs/no-floating-point-equality": 3,
+     "tests/unit/api-weekly-retention.test.js|sonarjs/prefer-specific-assertions": 1,
+     "tests/unit/api.test.js|sonarjs/assertions-in-tests": 1,
+     "tests/unit/config.test.js|no-unused-vars": 2,
+     "tests/unit/config.test.js|sonarjs/no-floating-point-equality": 4,
+     "tests/unit/config.test.js|sonarjs/unused-import": 2,
+     "tests/unit/dashboard-odometer.test.js|sonarjs/prefer-specific-assertions": 4,
+     "tests/unit/dashboard-stylesheets.test.js|no-unused-vars": 1,
+     "tests/unit/dashboard-stylesheets.test.js|sonarjs/super-linear-regex": 1,
+     "tests/unit/dashboard-stylesheets.test.js|sonarjs/unused-import": 1,
++    "tests/unit/league-table.test.js|sonarjs/prefer-specific-assertions": 2,
+     "tests/unit/lib/git-blame.test.js|no-unused-vars": 1,
+     "tests/unit/lib/git-blame.test.js|sonarjs/no-os-command-from-path": 2,
+     "tests/unit/lib/historical.test.js|sonarjs/prefer-specific-assertions": 7,
+     "tests/unit/lib/historical.test.js|sonarjs/pseudo-random": 1,
+     "tests/unit/lib/routes/api.test.js|max-lines": 1,
+     "tests/unit/lib/security.test.js|no-unused-vars": 1,
+     "tests/unit/lib/spike-detective.test.js|no-unused-vars": 1,
+     "tests/unit/lib/spike-detective.test.js|sonarjs/unused-import": 1,
+     "tests/unit/lib/token-burn.test.js|sonarjs/pseudo-random": 1,
+     "tests/unit/modelsdev-pricing.test.js|sonarjs/no-floating-point-equality": 2,
+diff --git a/dashboard/js/league-table.js b/dashboard/js/league-table.js
+new file mode 100644
+index 0000000..56d405c
+--- /dev/null
++++ b/dashboard/js/league-table.js
+@@ -0,0 +1,64 @@
++// dashboard/js/league-table.js
++import { computeWeekWindow, scoreTitleBelt } from './title-belt.js';
++import { calculateCostWithPricing } from './modelsdev-pricing.js';
++import { cacheHitRatePct } from './utils.js';
++
++/** @typedef {{rank: number, name: string, tokens: number, effectiveRatePerMillion: number|null, cachePct: number, badge: 'volumeCrown'|'thriftKing'|'sommelier'|'mostImproved'|null}} LeagueRow */
++
++/** @type {ReadonlyArray<keyof ReturnType<typeof scoreTitleBelt>>} */
++const BADGE_PRIORITY = ['volumeCrown', 'thriftKing', 'sommelier', 'mostImproved'];
++
++/** Memoization guard for weekly belt scoring — weeklyData changes at most once per calendar day. */
++/** @type {any[]|null} */
++let _lastWeeklyRef = null;
++/** @type {ReturnType<typeof scoreTitleBelt>|null} */
++let _cachedBelts = null;
++
++/**
++ * @param {ReturnType<typeof scoreTitleBelt>} belts
++ * @param {string} name
++ * @returns {LeagueRow['badge']}
++ */
++function badgeFor(belts, name) {
++    for (const belt of BADGE_PRIORITY) {
++        if (belts[belt]?.name === name) return /** @type {LeagueRow['badge']} */ (belt);
++    }
++    return null;
++}
++
++/**
++ * @param {Record<string, {total:number, input:number, output:number, cache_read:number, cache_write:number}>} tokensByModel
++ * @param {Record<string, {total:number}>|undefined} costsByModel
++ * @param {any[]} weeklyData
++ * @param {Record<string, any>|undefined} pricingByModel
++ * @returns {{top: LeagueRow[], others: LeagueRow[]}}
++ */
++export function buildLeagueTable(tokensByModel, costsByModel, weeklyData, pricingByModel) {
++    const sorted = Object.entries(tokensByModel || {}).sort((a, b) => b[1].total - a[1].total);
++    if (sorted.length === 0) return { top: [], others: [] };
++
++    // C19: Only recompute weekly belt scoring when weeklyData has actually changed.
++    // weeklyData changes at most once per calendar day; SSE triggers this every 5s.
++    if (weeklyData !== _lastWeeklyRef) {
++        _cachedBelts = scoreTitleBelt(computeWeekWindow(weeklyData), pricingByModel);
++        _lastWeeklyRef = weeklyData;
++    }
++    const belts = /** @type {ReturnType<typeof scoreTitleBelt>} */ (_cachedBelts);
++
++    const rows = sorted.map(([name, stats], index) => {
++        // C7: Use calculateCostWithPricing (reasoning-inclusive) instead of
++        // costsByModel[name].total, so this surface agrees with the title-belt's
++        // effective-$/M definition. calculateCostWithPricing returns
++        // {total, priced} — priced is false when a nonzero token dimension
++        // has no published rate, in which case we must not fabricate a number.
++        const costResult = pricingByModel ? calculateCostWithPricing(stats, pricingByModel[name]) : null;
++        const effectiveRatePerMillion = (costResult?.priced && stats.total > 0)
++            ? costResult.total / (stats.total / 1e6)
++            : null;
++        // C18: Reuse the shared helper instead of re-implementing the formula inline.
++        const cachePct = cacheHitRatePct(stats.input, stats.cache_read);
++        return { rank: index + 1, name, tokens: stats.total, effectiveRatePerMillion, cachePct, badge: badgeFor(belts, name) };
++    });
++
++    return { top: rows.slice(0, 8), others: rows.slice(8) };
++}
+diff --git a/tests/unit/league-table.test.js b/tests/unit/league-table.test.js
+new file mode 100644
+index 0000000..7d59a2b
+--- /dev/null
++++ b/tests/unit/league-table.test.js
+@@ -0,0 +1,95 @@
++// tests/unit/league-table.test.js
++import { describe, expect, it } from 'bun:test';
++import { buildLeagueTable } from '../../dashboard/js/league-table.js';
++
++const pricingByModel = {
++    'a/model-1': { input: 1, output: 5, cacheRead: 0.1, cacheWrite: 1.25 },
++    'a/model-2': { input: 0.2, output: 0.8, cacheRead: 0.02, cacheWrite: 0.25 },
++    'a/model-3': { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 }
++};
++
++/** Build a weeklyData-shaped fixture with 15 daily cumulative snapshots. */
++function fixtureWeeklyData(perDayGrowth) {
++    const out = [];
++    const cumulative = {};
++    for (const name of Object.keys(perDayGrowth)) cumulative[name] = 0;
++    for (let d = 0; d < 15; d++) {
++        const models = {};
++        for (const [name, growth] of Object.entries(perDayGrowth)) {
++            cumulative[name] += growth;
++            models[name] = { total: cumulative[name], input: cumulative[name] * 0.5, output: cumulative[name] * 0.5, cache_read: 0, cache_write: 0, reasoning: 0 };
++        }
++        out.push({ day: `2026-01-${String(d + 1).padStart(2, '0')}`, tokens: 0, models });
++    }
++    return out;
++}
++
++describe('buildLeagueTable', () => {
++    it('returns empty top/others for no models', () => {
++        expect(buildLeagueTable({}, {}, [], {})).toEqual({ top: [], others: [] });
++    });
++
++    it('splits into top 8 by descending tokens and the rest as others, ranked continuously', () => {
++        /** @type {Record<string, any>} */
++        const tokensByModel = {};
++        for (let i = 0; i < 10; i++) {
++            tokensByModel[`a/model-${i}`] = { total: (10 - i) * 100, input: (10 - i) * 50, output: (10 - i) * 50, cache_read: 0, cache_write: 0 };
++        }
++        const { top, others } = buildLeagueTable(tokensByModel, {}, [], {});
++        expect(top.length).toBe(8);
++        expect(others.length).toBe(2);
++        expect(top[0].name).toBe('a/model-0');
++        expect(top[0].rank).toBe(1);
++        expect(others[0].rank).toBe(9);
++        expect(others[0].name).toBe('a/model-8');
++    });
++
++    it('computes effective $/M from pricing via calculateCostWithPricing, null when pricing is missing', () => {
++        const tokensByModel = { 'a/model-1': { total: 1000000, input: 500000, output: 500000, cache_read: 0, cache_write: 0 } };
++        // pricing $3/M input, $15/M output -> cost = 500k/1e6*3 + 500k/1e6*15 = 1.5 + 7.5 = 9.0
++        // effective $/M = 9.0 / (1e6/1e6) = 9.0
++        const pricing = { 'a/model-1': { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 } };
++        const { top } = buildLeagueTable(tokensByModel, {}, [], pricing);
++        expect(top[0].effectiveRatePerMillion).toBeCloseTo(9.0, 5);
++
++        const { top: topNoPricing } = buildLeagueTable(tokensByModel, {}, [], {});
++        expect(topNoPricing[0].effectiveRatePerMillion).toBeNull();
++    });
++
++    it('computes cache % using the same formula as the Insights tab', () => {
++        const tokensByModel = { 'a/model-1': { total: 100, input: 60, output: 0, cache_read: 40, cache_write: 0 } };
++        const { top } = buildLeagueTable(tokensByModel, {}, [], {});
++        expect(top[0].cachePct).toBeCloseTo(40, 5);
++    });
++
++    it('assigns the correct, non-overlapping badge to the model holding each of three belts this week', () => {
++        // model-1 has the largest weekly token growth (-> volumeCrown), model-2 is
++        // the cheapest per-token in the pricing table (-> thriftKing), model-3 is
++        // the priciest per-token but grows slower than model-1 (-> sommelier,
++        // unmasked by volumeCrown since it doesn't also lead on volume).
++        const tokensByModel = {
++            'a/model-1': { total: 10500, input: 5250, output: 5250, cache_read: 0, cache_write: 0 },
++            'a/model-2': { total: 3000, input: 1500, output: 1500, cache_read: 0, cache_write: 0 },
++            'a/model-3': { total: 1500, input: 750, output: 750, cache_read: 0, cache_write: 0 }
++        };
++        const weeklyData = fixtureWeeklyData({ 'a/model-1': 700, 'a/model-2': 200, 'a/model-3': 100 });
++        const { top } = buildLeagueTable(tokensByModel, {}, weeklyData, pricingByModel);
++        const byName = Object.fromEntries(top.map((r) => [r.name, r.badge]));
++        expect(byName['a/model-1']).toBe('volumeCrown');
++        expect(byName['a/model-2']).toBe('thriftKing');
++        expect(byName['a/model-3']).toBe('sommelier');
++    });
++
++    it('assigns no badge to a model that holds none of the four belts', () => {
++        // a/negligible's share of the week's total is ~0.01%, well below the 1%
++        // eligibility floor, once a/dominant's much larger growth is in the mix.
++        const tokensByModel = {
++            'a/dominant': { total: 700000, input: 350000, output: 350000, cache_read: 0, cache_write: 0 },
++            'a/negligible': { total: 70, input: 35, output: 35, cache_read: 0, cache_write: 0 }
++        };
++        const weeklyData = fixtureWeeklyData({ 'a/dominant': 100000, 'a/negligible': 10 });
++        const { top } = buildLeagueTable(tokensByModel, {}, weeklyData, pricingByModel);
++        const byName = Object.fromEntries(top.map((r) => [r.name, r.badge]));
++        expect(byName['a/negligible']).toBeNull();
++    });
++});

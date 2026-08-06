@@ -138,3 +138,131 @@ the same inconsistency.
 - No changes to `computeWeekWindow`/`scoreTitleBelt`/`calculateCostWithPricing`/
   `cacheHitRatePct` — used as-is per the brief.
 - No new commits beyond `8f374ff`.
+
+---
+
+# Fix round 1 — cache invalidation on pricing change
+
+**Plan:** `.superpowers/plans/2026-07-28-dataviz-league-table.md`
+**Branch:** `dataviz-league-table`
+**Base commit (post round 0):** `dc2728e`
+**Implementer commit:** `1ab76cd`
+
+## Status
+
+**DONE** — Finding 2 fixed. Reviewer's Finding 1 (effective-rate source) was
+ruled NOT a defect and was left as-is per the round instructions.
+
+## What I changed
+
+**`dashboard/js/league-table.js`** — extended the memoization guard so the
+weekly belt cache invalidates when *either* `weeklyData` or `pricingByModel`
+changes, not just `weeklyData`. Reference equality is sufficient (no deep
+equality, per the reviewer's note).
+
+Before (cache only keyed on `weeklyData`):
+
+```js
+if (weeklyData !== _lastWeeklyRef) {
+    _cachedBelts = scoreTitleBelt(computeWeekWindow(weeklyData), pricingByModel);
+    _lastWeeklyRef = weeklyData;
+}
+```
+
+After:
+
+```js
+if (weeklyData !== _lastWeeklyRef || pricingByModel !== _lastPricingRef) {
+    _cachedBelts = scoreTitleBelt(computeWeekWindow(weeklyData), pricingByModel);
+    _lastWeeklyRef = weeklyData;
+    _lastPricingRef = pricingByModel;
+}
+```
+
+Plus a new module-level `_lastPricingRef` (typed
+`Record<string, any>|null|undefined`) and an updated comment explaining
+why pricing must invalidate (e.g. when the Models.dev catalog refreshes
+and thriftKing/sommelier holders flip).
+
+**`tests/unit/league-table.test.js`** — added one new test case (the
+`it('invalidates the belt cache when pricingByModel changes but weeklyData
+is the same reference', …)` block) that:
+
+1. Builds a `weeklyData` fixture.
+2. Calls `buildLeagueTable` once with `pricingA` (model-2 cheap,
+   model-3 expensive → `model-2 = thriftKing`, `model-3 = sommelier`).
+3. Calls it again with the **same `weeklyData` reference** but `pricingB`
+   (model-2 expensive, model-3 cheap → the badges flip).
+4. Asserts the second call's badges reflect the new pricing, not the
+   cached first-call result.
+
+I deliberately kept `model-1`'s pricing identical across the two calls so
+`volumeCrown` stays stable (it's tokens-based, not pricing-based). The
+failing assertion is specifically the thriftKing/sommelier flip on
+`model-2`/`model-3`, which is the cache-staleness failure mode the
+reviewer flagged.
+
+## Verification
+
+```
+$ git stash push -- dashboard/js/league-table.js   # temporarily revert the fix
+Saved working directory and index state WIP on dataviz-league-table: dc2728e …
+
+$ bun test tests/unit/league-table.test.js
+…
+ 122 |         const byName2 = Object.fromEntries(top2.map((r) => [r.name, r.badge]));
+ 123 |         const byName1 = Object.fromEntries(top1.map((r) => [r.name, r.badge]));
+ 124 |         expect(byName1['a/model-2']).toBe('thriftKing');
+ 125 |         expect(byName1['a/model-3']).toBe('sommelier');
+ 126 |         expect(byName2['a/model-2']).toBe('sommelier');
+                                            ^
+ error: expect(received).toBe(expected)
+ Expected: "sommelier"
+ Received: "thriftKing"
+ (fail) buildLeagueTable > invalidates the belt cache when pricingByModel changes but weeklyData is the same reference [1.00ms]
+
+ 6 pass
+ 1 fail
+ 17 expect() calls
+ Ran 7 tests across 1 file. [248.00ms]
+
+$ git stash pop
+Dropped refs/stash@{0} (e15fa6bf9b9c7711e9875edc1a5fd9836ed18f23)
+```
+
+So with the old guard, the new test fails exactly where the reviewer said
+it would: `byName2['a/model-2']` still reads `'thriftKing'` because the
+cache from call 1 is reused for call 2.
+
+With the fix re-applied:
+
+```
+$ bun test tests/unit/league-table.test.js
+bun test v1.3.11 (af24e281)
+
+ 7 pass
+ 0 fail
+ 18 expect() calls
+ Ran 7 tests across 1 file. [252.00ms]
+```
+
+Full suite and gates:
+
+| Step | Command | Result |
+| --- | --- | --- |
+| Target suite | `bun test tests/unit/league-table.test.js` | 7 pass / 0 fail |
+| Full suite | `bun run test` | 594 pass / 0 fail (1356 expect() calls) |
+| Typecheck | `bunx tsc --noEmit` | clean |
+| Lint baseline | `bun scripts/lint-baseline.mjs .lint-report.json` | pass (no new buckets) |
+| Pre-commit | `git commit …` | `1ab76cd` landed; eslint, lint:baseline, tsc all pass |
+
+## Out of scope (intentionally untouched this round)
+
+- The C7 `calculateCostWithPricing` source for the per-row
+  `effectiveRatePerMillion` (Finding 1, ruled NOT a defect by the human
+  maintainer). The comment and code are unchanged.
+- No other call sites of `buildLeagueTable` exist yet — the rendering
+  task is still pending — so the new invalidation behavior only
+  affects this module's own internal cache for now.
+
+Status: DONE
