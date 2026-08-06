@@ -83,6 +83,13 @@ test.describe('no horizontal overflow on critical selectors', () => {
     await expect(page.locator('.daily-heatmap-val').first()).toBeVisible({ timeout: 10000 });
     await expectNoOverflow(page, '.daily-heatmap-val');
   });
+
+  test('league table (Analytics > Compare)', async ({ page }) => {
+    await page.click('button:has-text("Analytics")');
+    await page.click('button:has-text("Compare")');
+    await expect(page.locator('#compare-chart-container table')).toBeVisible({ timeout: 10000 });
+    await expectNoOverflow(page, '#compare-chart-container');
+  });
 });
 
 test.describe('overflow screenshots', () => {

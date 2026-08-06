@@ -2196,3 +2196,14 @@ input:focus-visible,
 .belt-title { flex: none; color: var(--mono-text-muted); font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; min-width: 130px; }
 .belt-model { color: var(--mono-accent); font-weight: 700; font-size: 0.92rem; }
 .belt-detail { color: var(--mono-text-muted); font-size: 0.82rem; }
+
+.league-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 8px; border: 1px solid var(--mono-border-accent); color: var(--mono-accent);
+  background: var(--mono-accent-dim);
+}
+.league-badge svg { width: 14px; height: 14px; color: currentColor; fill: none; flex: none; }
+.league-badge-label { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
+.league-others-toggle { cursor: pointer; color: var(--mono-text-muted); }
+.league-others-toggle:hover { background: var(--mono-surface-hover); }
+.league-others-toggle td { text-align: center; font-size: 0.78rem; letter-spacing: 0.04em; }

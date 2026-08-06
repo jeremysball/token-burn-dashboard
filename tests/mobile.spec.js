@@ -40,7 +40,7 @@ test.describe('Mobile Responsive Tests', () => {
     await expect(page.locator('.subnav-btn[data-tab="compare"]')).toBeVisible({ timeout: 10000 });
 
     await page.click('button:has-text("Compare")');
-    await expect(page.locator('#compare-chart-container svg.main-svg').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#compare-chart-container table.mono-table')).toBeVisible({ timeout: 10000 });
 
     await page.click('button:has-text("Distribution")');
     await expect(page.locator('#distribution-chart-container svg.main-svg').first()).toBeVisible({ timeout: 10000 });
