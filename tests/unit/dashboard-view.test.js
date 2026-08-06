@@ -75,16 +75,17 @@ describe('dashboard model cards', () => {
     renderDashboard(true);
 
     const price = document.querySelector('.top-model-price');
+    const priceText = document.querySelector('.top-model-price-text');
     const source = document.querySelector('.pricing-source-badge');
-    const visiblePrice = price.textContent;
+    const visiblePrice = priceText.textContent;
 
     setCurrentData(dataForModelWithPricing(model, updatedPricing));
     renderDashboard(false);
 
-    expect(price.textContent).toBe(visiblePrice);
+    expect(priceText.textContent).toBe(visiblePrice);
     expect(price.title).toContain('cache $4.00 read / $5.00 write');
     expect(price.title).toContain('OpenRouter');
-    expect(source.textContent).toBe('OpenRouter');
+    expect(source.textContent).toBe('via OpenRouter');
     expect(source.title).toBe('Pricing sourced from OpenRouter');
   });
 

@@ -54,11 +54,11 @@ export function renderModelsTab(tbody) {
                         <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${color}; flex: 0 0 auto;"></span>
                         <div style="display: flex; flex-direction: column; min-width: 0;">
                             <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(displayName)}</span>
-                            <div style="display: flex; align-items: center; gap: 6px; min-width: 0; margin-top: 2px;">
-                                <span class="pricing-source-badge ${sourceMeta.source}" title="${escapeHtml(sourceMeta.title)}">${escapeHtml(sourceMeta.label)}</span>
+                            <div style="display: flex; align-items: baseline; gap: 5px; min-width: 0; margin-top: 2px;">
                                 <span class="model-price" title="${escapeHtml(priceTitle)}" style="font-size: 0.72rem; color: var(--mono-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                                     ${escapeHtml(priceSummary)}
                                 </span>
+                                <span class="pricing-source-badge ${sourceMeta.source}" title="${escapeHtml(sourceMeta.title)}">via ${escapeHtml(sourceMeta.label)}</span>
                             </div>
                         </div>
                     </div>
