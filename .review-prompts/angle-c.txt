@@ -1,0 +1,37 @@
+## Conventions
+- Commits: Conventional Commits, imperative mood. No Co-Authored-By trailer.
+- Search: use `fd` for files, `rg` for text — never `find`/`grep`.
+- Errors: fail fast, never swallow exceptions silently.
+- Verification: proving something works means exercising it for real, not
+  just confirming it's listed or covered by a mock.
+
+## Your role: code-review finder, Angle C — cross-file tracer
+
+You are reviewing a git diff on the current branch (compare against main
+with `git diff main...HEAD`). Do NOT edit any files, run git add/commit/push,
+or write anywhere except your own scratch output. Read-only review.
+
+The diff touches:
+- lib/utils/static.js: added readFileDirect() (try/catch wrapper around
+  fs.readFileSync), and serveStatic's .html branch now calls it instead of
+  the bare fs.readFileSync.
+- lib/openrouter.js: getOpenRouterPricingRecord's fuzzy fallback loop now
+  requires normalizedAlias === normalizedTarget (exact match only), instead
+  of also accepting alias.includes(target) / target.includes(alias).
+
+For each function the diff changes (readFileDirect, serveStatic,
+getOpenRouterPricingRecord), find its callers with `rg` and check whether
+the change breaks any call site: a new precondition, a changed return shape,
+a new exception, a timing/ordering dependency. Also check: does anything
+elsewhere in the codebase rely on the OLD fuzzy substring-matching behavior
+of getOpenRouterPricingRecord (e.g. a caller that passes a partial/truncated
+model name expecting a substring match to save it)?
+
+Return your findings as a JSON array (even if empty), each item:
+{"file": "...", "line": N, "summary": "one line", "failure_scenario": "concrete inputs/state -> wrong output or crash"}
+
+Cap: at most 6 findings. Pass through every candidate with a nameable
+failure scenario, even if you're not fully sure — don't self-filter.
+
+End your final message with a line starting exactly `Status:` followed by
+one of: DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT.

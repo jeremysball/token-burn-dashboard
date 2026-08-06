@@ -1,0 +1,50 @@
+[
+  {
+    "file": "lib/utils/static.js",
+    "line": 32,
+    "summary": "readFileDirect error suppression masks real failures",
+    "failure_scenario": "An operator accidentally points serveStatic at a directory path (e.g., '/dashboard/assets' resolved to the directory itself) → fs throws EISDIR → readFileDirect returns null → 404 'Not found' instead of a 403/500; same with an unreadable file (EACCES) silently masking a misconfigured volume mount in production."
+  },
+  {
+    "file": "lib/openrouter.js",
+    "line": 269,
+    "summary": "Fuzzy fallback cache index mismatch / last-written record returned",
+    "failure_scenario": "Snapshot [{id:'foo', input:1}, {id:'bar', name:'Foo', input:10}] → cache.index.set('foo', recordB) overwrites; getOpenRouterPricingRecord('Foo') candidate loop hits index key 'foo' and returns recordB (input=10). If a future candidate loop miss occurs, the fuzzy loop returns recordA (input=1) because A is iterated first — different records for the same input."
+  },
+  {
+    "file": "lib/openrouter.js",
+    "line": 263,
+    "summary": "normalizeAlias vs normalizeKey mismatch creates candidate loop gaps",
+    "failure_scenario": "Catalog entry {id: 'openai_gpt-4', name: null} → index gets key 'openai_gpt-4' (underscore preserved); caller passes 'openai-gpt-4' → candidates loop returns null (no match); fuzzy loop iterates record's aliases, normalizeAlias('openai_gpt-4')='openai-gpt-4' equals target, returns the record. Two paths name different records for the same input."
+  },
+  {
+    "file": "lib/utils/static.js",
+    "line": 53,
+    "summary": "Dev mode fallback silently serves stale bytes for non-js/css/html files",
+    "failure_scenario": "isDev=true, filePath='/dashboard/data.json' (not JS/CSS/HTML) → expression evaluates false → readFileCached (in-memory) is used; developer edits the file on disk, client refreshes, sees the pre-edit cached bytes until restart."
+  },
+  {
+    "file": "tests/unit/lib/openrouter.test.js",
+    "line": 35,
+    "summary": "Test mutates module-global pricing cache without restore",
+    "failure_scenario": "A later test in the same Bun process expects the default or previously configured cache; the snapshot containing only gpt-4o-mini remains installed and causes order-dependent lookup results."
+  },
+  {
+    "file": "tests/unit/lib/openrouter.test.js",
+    "line": 53,
+    "summary": "Test does not verify returned record or pricing values",
+    "failure_scenario": "The lookup returns a non-null but incorrect catalog record after a future alias/index regression; this test still passes and fails to detect pricing misassociation."
+  },
+  {
+    "file": "lib/openrouter.js",
+    "line": 265,
+    "summary": "buildModelAliases rebuilt on every fuzzy fallback call",
+    "failure_scenario": "On each cache.index miss, getOpenRouterPricingRecord walks all cache.models and recomputes the alias Set the index already enumerated. O(N × A) per lookup when a pre-computed index would be O(1)."
+  },
+  {
+    "file": "lib/openrouter.js",
+    "line": 264,
+    "summary": "Fuzzy fallback loop is largely vestigial after substring match removal",
+    "failure_scenario": "The candidates-loop + buildModelAliases's dotted→hyphen normalization already cover every tested case. The 12-line fallback only fires for inputs that don't share any normalized form with any indexed alias — cases where substring matching was both risky and rare."
+  }
+]
