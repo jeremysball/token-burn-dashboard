@@ -104,6 +104,38 @@ describe('dashboard hero equivalence tickers', () => {
     }
   });
 
+  it('removes a stuck fade class when invalidated mid-fade, so a later restart is visible', () => {
+    setCurrentData({
+      total_tokens: 100,
+      total_cost: { total: 5 },
+      total_cache_read: 0,
+      total_input: 0,
+      tokens_by_model: { 'm': { total: 100 } },
+      files_processed: 1,
+      total_lines: 10
+    });
+
+    const timers = captureTimers();
+    try {
+      renderDashboard(true);
+
+      const ticker = document.querySelector('[data-equiv-category="tokens"]');
+      const textEl = ticker.querySelector('.equiv-text');
+
+      timers.fireRotation();
+      expect(textEl.classList.contains('fade')).toBe(true);
+
+      updateEquivTickers({ tokens: 0, cost: 0, burnRate: 0 });
+      expect(textEl.classList.contains('fade')).toBe(false);
+
+      updateEquivTickers({ tokens: 100, cost: 5, burnRate: 1 });
+      expect(textEl.classList.contains('fade')).toBe(false);
+      expect(textEl.textContent).not.toBe('');
+    } finally {
+      timers.restore();
+    }
+  });
+
   it('restarts a cleared ticker once a valid value returns', () => {
     setCurrentData({
       total_tokens: 100,
