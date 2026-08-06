@@ -145,8 +145,8 @@ describe('renderCacheSlider', () => {
     });
 
     const heterogeneousData = () => ({
-        total_input: 500_000,
-        total_cache_read: 500_000,
+        total_input: 900_000,
+        total_cache_read: 1_100_000,
         tokens_by_model: {
             'high-cache/model': { input: 100_000, cache_read: 900_000, output: 0, cache_write: 0, reasoning: 0, total: 1_000_000 },
             'low-cache/model': { input: 800_000, cache_read: 200_000, output: 0, cache_write: 0, reasoning: 0, total: 1_000_000 }
