@@ -89,4 +89,82 @@ describe('createTaskferryReportWidget', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(container.querySelector('#testBody').innerHTML).toContain('Fresh.');
   });
+
+  it('escapes untrusted text in the rendered insights body (XSS via data.insights)', async () => {
+    // C19-3 (XSS fix): the report body is taskferry-generated and
+    // assigned via innerHTML, so any HTML in data.insights must be
+    // escaped before the bold-markdown replacement. Only `**` should
+    // produce real HTML. Assert that no live <img tag is present and
+    // that the escaped form IS present (the word "onerror" appears in
+    // the inert text — that's expected, since the user's intent is
+    // not for the page to evaluate it).
+    globalThis.fetch = mock(() => Promise.resolve(
+      new Response(JSON.stringify({ insights: '<img src=x onerror=alert(1)> **ok**' }), { status: 200 })
+    ));
+    widget.render(container, { date: '2026-07-28', data: true });
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    const body = container.querySelector('#testBody').innerHTML;
+    expect(body).not.toContain('<img');
+    expect(body).toContain('&lt;img');
+    expect(body).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(body).toContain('<b>ok</b>');
+  });
+
+  it('escapes untrusted server error messages (XSS via errBody.error)', async () => {
+    // C19-3 (XSS fix): the error message in the catch block is
+    // server-supplied (res.json().error) and was being interpolated
+    // into innerHTML unescaped. The error template must escape the
+    // message so a malicious server response cannot inject a live
+    // <img tag (the word "onerror" still appears as inert text in
+    // the escaped form — the assertion targets the unescaped tag).
+    globalThis.fetch = mock(() => Promise.resolve(
+      new Response(JSON.stringify({ error: '<img src=x onerror=alert(1)>' }), { status: 503 })
+    ));
+    widget.render(container, { date: '2026-07-28', data: true });
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    const body = container.querySelector('#testBody').innerHTML;
+    expect(body).not.toContain('<img');
+    expect(body).toContain('&lt;img');
+    expect(body).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(container.querySelector('#testRetry')).not.toBeNull();
+  });
+
+  it('ignores a stale fetch response when a newer fetch has been started (race regression)', async () => {
+    // C19-3 (race fix): when a fetch for an older date is still in
+    // flight and a newer date's render fires, the older response must
+    // NOT overwrite `cached` and the visible report. The generation
+    // counter on fetchAndRender guards against this.
+    let resolveStale;
+    const staleResponse = new Promise((r) => { resolveStale = r; });
+    let fetchCount = 0;
+    globalThis.fetch = mock(() => {
+      fetchCount++;
+      if (fetchCount === 1) return staleResponse;
+      return Promise.resolve(new Response(JSON.stringify({ insights: 'Newer day report.' }), { status: 200 }));
+    });
+
+    // Day 1: starts a fetch that will never resolve on its own
+    widget.render(container, { date: '2026-07-27', data: true });
+    // Day 2: starts a second fetch for a newer date
+    widget.render(container, { date: '2026-07-28', data: true });
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    // Now resolve the STALE (day 1) response AFTER day 2 has already committed
+    resolveStale(new Response(JSON.stringify({ insights: 'Stale day 1 report.' }), { status: 200 }));
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+
+    // The visible body must be the NEWER day's report, not the stale one
+    expect(container.querySelector('#testBody').innerHTML).toContain('Newer day report.');
+    expect(container.querySelector('#testBody').innerHTML).not.toContain('Stale day 1 report.');
+    // The stale response must also not overwrite `cached`, so a subsequent
+    // render for the stale date should re-fetch.
+    globalThis.fetch = mock(() => Promise.resolve(new Response(JSON.stringify({ insights: 'Refetched day 1.' }), { status: 200 })));
+    widget.render(container, { date: '2026-07-27', data: true });
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(container.querySelector('#testBody').innerHTML).toContain('Refetched day 1.');
+  });
 });

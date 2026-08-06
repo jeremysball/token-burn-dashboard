@@ -558,4 +558,34 @@ describe('formatMarkdownBoldToHtml', () => {
   it('returns text unchanged when there are no bold markers', () => {
     expect(formatMarkdownBoldToHtml('no bold here')).toBe('no bold here');
   });
+
+  it('escapes raw HTML before applying the bold-markdown replacement', () => {
+    // C19-3 (XSS fix): taskferry's `data.insights` is treated as
+    // untrusted, so any HTML markup in the response must be escaped
+    // before the result is assigned via innerHTML. Only the `**...**`
+    // pairs should produce HTML; the rest should be inert text. The
+    // escaped form keeps the words "onerror" / "alert" as characters,
+    // but they sit in a text node, not as live markup.
+    const out = formatMarkdownBoldToHtml('<img src=x onerror=alert(1)> **safe**');
+    expect(out).not.toContain('<img');
+    expect(out).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(out).toContain('<b>safe</b>');
+  });
+
+  it('escapes injected <script> tags and quoted attributes', () => {
+    // A common XSS payload is `" onmouseover="alert(1)"` — an attacker
+    // tries to break out of an attribute and inject their own. The
+    // escaping should turn the leading/trailing `"` into `&quot;`
+    // (so the payload sits inert in the text node), and the rest of
+    // the text survives as inert characters.
+    const out = formatMarkdownBoldToHtml('" onmouseover="alert(1)"');
+    expect(out).toContain('&quot;');
+    expect(out).not.toContain('" onmouseover="');
+  });
+
+  it('coerces non-string input to a string before escaping', () => {
+    expect(formatMarkdownBoldToHtml(null)).toBe('');
+    expect(formatMarkdownBoldToHtml(undefined)).toBe('');
+    expect(formatMarkdownBoldToHtml(42)).toBe('42');
+  });
 });

@@ -161,13 +161,15 @@ export function renderDailyFieldReport(container, currentData, fileHistoricalDat
         // C19-1: do NOT set the `dailyReportBuilt` flag here — that flag
         // is owned by dailyReport.render / its build() function, and the
         // inline element ids below don't match build()'s template (no
-        // `#dailyFieldReportDate` child). If the flag is set here, the
-        // next call that finds data will skip build() inside
-        // dailyReport.render and try to populate a date label that doesn't
-        // exist, throwing "Cannot set properties of null (setting
-        // 'textContent')" and showing a fabricated-looking error state.
-        // Instead, write the placeholder directly; build() will replace it
-        // wholesale on the next successful render.
+        // `#dailyFieldReportDate` child). If the flag is left over from
+        // an EARLIER successful day's build, the next call that finds
+        // data will skip build() inside dailyReport.render and try to
+        // populate a date label that doesn't exist, throwing "Cannot set
+        // properties of null (setting 'textContent')" and showing a
+        // fabricated-looking error state. C19-3: explicitly clear the
+        // flag here so the next successful render rebuilds the full
+        // skeleton via build() before populating the date label.
+        delete container.dataset.dailyReportBuilt;
         container.innerHTML = '<div class="field-report" id="dailyFieldReport">'
             + '<div id="dailyFieldReportBody">Not enough data yet for a report today.</div></div>';
         return;

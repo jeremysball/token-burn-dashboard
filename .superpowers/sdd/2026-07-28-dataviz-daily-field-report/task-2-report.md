@@ -324,3 +324,242 @@ asserts the date label is present after the second render.
   null` shim, and the commit message are all verbatim.
 
 Status: DONE_WITH_CONCERNS
+
+---
+
+# Task 2 Fix Round 1 — `fix(dashboard): fix daily-report stale-build-flag crash, fetch race, and XSS`
+
+## Status
+
+DONE
+
+## Summary
+
+Three Important findings from the Task 2 review — all confirmed real by
+the orchestrator's direct code tracing — fixed. The original commit
+`b68e2a8` landed a working but subtly broken widget; the new commit
+`9a5f24c` closes the three concrete failure paths and ships regression
+tests for each.
+
+## Files touched
+
+| File | Change |
+| --- | --- |
+| `dashboard/js/daily-report.js` | Not-enough-data branch now `delete container.dataset.dailyReportBuilt;` so a stale `'true'` from a previous day's successful build is cleared before the placeholder overwrites the DOM. Comment updated to describe the cross-day scenario. |
+| `dashboard/js/report-widget.js` | Added `let generation = 0` and a `const myGeneration = ++generation` capture at the start of `fetchAndRender`. Three early-returns (`if (myGeneration !== generation) return;`) guard the success path, the success data path, and the catch path. `finally` only clears `inFlight` if this call is still the current generation (otherwise an older request's finally would clobber a newer request's `inFlight` marker). The catch block now `escapeHtml(message)`s the server-supplied error before interpolating into the innerHTML template. |
+| `dashboard/js/utils.js` | `formatMarkdownBoldToHtml` now applies `escapeHtml(String(text ?? ''))` BEFORE the bold-markdown replacement, mirroring the order in `renderLLMInsights` (insights.js:escapeHtml → replace). Docstring updated to describe the escaping step and reference the sibling pattern. |
+| `tests/unit/daily-report.test.js` | Added `clears the stale dailyReportBuilt flag when the not-enough-data branch overwrites the container (cross-day regression)` — exercises the exact 3-step sequence (day 1 data → cross-day reset → not-enough-data → day 2 data) and asserts no crash and that `#dailyFieldReportDate` is populated correctly on the third render. |
+| `tests/unit/report-widget.test.js` | Added 3 tests: (1) XSS via `data.insights` — malicious string `'<img src=x onerror=alert(1)> **ok**'` must render inert, (2) XSS via `errBody.error` — server error message `'<img src=x onerror=alert(1)>'` must be escaped before the innerHTML template, (3) race regression — an older in-flight response must NOT overwrite a newer fetch's committed report, and the older date must remain refetchable. |
+| `tests/unit/utils.test.js` | Added 3 tests for `formatMarkdownBoldToHtml` XSS hardening: raw `<img onerror>` payload, quoted-attribute breakout, and non-string input coercion. |
+
+## Test output (real)
+
+### `bun test tests/unit/daily-report.test.js tests/unit/report-widget.test.js tests/unit/utils.test.js`
+
+```
+ 105 pass
+ 0 fail
+ 205 expect() calls
+Ran 105 tests across 3 files. [3.83s]
+```
+
+### `bun run test` (full unit suite) — 3 consecutive runs
+
+```
+ 618 pass
+ 0 fail
+ 1410 expect() calls
+Ran 618 tests across 59 files. [14.13s]
+---
+ 618 pass
+ 0 fail
+ 1410 expect() calls
+Ran 618 tests across 59 files. [14.27s]
+---
+ 618 pass
+ 0 fail
+ 1410 expect() calls
+Ran 618 tests across 59 files. [14.09s]
+```
+
+618 tests, 0 failures, 3 consecutive stable runs.
+
+### `bunx tsc --noEmit`
+
+```
+(no output — clean)
+```
+
+### `bun run lint:baseline`
+
+```
+$ bun run lint:json && bun scripts/lint-baseline.mjs .lint-report.json
+$ bunx eslint . --format json --output-file .lint-report.json
+(no further output — passes)
+```
+
+0 errors, 297 warnings (same warning set as before this commit — no new
+lint warnings introduced).
+
+### Playwright e2e
+
+```
+ 9 passed (18.3s)
+ 1 failed
+```
+
+The 9 passing tests include the `daily field report` overflow test. The
+1 failure is the pre-existing `main dashboard` `.top-model-name` count
+assertion — confirmed unrelated to this commit (reproduces on the
+previous Task 2 commit `b68e2a8` and on `225b535` before my changes).
+
+## Regression-guard verification (each fix was individually reverted and the test was observed to fail)
+
+I temporarily reverted each fix to confirm the regression test catches
+the corresponding bug. For each revert, the test was run, the failure
+captured, and the fix was restored.
+
+### Finding 1 revert
+
+Commented out the `delete container.dataset.dailyReportBuilt;` line in
+`renderDailyFieldReport`'s not-enough-data branch, ran the new
+`clears the stale dailyReportBuilt flag` test:
+
+```
+(fail) renderDailyFieldReport > clears the stale dailyReportBuilt flag when the not-enough-data branch overwrites the container (cross-day regression) [24.00ms]
+
+expect(received).toBeUndefined()
+Received: "true"
+
+  at <anonymous> (tests/unit/daily-report.test.js:151:48)
+```
+
+The test correctly fails without the fix, identifying the exact
+uncleared dataset attribute. Restored.
+
+### Finding 2 revert
+
+Commented out the two `if (myGeneration !== generation) return;` checks
+in `fetchAndRender`'s success path, ran the new
+`ignores a stale fetch response when a newer fetch has been started`
+test:
+
+```
+(fail) createTaskferryReportWidget > ignores a stale fetch response when a newer fetch has been started (race regression) [98.00ms]
+
+expect(received).toContain(expected)
+Expected to contain: "Newer day report."
+Received: "Stale day 1 report."
+```
+
+The test correctly fails without the fix, showing the older response
+overwrites the newer report. Restored.
+
+### Finding 3 revert (two parts)
+
+**Part A** — reverted `formatMarkdownBoldToHtml` to its pre-fix form
+(no `escapeHtml` on the input), ran the new utils + report-widget XSS
+tests:
+
+```
+(fail) formatMarkdownBoldToHtml > escapes raw HTML before applying the bold-markdown replacement
+(fail) formatMarkdownBoldToHtml > escapes injected <script> tags and quoted attributes
+(fail) createTaskferryReportWidget > escapes untrusted text in the rendered insights body (XSS via data.insights)
+
+Received (third test): "<img src=\"x\" onerror=\"alert(1)\"> <b>ok</b>"
+```
+
+The tests correctly fail without the fix, showing the live `<img>` tag
+in the rendered body. Restored.
+
+**Part B** — reverted the `escapeHtml(message)` in
+`fetchAndRender`'s catch block, ran the new
+`escapes untrusted server error messages` test:
+
+```
+(fail) createTaskferryReportWidget > escapes untrusted server error messages (XSS via errBody.error) [21.00ms]
+
+Received: "<span style=\"color: var(--mono-danger, #ef4444);\">Report generation failed: <img src=\"x\" onerror=\"alert(1)\"></span> ..."
+```
+
+The test correctly fails without the fix, showing the live `<img>`
+inside the error message. Restored.
+
+## Commits
+
+```
+9a5f24c fix(dashboard): fix daily-report stale-build-flag crash, fetch race, and XSS
+b68e2a8 feat(dashboard): add the daily field report widget   (Task 2 initial)
+225b535 feat(api): add the taskferry-backed daily field report route   (Task 1, shipped)
+```
+
+## What changed in this fix round
+
+### Finding 1 (cross-day stale `dailyReportBuilt`)
+
+The not-enough-data branch in `renderDailyFieldReport` overwrites
+`container.innerHTML` with a placeholder that lacks
+`#dailyFieldReportDate`. The previous fix (commit `b68e2a8`) made the
+not-enough-data path *not set* the `dailyReportBuilt` flag for the
+same-day case (render-with-data → render-without-data → render-with-data
+on the same day). But the cross-day case was still broken: a day 1
+successful build sets the flag, day 2's not-enough-data branch
+overwrites innerHTML but the dataset flag is still `'true'`, and day
+2's eventual successful render skips `build()` because the flag says
+the skeleton is already there.
+
+Fix: explicitly `delete container.dataset.dailyReportBuilt;` in the
+not-enough-data branch. Comment updated to cite the cross-day scenario.
+
+### Finding 2 (overlapping fetch race across dates)
+
+`render()`'s in-flight dedup was `if (inFlight === cacheKeyValue)
+return;` — same-date dedup only. For different dates, two
+`fetchAndRender` calls could be in flight at once, and whichever
+resolved last would win.
+
+Fix: monotonic `generation` counter; each `fetchAndRender` captures
+`const myGeneration = ++generation` and checks `if (myGeneration !==
+generation) return;` on every resolution path (success, success-data,
+catch). The `finally` block also guards `inFlight = null` with
+`if (myGeneration === generation)` so an older request's finally
+doesn't clobber a newer request's inFlight marker.
+
+### Finding 3 (XSS via unescaped HTML injection)
+
+Two innerHTML call sites were inserting server-supplied text
+unescaped. The codebase already has the correct pattern in
+`renderLLMInsights` (insights.js): `escapeHtml(text)` first, then
+`.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')` on the escaped
+string. `formatMarkdownBoldToHtml`'s docstring claimed to "mirror"
+the sibling renderers but was missing the `escapeHtml` step.
+
+Fix:
+- `formatMarkdownBoldToHtml` now does
+  `escapeHtml(String(text ?? '')).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')`
+  — escape first, then bold-markdown replacement on the escaped text.
+  `String(text ?? '')` also closes a related latent null-coercion bug
+  if the server ever returned `null` for `data.insights`. The test
+  `coerces non-string input to a string before escaping` covers
+  `null`/`undefined`/numeric inputs.
+- The catch block in `report-widget.js` now
+  `${escapeHtml(message)}`s the server-supplied error string before
+  interpolating into the innerHTML template.
+- The reusable `escapeHtml` is the one already in `dashboard/js/utils.js`
+  (line 153, exported). I import it into `report-widget.js` alongside
+  the existing `formatMarkdownBoldToHtml` and `ensureWidgetBuilt`
+  imports. **No import cycle**: `report-widget.js` → `utils.js` is a
+  leaf (utils has no relative imports of report-widget, and
+  `escapeHtml` itself has no relative imports), verified by running
+  `bunx tsc --noEmit` clean and the full unit suite green three times
+  in a row.
+
+The pre-existing `escapeHtml` already covers the full 5-character set
+(`& < > " '`) that the test cases probe (`<img onerror=`, `" onmouseover="`).
+
+## One-line test summary
+
+`618 / 618` unit tests pass (7 new: 1 cross-day regression in daily-report, 3 in report-widget covering both XSS sites + the race, 3 in utils for XSS hardening + non-string coercion), `tsc --noEmit` clean, `lint:baseline` passes, all 3 regression guards individually verified to catch the bug when the corresponding fix is reverted, and the existing `daily field report` Playwright overflow test still passes.
+
+Status: DONE
+

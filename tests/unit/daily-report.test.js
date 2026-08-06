@@ -127,4 +127,34 @@ describe('renderDailyFieldReport', () => {
     expect(container.querySelector('#dailyFieldReportBody').innerHTML).toContain('<b>quiet</b>');
     expect(container.querySelector('#dailyFieldReportDate')).not.toBeNull();
   });
+
+  it('clears the stale dailyReportBuilt flag when the not-enough-data branch overwrites the container (cross-day regression)', async () => {
+    // C19-3 regression guard: a previous successful day's build leaves
+    // dataset.dailyReportBuilt = 'true' on the container. If a later
+    // render with no data overwrites the container's innerHTML with the
+    // placeholder (which lacks #dailyFieldReportDate), the flag MUST
+    // be cleared, otherwise the next render that finds data would skip
+    // build() inside dailyReport.render and crash populating a missing
+    // #dailyFieldReportDate element.
+    globalThis.fetch = mock(() => Promise.resolve(new Response(JSON.stringify({ insights: 'A **quiet** day.', source: 'taskferry' }), { status: 200 })));
+
+    renderDailyFieldReport(container, { pricing_by_model: {} }, summaryFixture());
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(container.dataset.dailyReportBuilt).toBe('true');
+    expect(container.querySelector('#dailyFieldReportDate')).not.toBeNull();
+
+    resetDailyFieldReportForTest();
+    expect(container.dataset.dailyReportBuilt).toBe('true');
+
+    renderDailyFieldReport(container, { pricing_by_model: {} }, []);
+    expect(container.dataset.dailyReportBuilt).toBeUndefined();
+    expect(container.querySelector('#dailyFieldReportDate')).toBeNull();
+
+    renderDailyFieldReport(container, { pricing_by_model: {} }, summaryFixture());
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(container.querySelector('#dailyFieldReportDate')).not.toBeNull();
+    expect(container.querySelector('#dailyFieldReportBody').innerHTML).toContain('<b>quiet</b>');
+  });
 });

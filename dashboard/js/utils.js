@@ -396,12 +396,16 @@ export const meanStddev = (values) => {
 
 // ===== MARKDOWN HELPERS =====
 /**
- * Convert markdown bold to HTML <b>. Mirrors the existing field-report
- * response renderers. Pattern-only transform with no content escaping —
- * preserves current behavior on untrusted taskferry output.
+ * Convert markdown bold to HTML <b> for the taskferry-generated report body.
+ * The raw text is treated as untrusted (it originates from a model output)
+ * and is HTML-escaped BEFORE the bold-markdown replacement, so only the
+ * "star-star" pairs survive as markup. Mirrors the order of operations in
+ * renderLLMInsights (dashboard/js/views/analytics/tabs/insights.js):
+ * escapeHtml first, then the bold-markdown replace on the escaped string.
+ * Callers can safely assign the result via innerHTML.
  * @param {string} text
  * @returns {string}
  */
 export function formatMarkdownBoldToHtml(text) {
-    return text.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    return escapeHtml(String(text ?? '')).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
 }

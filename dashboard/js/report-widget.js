@@ -1,4 +1,4 @@
-import { formatMarkdownBoldToHtml, ensureWidgetBuilt } from './utils.js';
+import { formatMarkdownBoldToHtml, ensureWidgetBuilt, escapeHtml } from './utils.js';
 
 /**
  * @typedef {object} ReportWidgetOptions
@@ -28,6 +28,15 @@ export function createTaskferryReportWidget(opts) {
     let cached = null;
     /** @type {any} */
     let inFlight = null;
+    // C19-3 (race fix): monotonically increasing generation counter for
+    // overlapping fetchAndRender calls. A new render() bumps the counter;
+    // when a previous fetch's response resolves, it checks its captured
+    // generation and bails out if a newer fetch has been started in the
+    // meantime. Without this, an older request that resolves AFTER a newer
+    // one would overwrite `cached` and the visible report with the older
+    // (stale) day's content. Also guards the inFlight cleanup so the older
+    // request's `finally` doesn't clobber the newer request's inFlight marker.
+    let generation = 0;
 
     /** @param {HTMLElement} container */
     function build(container) {
@@ -42,6 +51,7 @@ export function createTaskferryReportWidget(opts) {
     /** @param {HTMLElement} container @param {any} summary */
     async function fetchAndRender(container, summary) {
         const cacheKeyValue = summary[opts.cacheKeyField];
+        const myGeneration = ++generation;
         inFlight = cacheKeyValue;
         const bodyEl = /** @type {HTMLElement} */ (container.querySelector(`#${opts.bodyId}`));
         bodyEl.textContent = opts.loadingText;
@@ -51,20 +61,29 @@ export function createTaskferryReportWidget(opts) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(summary)
             });
+            if (myGeneration !== generation) return;
             if (!res.ok) {
                 const errBody = await res.json().catch(() => ({}));
                 throw new Error(errBody.error || `Server error: ${res.status}`);
             }
             const data = await res.json();
+            if (myGeneration !== generation) return;
             cached = { [opts.cacheKeyField]: cacheKeyValue, text: data.insights };
             renderCached(container);
         } catch (err) {
+            if (myGeneration !== generation) return;
             const message = err instanceof Error ? err.message : String(err);
-            bodyEl.innerHTML = `<span style="color: var(--mono-danger, #ef4444);">Report generation failed: ${message}</span> `
+            // C19-3 (XSS fix): escape the server-supplied error message
+            // before interpolating it into the innerHTML template. The
+            // message originates from res.json().error (or the synthesized
+            // "Server error: NNN" string), so it is untrusted HTML.
+            bodyEl.innerHTML = `<span style="color: var(--mono-danger, #ef4444);">Report generation failed: ${escapeHtml(message)}</span> `
                 + `<button type="button" class="retry-btn" id="${opts.retryId}">↻ Retry</button>`;
             container.querySelector(`#${opts.retryId}`)?.addEventListener('click', () => fetchAndRender(container, summary));
         } finally {
-            inFlight = null;
+            if (myGeneration === generation) {
+                inFlight = null;
+            }
         }
     }
 
@@ -98,6 +117,7 @@ export function createTaskferryReportWidget(opts) {
     function resetForTest() {
         cached = null;
         inFlight = null;
+        generation = 0;
     }
 
     return { render, resetForTest };
