@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:te
 import { EventEmitter } from 'events';
 import * as path from 'path';
 import {
+  createDailyReportHandler,
   createInsightsHandler,
   createTokensHandler,
   handleGitBlameRoute
@@ -44,6 +45,15 @@ function createMockRes() {
 
 async function submitSummary(handler, summary, res = createMockRes()) {
   const req = createMockReq('/api/insights/analyze');
+  const promise = handler(req, res, undefined);
+  req.emit('data', Buffer.from(JSON.stringify(summary)));
+  req.emit('end');
+  await promise;
+  return res;
+}
+
+async function submitDailyReport(handler, summary, res = createMockRes()) {
+  const req = createMockReq('/api/insights/daily-report');
   const promise = handler(req, res, undefined);
   req.emit('data', Buffer.from(JSON.stringify(summary)));
   req.emit('end');
@@ -349,6 +359,385 @@ describe('createInsightsHandler taskferry analysis', () => {
     res.emit('close');
 
     expect(cancelArgs).toEqual(['cancel', 'oc_test_cancel']);
+  });
+
+  // Final-review fix: the cancel listener was registered AFTER the
+  // dispatch await, so a 'close' that fired while dispatch was still
+  // in flight (e.g. the outer gateway timeout winning the race) was
+  // silently dropped — leaving the worker to keep running for up to
+  // ~200s after the response had already ended. The new contract
+  // registers the cancel listener BEFORE dispatch and re-checks
+  // `responseClosed` immediately after dispatch returns, so a close
+  // during the dispatch phase also gets the task cancelled.
+  it('cancels the taskferry worker if the response closes while dispatch is still in flight', async () => {
+    const cancelCalls = [];
+    const fsImpl = createScratchFs();
+    const execFileImpl = mock((file, args, options, callback) => {
+      if (args[0] === 'dispatch') {
+        // Emit 'close' on the response synchronously, BEFORE the dispatch
+        // callback fires — this simulates the outer-gateway-timeout race
+        // where the response ends while we're still waiting for dispatch
+        // to return. The original code path would never have observed this
+        // close (the cancel listener was attached after the await).
+        res.emit('close');
+        process.nextTick(() => callback(null, 'id: oc_test_dispatch_close\nstatus: running\n', ''));
+      } else if (args[0] === 'cancel') {
+        cancelCalls.push(args);
+        process.nextTick(() => callback(null, '', ''));
+      } else {
+        process.nextTick(() => callback(null, '', ''));
+      }
+    });
+    const handler = createInsightsHandler({ execFileImpl, fsImpl });
+    const res = createMockRes();
+    const consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
+
+    await submitSummary(handler, validSummary, res);
+
+    expect(cancelCalls).toEqual([['cancel', 'oc_test_dispatch_close']]);
+    consoleErrorSpy.mockRestore();
+  });
+
+  // Final-review fix: the shared runTaskferryAnalysis now rejects blank /
+  // non-string results. The deep-insights route (createInsightsHandler) was
+  // also vulnerable to the same "200 with empty insights" bug as the
+  // daily-report route, so we lock in the same 503 behavior here.
+  it('returns 503 (not 200 with empty insights) when taskferry result message is an empty string', async () => {
+    const fsImpl = createScratchFs();
+    const execFileImpl = mock((file, args, options, callback) => {
+      if (args[0] === 'dispatch') process.nextTick(() => callback(null, 'id: oc_blank\nstatus: running\n', ''));
+      else if (args[0] === 'wait') process.nextTick(() => callback(null, 'id: oc_blank\nstatus: done\nexitCode: 0\n', ''));
+      else if (args[0] === 'result') process.nextTick(() => callback(null, `taskId: oc_blank\nstatus: done\nmessage: ${JSON.stringify('')}\n`, ''));
+      else process.nextTick(() => callback(null, '', ''));
+    });
+    const consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await submitSummary(createInsightsHandler({ execFileImpl, fsImpl }), validSummary);
+
+    expect(res.statusCode).toBe(503);
+    expect(JSON.parse(res.body)).toEqual({ error: 'AI analysis service unavailable' });
+    expect(res.body).not.toMatch(/"insights"/);
+    consoleErrorSpy.mockRestore();
+  });
+});
+
+describe('handleDailyReportRoute', () => {
+  const validDailyReportSummary = {
+    date: '2026-07-28',
+    totalTokensToday: 500000,
+    totalCostToday: 4.2,
+    topModelToday: 'anthropic/claude-sonnet-5',
+    peakHour: {
+      hour: 14,
+      totalTokens: 200000,
+      tokenShareByModel: { 'anthropic/claude-sonnet-5': 0.76, 'kimi/k2p5': 0.24 },
+      costShareByModel: { 'anthropic/claude-sonnet-5': 0.6, 'kimi/k2p5': 0.4 }
+    },
+    baseline: { meanHourlyTokens: 90000, stddevHourlyTokens: 30000 },
+    hourlyBuckets: [{ hour: 13, totalTokens: 80000 }, { hour: 14, totalTokens: 200000 }]
+  };
+
+  it('rejects a malformed body with 400 before dispatching anything', async () => {
+    const execFileImpl = mock();
+    const handler = createDailyReportHandler({ execFileImpl });
+
+    const res = await submitDailyReport(handler, { date: 123 });
+
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Invalid request body/);
+    expect(execFileImpl).not.toHaveBeenCalled();
+  });
+
+  it('dispatches taskferry with a daily-report-shaped prompt and returns its message on success', async () => {
+    const fsImpl = createScratchFs();
+    let dispatchPrompt;
+    const execFileImpl = mock((file, args, options, callback) => {
+      const subcommand = args[0];
+      if (subcommand === 'dispatch') {
+        dispatchPrompt = args[args.indexOf('--prompt') + 1];
+        process.nextTick(() => callback(null, 'id: task-1\nstatus: running\n', ''));
+      } else if (subcommand === 'wait') {
+        process.nextTick(() => callback(null, 'id: task-1\nstatus: done\nexitCode: 0\n', ''));
+      } else if (subcommand === 'result') {
+        process.nextTick(() => callback(null, `taskId: task-1\nstatus: done\nmessage: ${JSON.stringify('A quiet day...')}\n`, ''));
+      } else {
+        process.nextTick(() => callback(null, '', ''));
+      }
+    });
+
+    const res = await submitDailyReport(createDailyReportHandler({ execFileImpl, fsImpl }), validDailyReportSummary);
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ insights: 'A quiet day...', source: 'taskferry' });
+    expect(dispatchPrompt).toContain('tokenShareByModel');
+    expect(dispatchPrompt).toContain('costShareByModel');
+    expect(dispatchPrompt).toContain('z-score');
+  });
+
+  // Final-review fix: the "HARD RULE: read exactly one file..." preamble
+  // (the taskferry worker's tool-access restriction) was duplicated
+  // verbatim across buildTaskferryPrompt and buildDailyReportPrompt.
+  // The fix extracts it into a shared helper so a future tightening of
+  // this security-relevant constraint only needs to change one place.
+  // This test pins the new contract: the rule text appears identically
+  // in both routes' dispatch prompts, AND both prompts point the rule
+  // at the SAME data file path the route wrote to disk.
+  it('embeds the same shared read-only-file rule in both the insights and daily-report dispatch prompts', async () => {
+    const fsImpl = createScratchFs();
+    const dispatchPrompts = [];
+    const execFileImpl = mock((file, args, options, callback) => {
+      const subcommand = args[0];
+      if (subcommand === 'dispatch') {
+        dispatchPrompts.push(args[args.indexOf('--prompt') + 1]);
+        process.nextTick(() => callback(null, `id: ${subcommand}-shared-rule\nstatus: running\n`, ''));
+      } else if (subcommand === 'wait') {
+        process.nextTick(() => callback(null, `id: ${subcommand}-shared-rule\nstatus: done\nexitCode: 0\n`, ''));
+      } else if (subcommand === 'result') {
+        process.nextTick(() => callback(null, `taskId: ${subcommand}-shared-rule\nstatus: done\nmessage: ${JSON.stringify('ok')}\n`, ''));
+      } else {
+        process.nextTick(() => callback(null, '', ''));
+      }
+    });
+
+    await submitSummary(createInsightsHandler({ execFileImpl, fsImpl }), validSummary);
+    await submitDailyReport(createDailyReportHandler({ execFileImpl, fsImpl }), validDailyReportSummary);
+
+    expect(dispatchPrompts).toHaveLength(2);
+    const ruleFragment = 'HARD RULE: this is a read-only analysis task. You may read exactly one file — ';
+    expect(dispatchPrompts[0]).toContain(ruleFragment);
+    expect(dispatchPrompts[1]).toContain(ruleFragment);
+    // Both prompts must read from their own scratch file — verify each
+    // path appears in its own prompt.
+    const insightsPath = (dispatchPrompts[0].match(/one file — ([^\s—]+)/) || [])[1];
+    const dailyPath = (dispatchPrompts[1].match(/one file — ([^\s—]+)/) || [])[1];
+    expect(insightsPath).toMatch(/insights-data-.*\.ndjson$/);
+    expect(dailyPath).toMatch(/daily-report-data-.*\.json$/);
+  });
+
+  // Final-review fix: the daily-report scratch file used to be written
+  // as a pretty-printed multi-line JSON object under a `.ndjson`
+  // extension — but the file isn't newline-delimited. The worker's
+  // file-read tool truncates at 2000 chars per line, so a single
+  // pretty-printed multi-line object exposes only the first 2000 chars
+  // of line 1 to the model. Fix: serialize as compact single-line JSON
+  // and rename to `.json` so the file actually contains a single
+  // object the worker can read whole, and the extension matches the
+  // shape. This test pins the new contract: the scratch file path ends
+  // in `.json` (not `.ndjson`) and its contents are a single line.
+  it('writes the daily-report scratch file as a single-line .json file, not multi-line .ndjson', async () => {
+    const { TASKFERRY_SCRATCH_DIR } = require('../../../../lib/config');
+    const fsImpl = createScratchFs();
+    let dispatchPrompt;
+    let dataFilePathAtDispatchTime;
+    let dataFileContentsAtDispatchTime;
+    const execFileImpl = mock((file, args, options, callback) => {
+      const subcommand = args[0];
+      if (subcommand === 'dispatch') {
+        dispatchPrompt = args[args.indexOf('--prompt') + 1];
+        // The daily-report prompt wraps the file path in
+        // "**Complete input data:** <path> (one JSON object, ...)" —
+        // extract just the path before the trailing parenthetical.
+        const match = dispatchPrompt.match(/Complete input data:\*\* (\S+\.json)/);
+        dataFilePathAtDispatchTime = match ? match[1] : null;
+        dataFileContentsAtDispatchTime = dataFilePathAtDispatchTime ? fsImpl.files.get(dataFilePathAtDispatchTime) : null;
+        process.nextTick(() => callback(null, 'id: task-shape\nstatus: running\n', ''));
+      } else if (subcommand === 'wait') {
+        process.nextTick(() => callback(null, 'id: task-shape\nstatus: done\nexitCode: 0\n', ''));
+      } else if (subcommand === 'result') {
+        process.nextTick(() => callback(null, `taskId: task-shape\nstatus: done\nmessage: ${JSON.stringify('ok')}\n`, ''));
+      } else {
+        process.nextTick(() => callback(null, '', ''));
+      }
+    });
+
+    await submitDailyReport(createDailyReportHandler({ execFileImpl, fsImpl }), validDailyReportSummary);
+
+    expect(dataFilePathAtDispatchTime).toMatch(/\/daily-report-data-.*\.json$/);
+    expect(dataFilePathAtDispatchTime).not.toMatch(/\.ndjson$/);
+    expect(dataFilePathAtDispatchTime).toMatch(new RegExp(`^${TASKFERRY_SCRATCH_DIR.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/`));
+    expect(dataFileContentsAtDispatchTime).toBeDefined();
+    expect(dataFileContentsAtDispatchTime.split('\n')).toHaveLength(1);
+    const parsed = JSON.parse(dataFileContentsAtDispatchTime);
+    expect(parsed.date).toBe(validDailyReportSummary.date);
+  });
+
+  it('returns 503 without a silent fallback when taskferry dispatch fails', async () => {
+    const fsImpl = createScratchFs();
+    const execFileImpl = mock((file, args, options, callback) => {
+      if (args[0] === 'dispatch') process.nextTick(() => callback(new Error('TASKFERRY_INTERNAL_FAILURE_SENTINEL')));
+      else process.nextTick(() => callback(null, '', ''));
+    });
+    const consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await submitDailyReport(createDailyReportHandler({ execFileImpl, fsImpl }), validDailyReportSummary);
+
+    expect(res.statusCode).toBe(503);
+    const parsed = JSON.parse(res.body);
+    expect(typeof parsed.error).toBe('string');
+    expect(parsed.error).not.toContain('TASKFERRY_INTERNAL_FAILURE_SENTINEL');
+    expect(res.body).not.toMatch(/quota|daily|hour|model/i);
+    consoleErrorSpy.mockRestore();
+  });
+
+  // Final-review fix: a taskferry task that completed with status: done but
+  // emitted an empty/whitespace-only message used to be passed through as a
+  // 200 with insights: '' — the widget's renderCached would then render a
+  // blank body with no error and no Retry. The shared runTaskferryAnalysis
+  // now rejects blank/non-string results so the existing try/catch surfaces
+  // it as 503, matching the AI-report-generation-unavailable error path
+  // the widget already knows how to handle.
+  it('returns 503 (not 200 with empty insights) when taskferry result message is an empty string', async () => {
+    const fsImpl = createScratchFs();
+    const execFileImpl = mock((file, args, options, callback) => {
+      if (args[0] === 'dispatch') process.nextTick(() => callback(null, 'id: task-blank\nstatus: running\n', ''));
+      else if (args[0] === 'wait') process.nextTick(() => callback(null, 'id: task-blank\nstatus: done\nexitCode: 0\n', ''));
+      else if (args[0] === 'result') process.nextTick(() => callback(null, `taskId: task-blank\nstatus: done\nmessage: ${JSON.stringify('')}\n`, ''));
+      else process.nextTick(() => callback(null, '', ''));
+    });
+    const consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await submitDailyReport(createDailyReportHandler({ execFileImpl, fsImpl }), validDailyReportSummary);
+
+    expect(res.statusCode).toBe(503);
+    const parsed = JSON.parse(res.body);
+    expect(parsed).toEqual({ error: 'AI report generation unavailable' });
+    expect(res.body).not.toMatch(/"insights"/);
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('returns 503 when taskferry result message is whitespace-only', async () => {
+    const fsImpl = createScratchFs();
+    const execFileImpl = mock((file, args, options, callback) => {
+      if (args[0] === 'dispatch') process.nextTick(() => callback(null, 'id: task-ws\nstatus: running\n', ''));
+      else if (args[0] === 'wait') process.nextTick(() => callback(null, 'id: task-ws\nstatus: done\nexitCode: 0\n', ''));
+      else if (args[0] === 'result') process.nextTick(() => callback(null, `taskId: task-ws\nstatus: done\nmessage: ${JSON.stringify('   \n\t  ')}\n`, ''));
+      else process.nextTick(() => callback(null, '', ''));
+    });
+    const consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await submitDailyReport(createDailyReportHandler({ execFileImpl, fsImpl }), validDailyReportSummary);
+
+    expect(res.statusCode).toBe(503);
+    expect(JSON.parse(res.body)).toEqual({ error: 'AI report generation unavailable' });
+    consoleErrorSpy.mockRestore();
+  });
+});
+
+describe('handleDailyReportRoute request validation tightening', () => {
+  // Final-review fix: validateDailyReportSummary used to accept any value
+  // with `typeof === 'number'`, which lets NaN, Infinity, -Infinity, and
+  // negative counts through — and dispatched the taskferry worker against
+  // nonsensical numeric data. It now requires Number.isFinite plus range
+  // checks on hour fields and non-negativity on the count/sum fields.
+  const validDailyReportSummary = {
+    date: '2026-07-28',
+    totalTokensToday: 500000,
+    totalCostToday: 4.2,
+    topModelToday: 'anthropic/claude-sonnet-5',
+    peakHour: {
+      hour: 14,
+      totalTokens: 200000,
+      tokenShareByModel: { 'anthropic/claude-sonnet-5': 0.76, 'kimi/k2p5': 0.24 },
+      costShareByModel: { 'anthropic/claude-sonnet-5': 0.6, 'kimi/k2p5': 0.4 }
+    },
+    baseline: { meanHourlyTokens: 90000, stddevHourlyTokens: 30000 },
+    hourlyBuckets: [{ hour: 13, totalTokens: 80000 }, { hour: 14, totalTokens: 200000 }]
+  };
+
+  const rejection = async (mutator) => {
+    const execFileImpl = mock();
+    const handler = createDailyReportHandler({ execFileImpl });
+    const res = await submitDailyReport(handler, mutator(structuredClone(validDailyReportSummary)));
+    return { res, execFileImpl };
+  };
+
+  it('rejects NaN totalTokensToday with 400 and never dispatches', async () => {
+    const { res, execFileImpl } = await rejection((s) => { s.totalTokensToday = NaN; return s; });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Invalid request body.*totalTokensToday/);
+    expect(execFileImpl).not.toHaveBeenCalled();
+  });
+
+  it('rejects Infinity baseline.meanHourlyTokens with 400 and never dispatches', async () => {
+    const { res, execFileImpl } = await rejection((s) => { s.baseline.meanHourlyTokens = Infinity; return s; });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Invalid request body.*meanHourlyTokens/);
+    expect(execFileImpl).not.toHaveBeenCalled();
+  });
+
+  it('rejects -Infinity baseline.stddevHourlyTokens with 400 and never dispatches', async () => {
+    const { res, execFileImpl } = await rejection((s) => { s.baseline.stddevHourlyTokens = -Infinity; return s; });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Invalid request body.*stddevHourlyTokens/);
+    expect(execFileImpl).not.toHaveBeenCalled();
+  });
+
+  it('rejects peakHour.hour = 24 with 400 and never dispatches', async () => {
+    const { res, execFileImpl } = await rejection((s) => { s.peakHour.hour = 24; return s; });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Invalid request body.*peakHour\.hour/);
+    expect(execFileImpl).not.toHaveBeenCalled();
+  });
+
+  it('rejects peakHour.hour = -1 with 400 and never dispatches', async () => {
+    const { res, execFileImpl } = await rejection((s) => { s.peakHour.hour = -1; return s; });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Invalid request body.*peakHour\.hour/);
+    expect(execFileImpl).not.toHaveBeenCalled();
+  });
+
+  it('rejects an out-of-range hourlyBuckets[i].hour with 400 and never dispatches', async () => {
+    const { res, execFileImpl } = await rejection((s) => { s.hourlyBuckets[0].hour = 25; return s; });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Invalid request body.*hourlyBuckets\[0\]\.hour/);
+    expect(execFileImpl).not.toHaveBeenCalled();
+  });
+
+  it('rejects a negative hourlyBuckets[i].totalTokens with 400 and never dispatches', async () => {
+    const { res, execFileImpl } = await rejection((s) => { s.hourlyBuckets[0].totalTokens = -1; return s; });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Invalid request body.*hourlyBuckets\[0\]\.totalTokens/);
+    expect(execFileImpl).not.toHaveBeenCalled();
+  });
+
+  it('rejects a negative totalTokensToday with 400 and never dispatches', async () => {
+    const { res, execFileImpl } = await rejection((s) => { s.totalTokensToday = -1; return s; });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Invalid request body.*totalTokensToday/);
+    expect(execFileImpl).not.toHaveBeenCalled();
+  });
+
+  it('rejects a negative totalCostToday with 400 and never dispatches', async () => {
+    const { res, execFileImpl } = await rejection((s) => { s.totalCostToday = -0.01; return s; });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Invalid request body.*totalCostToday/);
+    expect(execFileImpl).not.toHaveBeenCalled();
+  });
+
+  it('rejects a negative peakHour.totalTokens with 400 and never dispatches', async () => {
+    const { res, execFileImpl } = await rejection((s) => { s.peakHour.totalTokens = -100; return s; });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Invalid request body.*peakHour\.totalTokens/);
+    expect(execFileImpl).not.toHaveBeenCalled();
+  });
+
+  // Final-review fix: validateDailyReportSummary's error message claims
+  // "finite integer in 0..23" for the hour fields, but the check only
+  // verified `Number.isFinite` + range — letting fractional hours like
+  // 14.5 through and dispatching the taskferry worker against them. The
+  // new check uses `Number.isInteger` to match the documented contract.
+  it('rejects a fractional peakHour.hour (14.5) with 400 and never dispatches', async () => {
+    const { res, execFileImpl } = await rejection((s) => { s.peakHour.hour = 14.5; return s; });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Invalid request body.*peakHour\.hour/);
+    expect(execFileImpl).not.toHaveBeenCalled();
+  });
+
+  it('rejects a fractional hourlyBuckets[i].hour (3.14) with 400 and never dispatches', async () => {
+    const { res, execFileImpl } = await rejection((s) => { s.hourlyBuckets[0].hour = 3.14; return s; });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Invalid request body.*hourlyBuckets\[0\]\.hour/);
+    expect(execFileImpl).not.toHaveBeenCalled();
   });
 });
 

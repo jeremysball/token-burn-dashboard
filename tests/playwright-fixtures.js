@@ -136,6 +136,21 @@ async function routeDashboardApis(page) {
       body: JSON.stringify(spikesResponse)
     });
   });
+
+  await page.route('**/api/insights/analyze', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ insights: 'Mock analysis result.', source: 'taskferry' })
+    });
+  });
+  await page.route('**/api/insights/daily-report', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ insights: 'A quiet day, nothing dramatic.', source: 'taskferry' })
+    });
+  });
 }
 
 module.exports = {

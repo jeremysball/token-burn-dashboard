@@ -13,7 +13,7 @@ const { resolveCorsOrigin, isAuthorized } = require('./lib/security');
 
 // Components
 const { startBackgroundUpdater } = require('./lib/cache');
-const { handleTokensRoute, handleHistoricalRoute, handleHealthRoute, handleInsightsAnalyzeRoute, handleGitBlameRoute, handleSpikeDetectiveRoute, handleSpikesListRoute, handlePricingRoute } = require('./lib/routes/api');
+const { handleTokensRoute, handleHistoricalRoute, handleHealthRoute, handleDailyReportRoute, handleInsightsAnalyzeRoute, handleGitBlameRoute, handleSpikeDetectiveRoute, handleSpikesListRoute, handlePricingRoute } = require('./lib/routes/api');
 const { handleSseRoute } = require('./lib/routes/sse');
 const { handleStaticRoutes } = require('./lib/routes/static');
 
@@ -55,11 +55,12 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   
-  // Gateway timeout configuration (not for SSE). /api/insights/analyze gets a
-  // longer budget since it dispatches an agentic taskferry worker.
+  // Gateway timeout configuration (not for SSE). /api/insights/analyze and
+  // /api/insights/daily-report get a longer budget since both dispatch an
+  // agentic taskferry worker that can run well past the default timeout.
   let requestTimeout;
   if (url.pathname !== '/api/tokens/stream') {
-    const isInsightsAnalyze = url.pathname === '/api/insights/analyze' && req.method === 'POST';
+    const isInsightsAnalyze = (url.pathname === '/api/insights/analyze' || url.pathname === '/api/insights/daily-report') && req.method === 'POST';
     requestTimeout = setTimeout(() => {
       if (!res.writableEnded) {
         res.writeHead(504, { 'Content-Type': 'application/json' });
@@ -104,6 +105,12 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === '/api/insights/analyze' && req.method === 'POST') {
     const result = await handleInsightsAnalyzeRoute(req, res, requestTimeout);
+    logResponse(res.statusCode);
+    return result;
+  }
+
+  if (url.pathname === '/api/insights/daily-report' && req.method === 'POST') {
+    const result = await handleDailyReportRoute(req, res, requestTimeout);
     logResponse(res.statusCode);
     return result;
   }
