@@ -7,12 +7,16 @@ on:
 
 jobs:
   check:
-    name: check / ${{ matrix.leg }}
+    # Used to run as a 4-way matrix (lint, typecheck, unit, lifecycle), each
+    # leg claiming its own GitHub-hosted runner. With several PRs open at
+    # once that saturated this account's concurrent-runner cap and left legs
+    # sitting `queued` for 10-20+ minutes with zero billable compute -- never
+    # actually starting, just waiting on a slot. Collapsing to one job means
+    # one runner request per push/PR instead of four, which is the actual
+    # fix for the contention; it costs matrix parallelism (the legs now run
+    # sequentially instead of side by side), a reasonable trade against
+    # everything queuing indefinitely.
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        leg: [lint, typecheck, unit, lifecycle]
     steps:
       - uses: actions/checkout@v5
 
@@ -23,17 +27,13 @@ jobs:
       - run: bun install --frozen-lockfile
 
       - name: lint
-        if: matrix.leg == 'lint'
         run: bun run lint:baseline
 
       - name: typecheck
-        if: matrix.leg == 'typecheck'
         run: bun run typecheck
 
       - name: unit
-        if: matrix.leg == 'unit'
         run: bun test tests/unit --coverage --coverage-reporter=lcov && bun run coverage:check
 
       - name: lifecycle
-        if: matrix.leg == 'lifecycle'
         run: bun run test:lifecycle

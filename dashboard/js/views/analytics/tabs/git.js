@@ -84,7 +84,7 @@ const updateDirectorySelector = (directories, selectedCwd) => {
         (dir) => {
         const icon = dir.isGitRepo ? '▪' : '▫';
         const selected = dir.path === currentValue ? 'selected' : '';
-        return `<option value="${dir.path}" ${selected}>${icon} ${dir.name}</option>`;
+        return `<option value="${escapeHtml(dir.path)}" ${selected}>${icon} ${escapeHtml(dir.name)}</option>`;
     }).join('');
     
     // Restore selection if possible

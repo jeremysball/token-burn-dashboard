@@ -35,6 +35,47 @@ describe('loadGitBlame error escaping', () => {
     });
 });
 
+// ========== git.js: updateDirectorySelector (#50) ==========
+
+describe('updateDirectorySelector escaping', () => {
+    beforeEach(() => {
+        document.body.innerHTML = `
+            <select id="git-days-selector"><option value="30">30d</option></select>
+            <select id="git-directory-selector"><option value="">All</option></select>
+            <div id="git-total-commits"></div>
+            <div id="git-total-cost"></div>
+            <div id="git-total-sessions"></div>
+            <div id="git-commits-list"></div>
+            <div id="git-files-list"></div>
+        `;
+    });
+
+    it('escapes directory path/name so a malicious directory entry cannot inject markup', async () => {
+        const maliciousPath = '"><img src=x onerror=alert(1)>';
+        global.fetch = mock(() => Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({
+                commits: [],
+                projects: [],
+                directories: [
+                    { path: maliciousPath, name: '<img src=x onerror=alert(1)>', isGitRepo: true }
+                ]
+            })
+        }));
+
+        await loadGitBlame();
+
+        const selector = document.getElementById('git-directory-selector');
+        // The escaped "> never breaks out of the value attribute into real
+        // markup, so no <img> element gets created...
+        expect(selector.querySelector('img')).toBeNull();
+        // ...and the option's actual value stays the literal (contained)
+        // string rather than being truncated at the injected quote.
+        expect(selector.options[0].value).toBe(maliciousPath);
+        expect(selector.innerHTML).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    });
+});
+
 // ========== git.js: showCommitDetails catch ==========
 
 describe('showCommitDetails error escaping', () => {
