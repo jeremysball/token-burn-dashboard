@@ -195,7 +195,7 @@ export function updateOdometer(el, valueStr) {
         renderOdometer(el, valueStr);
         return;
     }
-    if (valueStr === state.valueStr) return;
+    if (valueStr === state.valueStr && state.pendingValueStr == null) return;
 
     const codePoints = Array.from(valueStr);
     const layoutChanged = codePoints.length !== state.digitCols.length || codePoints.some((codePoint, i) => {
