@@ -185,7 +185,10 @@ function clearTicker(el) {
     el._equivLines = [];
     el._equivRotationIndex = 0;
     const textEl = el.querySelector('.equiv-text');
-    if (textEl) textEl.textContent = '';
+    if (textEl) {
+        textEl.textContent = '';
+        textEl.classList.remove('fade');
+    }
 }
 
 /**
