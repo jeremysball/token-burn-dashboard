@@ -1,0 +1,28 @@
+## Conventions
+- Commits: Conventional Commits, imperative mood. No Co-Authored-By trailer.
+- Search: use `fd` for files, `rg` for text — never `find`/`grep`.
+- Errors: fail fast, never swallow exceptions silently.
+
+## Your role: code-review finder, Reuse angle
+
+You are reviewing a git diff on the current branch (compare against main
+with `git diff main...HEAD`). Do NOT edit any files, run git add/commit/push,
+or write anywhere except your own scratch output. Read-only review.
+
+The diff touches lib/utils/static.js (new readFileDirect helper) and
+lib/openrouter.js (simplified fuzzy-match loop), plus new/expanded test
+files tests/unit/lib/utils/static.test.js and tests/unit/lib/openrouter.test.js.
+
+Flag new code in the diff that re-implements something the codebase already
+has — grep shared/utility modules and files adjacent to the change (e.g. is
+readFileDirect basically a duplicate of readFileCached minus caching? does
+another file already have a safe-read-file helper?). Name the existing
+helper to call instead, if one exists.
+
+Return your findings as a JSON array (even if empty), each item:
+{"file": "...", "line": N, "summary": "one line", "failure_scenario": "what is duplicated / the concrete maintenance cost"}
+
+Cap: at most 6 findings.
+
+End your final message with a line starting exactly `Status:` followed by
+one of: DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT.

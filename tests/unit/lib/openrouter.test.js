@@ -9,7 +9,7 @@ const {
   setOpenRouterPricingSnapshot
 } = require('../../../lib/openrouter');
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, beforeEach } from 'bun:test';
 
 describe('OpenRouter first-slash parsing', () => {
   it('strips only the first provider segment, keeps the rest', () => {
@@ -32,6 +32,11 @@ describe('OpenRouter first-slash parsing', () => {
 });
 
 describe('getOpenRouterPricingRecord fuzzy fallback', () => {
+  // Reset the pricing snapshot before each test to avoid order-dependent failures
+  beforeEach(() => {
+    setOpenRouterPricingSnapshot({ models: [] });
+  });
+
   it('does not match a shorter model id onto a longer catalog-only entry', () => {
     setOpenRouterPricingSnapshot({
       fetchedAt: Date.now(),
@@ -61,6 +66,13 @@ describe('getOpenRouterPricingRecord fuzzy fallback', () => {
       ]
     });
 
-    expect(getOpenRouterPricingRecord('GPT-4o-Mini')).not.toBeNull();
+    const record = getOpenRouterPricingRecord('GPT-4o-Mini');
+    expect(record).not.toBeNull();
+    expect(record?.id).toBe('openai/gpt-4o-mini');
+    // Pricing is normalized to per-million: 0.00000015 * 1,000,000 = 0.15
+    // Use a small tolerance for floating point comparison
+    const tolerance = 0.0001;
+    expect(Math.abs((record?.input || 0) - 0.15)).toBeLessThan(tolerance);
+    expect(Math.abs((record?.output || 0) - 0.6)).toBeLessThan(tolerance);
   });
 });
