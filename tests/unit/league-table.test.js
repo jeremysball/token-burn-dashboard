@@ -228,5 +228,117 @@ describe('buildLeagueTable', () => {
         expect(spy3.mock.calls).toHaveLength(1);
         spy3.mockRestore();
     });
+
+    it('invalidates the belt cache when earlier-week weeklyData changes (regression for the round-2 fingerprint bug)', () => {
+        // Round-2 review: the previous fingerprint only encoded length + the
+        // last-day's string + the last-day's per-model totals. Two SSE ticks
+        // with identical length, identical last-day string, and identical
+        // last-day per-model cumulative totals — but different earlier-week
+        // data — collided in the cache and returned stale belts. The
+        // corrected fingerprint must detect the earlier-week change and
+        // invalidate (forcing a fresh scoreTitleBelt). This scenario is
+        // real: an SSE handler can re-emit a partial week-history, keep the
+        // anchor (last day) totals stable, yet still mutate an earlier day.
+        const tokensByModel = {
+            'a/model-1': { total: 10500, input: 5250, output: 5250, cache_read: 0, cache_write: 0 },
+            'a/model-2': { total: 3000,  input: 1500, output: 1500, cache_read: 0, cache_write: 0 }
+        };
+        const weeklyData = fixtureWeeklyData({ 'a/model-1': 700, 'a/model-2': 200 });
+
+        // First call populates the cache.
+        buildLeagueTable(tokensByModel, {}, weeklyData, pricingByModel);
+
+        // Build a fresh-reference copy that keeps length, last-day string,
+        // and the last-day per-model totals identical to the baseline, but
+        // perturbs every earlier day. The previous fingerprint would call
+        // this a cache hit; the corrected fingerprint must invalidate.
+        const weeklyDataEarlierDelta = weeklyData.map((entry, idx) => {
+            if (idx === weeklyData.length - 1) return entry;
+            return {
+                day: entry.day,
+                tokens: entry.tokens,
+                models: Object.fromEntries(
+                    Object.entries(entry.models).map(([name, stats]) => [
+                        name,
+                        {
+                            total: stats.total + 1,
+                            input: stats.input + 1,
+                            output: stats.output + 1,
+                            cache_read: stats.cache_read,
+                            cache_write: stats.cache_write,
+                            reasoning: stats.reasoning
+                        }
+                    ])
+                )
+            };
+        });
+
+        // Sanity: the two arrays have identical length, last-day, and
+        // last-day per-model totals — exactly the attributes the buggy
+        // fingerprint used to gate on. If any of these drift, the test is
+        // not actually exercising the earlier-week-invalidation path.
+        const baselineLast = weeklyData[weeklyData.length - 1];
+        const deltaLast = weeklyDataEarlierDelta[weeklyDataEarlierDelta.length - 1];
+        expect(weeklyDataEarlierDelta).toHaveLength(weeklyData.length);
+        expect(deltaLast.day).toBe(baselineLast.day);
+        expect(deltaLast.models['a/model-1'].total).toBe(baselineLast.models['a/model-1'].total);
+        expect(deltaLast.models['a/model-2'].total).toBe(baselineLast.models['a/model-2'].total);
+
+        // Earlier-week change must invalidate the cache, forcing a fresh
+        // scoreTitleBelt invocation.
+        const spy = spyOn(titleBeltModule, 'scoreTitleBelt');
+        buildLeagueTable(tokensByModel, {}, weeklyDataEarlierDelta, pricingByModel);
+        expect(spy.mock.calls).toHaveLength(1);
+        spy.mockRestore();
+
+        // An SSE-shaped new-reference refresh with byte-equal content to
+        // the second array must still hit the cache.
+        const weeklyDataEarlierDeltaClone = weeklyDataEarlierDelta.map((entry) => ({
+            day: entry.day,
+            tokens: entry.tokens,
+            models: { ...entry.models }
+        }));
+        const spy2 = spyOn(titleBeltModule, 'scoreTitleBelt');
+        buildLeagueTable(tokensByModel, {}, weeklyDataEarlierDeltaClone, pricingByModel);
+        expect(spy2.mock.calls).toHaveLength(0);
+        spy2.mockRestore();
+    });
+
+    it('invalidates the belt cache when pricing presence flags change but numeric rates are byte-equal (regression for the round-2 pricing-fingerprint bug)', () => {
+        // Round-2 review: the previous pricing fingerprint only encoded
+        // numeric rates. The explicit presence flags (`hasInput` / `hasOutput`
+        // / `hasCacheRead` / `hasCacheWrite` / `hasReasoning`) flip
+        // `effectiveRatePerMillion` — and therefore thriftKing / sommelier —
+        // even when the underlying rates are byte-equal (see
+        // `pricingWithPresence` and `calculateCostWithPricing`). Two pricing
+        // records with identical numeric rates but different presence flags
+        // must produce different fingerprints so the cache invalidates.
+        const tokensByModel = {
+            'a/model-1': { total: 1000000, input: 500000, output: 500000, cache_read: 0, cache_write: 0, reasoning: 0 }
+        };
+
+        // rates-only fingerprint would collide here — presence flags differ.
+        const pricingRatesOnly = {
+            'a/model-1': { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75, reasoning: 0 }
+        };
+        const pricingExplicitHasInputFalse = {
+            'a/model-1': { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75, reasoning: 0, hasInput: false }
+        };
+
+        const weeklyData = fixtureWeeklyData({ 'a/model-1': 700 });
+
+        // Baseline: priced (hasInput derived from Number.isFinite(3) === true).
+        const baseline = buildLeagueTable(tokensByModel, {}, weeklyData, pricingRatesOnly);
+        expect(baseline.top[0].effectiveRatePerMillion).not.toBeNull();
+
+        // With explicit hasInput: false, the model is unpriced
+        // (requireRate(input=500000, flag=false, value=3) → false).
+        const spy = spyOn(titleBeltModule, 'scoreTitleBelt');
+        const explicitFalse = buildLeagueTable(tokensByModel, {}, weeklyData, pricingExplicitHasInputFalse);
+        // Cache invalidated by the presence-flag change.
+        expect(spy.mock.calls).toHaveLength(1);
+        spy.mockRestore();
+        expect(explicitFalse.top[0].effectiveRatePerMillion).toBeNull();
+    });
 });
 

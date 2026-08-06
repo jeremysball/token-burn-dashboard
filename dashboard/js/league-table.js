@@ -1,5 +1,12 @@
 // dashboard/js/league-table.js
-import { computeWeekWindow, effectiveRatePerMillion, scoreTitleBelt } from './title-belt.js';
+import {
+    computeWeekWindow,
+    effectiveRatePerMillion,
+    scoreTitleBelt,
+    TOKEN_DIMENSIONS,
+    PRICING_RATE_FIELDS,
+    PRICING_PRESENCE_FLAGS
+} from './title-belt.js';
 import { cacheHitRatePct } from './utils.js';
 
 /** @typedef {'volumeCrown'|'thriftKing'|'sommelier'|'mostImproved'} BadgeKey */
@@ -7,47 +14,93 @@ import { cacheHitRatePct } from './utils.js';
 
 /** Memoization guard for weekly belt scoring. Both `weeklyData` and
  *  `pricingByModel` arrive as fresh references on every SSE tick (~5s), so
- *  a reference-equality check would never hit. Instead we digest a cheap
- *  content fingerprint: the week-window's end day + length, the cumulative
- *  totals on the latest day (the basis for the volume + mostImproved belts),
- *  and a sorted pricing fingerprint (thriftKing + sommelier flip when the
- *  catalog refreshes even if weeklyData is unchanged). The cache recomputes
- *  only when any of those change, i.e. once per calendar day for the
- *  data-shape side and once per Models.dev catalog refresh for the pricing
- *  side — not on every ~5s render. */
+ *  a reference-equality check would never hit. Instead we digest a canonical
+ *  JSON fingerprint that covers every field the belt-scoring pipeline
+ *  actually consumes:
+ *    - `weeklyData`: per-day, per-model values on ALL six TOKEN_DIMENSIONS
+ *      (`total`, `input`, `output`, `cache_read`, `cache_write`,
+ *      `reasoning`), deduped last-write-wins per day (matching the dedup
+ *      done inside `computeWeekWindow`).
+ *    - `pricingByModel`: each model's numeric rates (PRICING_RATE_FIELDS)
+ *      AND its explicit presence flags (PRICING_PRESENCE_FLAGS) — the
+ *      `hasInput`/`hasOutput`/... flags flip effective $ / M even when the
+ *      underlying rates are byte-identical (see `pricingWithPresence` and
+ *      `calculateCostWithPricing`).
+ *  Keys in both fingerprints are sorted, so two inputs that produce
+ *  identical scoring results always fingerprint to the same string. The
+ *  cache therefore recomputes only on a genuine content change — not on
+ *  every ~5s SSE-shaped new-reference refresh. */
 /** @type {string|null} */
 let _cacheKey = null;
 /** @type {ReturnType<typeof scoreTitleBelt>|null} */
 let _cachedBelts = null;
 
 /**
+ * Canonical JSON of every daily snapshot, deduped last-write-wins per day
+ * (the same dedup `computeWeekWindow` performs), with each model's six
+ * token dimensions sorted by dimension name and each day's model map
+ * sorted by model name. Two inputs that produce identical
+ * `computeWeekWindow(weeklyData)` results fingerprint identically;
+ * differing inputs (including earlier-week days that disagree) get
+ * different fingerprints.
  * @param {any[]} weeklyData
  * @returns {string}
  */
 function weeklyDataFingerprint(weeklyData) {
-    if (!Array.isArray(weeklyData) || weeklyData.length === 0) return 'empty:0';
-    const last = weeklyData[weeklyData.length - 1];
-    const day = typeof last?.day === 'string' ? last.day : '?';
-    const models = last?.models && typeof last.models === 'object' ? last.models : {};
-    /** @param {*} v */
-    const fmt = (v) => (Number.isFinite(v) ? v : '?');
-    const totals = Object.keys(models).sort().map((name) => `${name}:${fmt(models[name]?.total)}`);
-    return `${weeklyData.length}|${day}|${totals.join(',')}`;
+    if (!Array.isArray(weeklyData) || weeklyData.length === 0) return '[]';
+    /** @type {Map<string, any>} */
+    const byDay = new Map();
+    for (const entry of weeklyData) {
+        if (!entry || typeof entry !== 'object') continue;
+        if (typeof entry.day !== 'string') continue;
+        byDay.set(entry.day, entry);
+    }
+    const days = [...byDay.keys()].sort();
+    const canonical = days.map((day) => {
+        const entry = byDay.get(day);
+        const models = entry.models && typeof entry.models === 'object' ? entry.models : {};
+        /** @type {Record<string, any>} */
+        const orderedModels = {};
+        for (const name of Object.keys(models).sort()) {
+            const m = models[name];
+            /** @type {Record<string, number|null>} */
+            const dims = {};
+            for (const dim of TOKEN_DIMENSIONS) {
+                dims[dim] = m && Number.isFinite(m[dim]) ? m[dim] : null;
+            }
+            orderedModels[name] = dims;
+        }
+        return [day, orderedModels];
+    });
+    return JSON.stringify(canonical);
 }
 
-const PRICING_FIELDS = ['input', 'output', 'cacheRead', 'cacheWrite', 'reasoning'];
-
-/** @param {Record<string, any>|undefined} pricingByModel @returns {string} */
+/**
+ * Canonical JSON of every model's pricing record: numeric rate fields
+ * followed by explicit presence-flag values (with `undefined` serialized
+ * as `null` to distinguish "absent" from "explicit false"). Two pricing
+ * records that produce identical `effectiveRatePerMillion` results always
+ * fingerprint identically.
+ * @param {Record<string, any>|undefined} pricingByModel
+ * @returns {string}
+ */
 function pricingFingerprint(pricingByModel) {
-    if (!pricingByModel || typeof pricingByModel !== 'object') return 'pricing:none';
-    const parts = [];
+    if (!pricingByModel || typeof pricingByModel !== 'object') return '{}';
+    /** @type {Record<string, Record<string, number|null|boolean>|null>} */
+    const canonical = {};
     for (const name of Object.keys(pricingByModel).sort()) {
         const p = pricingByModel[name];
-        if (!p || typeof p !== 'object') continue;
-        const rates = PRICING_FIELDS.map((f) => (Number.isFinite(p[f]) ? p[f] : '?')).join(',');
-        parts.push(`${name}=${rates}`);
+        if (!p || typeof p !== 'object') {
+            canonical[name] = null;
+            continue;
+        }
+        /** @type {Record<string, number|null|boolean>} */
+        const entry = {};
+        for (const f of PRICING_RATE_FIELDS) entry[f] = Number.isFinite(p[f]) ? p[f] : null;
+        for (const f of PRICING_PRESENCE_FLAGS) entry[f] = p[f] === undefined ? null : !!p[f];
+        canonical[name] = entry;
     }
-    return `pricing:${parts.join('|')}`;
+    return JSON.stringify(canonical);
 }
 
 /**

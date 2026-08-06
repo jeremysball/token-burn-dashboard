@@ -1,7 +1,8 @@
 // tests/unit/league-table-render.test.js
-import { beforeEach, describe, expect, it } from 'bun:test';
+import { beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { renderCompareTab } from '../../dashboard/js/views/analytics/tabs/compare.js';
 import { setCurrentData, setWeeklyData } from '../../dashboard/js/state.js';
+import * as leagueTableModule from '../../dashboard/js/league-table.js';
 
 function fixtureCurrentData(count) {
     /** @type {Record<string, any>} */
@@ -202,37 +203,77 @@ describe('renderCompareTab (league table)', () => {
     });
 
     it('uses one shared row template for top + other rows (regression: templates were duplicated)', () => {
-        // Render a fixed dataset and assert that the cell content of a top
-        // row matches the cell content of an "other" row for the same
-        // model-shaped data. The original code had two separate templates
-        // (topRowHtml / otherRowHtml) with byte-identical <td> children and
-        // a tiny wrapper diff; if a future change re-introduces divergence
-        // between the two paths, a property-level comparison of the
-        // resulting cells catches it.
-        setCurrentData(fixtureCurrentData(10));
-        renderCompareTab(container);
+        // Mock buildLeagueTable to return rows with identical content (model,
+        // badges, effective $/M, cache %) in both top and other positions.
+        // The previous className-only check could silently pass even if the
+        // two row templates produced different text — so long as the <td>
+        // classNames matched. This version also asserts cell textContent
+        // byte-equality per column (rank legitimately differs since the two
+        // rows are positioned differently). If a future regression
+        // re-introduces topRowHtml vs otherRowHtml divergence in any of
+        // model / badges / price / cache content, the test fails immediately.
+        spyOn(leagueTableModule, 'buildLeagueTable').mockImplementation(() => ({
+            top: [{
+                rank: 1,
+                name: 'a/model-shared',
+                tokens: 12345,
+                effectiveRatePerMillion: 7.89,
+                cachePct: 42,
+                badges: ['volumeCrown']
+            }],
+            others: [{
+                rank: 9,
+                name: 'a/model-shared',
+                tokens: 12345,
+                effectiveRatePerMillion: 7.89,
+                cachePct: 42,
+                badges: ['volumeCrown']
+            }]
+        }));
+        try {
+            setCurrentData({
+                tokens_by_model: {
+                    'a/model-shared': { total: 12345, input: 6000, output: 6000, cache_read: 0, cache_write: 0, reasoning: 0 }
+                },
+                costs_by_model: {},
+                pricing_by_model: {}
+            });
+            renderCompareTab(container);
 
-        const topRows = container.querySelectorAll('tbody tr:not(.league-others-toggle):not(.league-other-row)');
-        const otherRows = container.querySelectorAll('tbody tr.league-other-row');
-        expect(topRows).toHaveLength(8);
-        expect(otherRows).toHaveLength(2);
+            const topRows = container.querySelectorAll('tbody tr:not(.league-others-toggle):not(.league-other-row)');
+            const otherRows = container.querySelectorAll('tbody tr.league-other-row');
+            expect(topRows).toHaveLength(1);
+            expect(otherRows).toHaveLength(1);
 
-        // The 5-cell structure (rank / model / badges / effective / cache)
-        // must match between top and other rows. The badge cell may contain
-        // zero spans for either, so just compare the cell count + class
-        // names + numeric classes.
-        const topCells = Array.from(topRows[0].querySelectorAll('td'));
-        const otherCells = Array.from(otherRows[0].querySelectorAll('td'));
-        expect(topCells).toHaveLength(otherCells.length);
-        expect(topCells).toHaveLength(5);
-        for (let i = 0; i < 5; i++) {
-            expect(topCells[i].className).toBe(otherCells[i].className);
+            // The 5-cell structure (rank / model / badges / effective / cache)
+            // must match between top and other rows.
+            const topCells = Array.from(topRows[0].querySelectorAll('td'));
+            const otherCells = Array.from(otherRows[0].querySelectorAll('td'));
+            expect(topCells).toHaveLength(5);
+            expect(otherCells).toHaveLength(5);
+
+            // Rank legitimately differs between the two positions.
+            expect(topCells[0].textContent).toBe('1');
+            expect(otherCells[0].textContent).toBe('9');
+
+            // Every other cell — model name, badges, $/M, cache% — must
+            // agree byte-for-byte. The className check is kept too: a
+            // divergence in cell semantics (e.g. wrapping some columns in
+            // an extra <div> for "top" but not "other") would change
+            // textContent but keep className equal, so we also need the
+            // className guarantee.
+            for (let i = 1; i < 5; i++) {
+                expect(topCells[i].textContent).toBe(otherCells[i].textContent);
+                expect(topCells[i].className).toBe(otherCells[i].className);
+            }
+
+            // The badge column header is "Badges" (plural) since rows can now
+            // carry more than one — a future regression that flips it back to
+            // singular would re-introduce the "one badge per row" contract.
+            const headers = Array.from(container.querySelectorAll('thead th')).map((th) => th.textContent.trim());
+            expect(headers).toContain('Badges');
+        } finally {
+            spyOn(leagueTableModule, 'buildLeagueTable').mockRestore();
         }
-
-        // The badge column header is "Badges" (plural) since rows can now
-        // carry more than one — a future regression that flips it back to
-        // singular would re-introduce the "one badge per row" contract.
-        const headers = Array.from(container.querySelectorAll('thead th')).map((th) => th.textContent.trim());
-        expect(headers).toContain('Badges');
     });
 });

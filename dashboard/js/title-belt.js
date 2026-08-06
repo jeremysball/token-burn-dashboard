@@ -3,7 +3,7 @@ import { calculateCostWithPricing } from './modelsdev-pricing.js';
 
 export const ELIGIBILITY_FLOOR = 0.01; // 1% of the week's total tokens
 
-const TOKEN_DIMENSIONS = [
+export const TOKEN_DIMENSIONS = [
     'total',
     'input',
     'output',
@@ -11,6 +11,14 @@ const TOKEN_DIMENSIONS = [
     'cache_write',
     'reasoning'
 ];
+
+// Single source of truth for the pricing-rate field names and their
+// matching presence flag names. Exported so the league-table cache
+// fingerprint can mirror the exact fields `pricingWithPresence` consumes
+// in `calculateCostWithPricing` — see the readme in league-table.js for
+// why mirroring matters.
+export const PRICING_RATE_FIELDS = ['input', 'output', 'cacheRead', 'cacheWrite', 'reasoning'];
+export const PRICING_PRESENCE_FLAGS = ['hasInput', 'hasOutput', 'hasCacheRead', 'hasCacheWrite', 'hasReasoning'];
 
 /** @param {*} model */
 const hasFiniteTokenDimensions = (model) =>
