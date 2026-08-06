@@ -1,0 +1,36 @@
+## Conventions
+- Search: use `fd` for files, `rg` for text — never `find`/`grep`.
+- Errors: fail fast, never swallow exceptions silently.
+
+## Your role: code-review verifier (strict rubric)
+
+You are verifying ONE candidate finding against a git diff (compare against
+main with `git diff main...HEAD`). Do NOT edit any files, run
+git add/commit/push, or write anywhere except your own scratch output.
+
+Candidate:
+file: lib/utils/static.js
+line: ~34 (the new readFileDirect helper)
+summary: readFileDirect's `try { return fs.readFileSync(filePath); } catch { return null; }` suppresses every filesystem error (EACCES, EISDIR, EMFILE, EIO, etc.), not just ENOENT (missing file). serveStatic then always responds 404 "Not found" regardless of which error occurred, even for a permissions error or a directory mistakenly passed as a file path, which arguably deserves a 500 rather than a 404.
+failure_scenario: A deployed .html file has its permissions misconfigured (EACCES) or gets replaced by a directory (EISDIR); serveStatic silently returns 404 "Not found" to every client with no server-side signal distinguishing it from a genuinely missing file.
+
+Read lib/utils/static.js in full (both readFileCached's existing catch and
+the new readFileDirect's catch) to see whether this is a new problem this
+diff introduces, or a pre-existing pattern the diff just extends to a second
+code path (readFileCached already has the identical catch-all shape).
+
+Vote exactly one of:
+- CONFIRMED — you can name the inputs/state that trigger it and the wrong
+  output. Quote the line.
+- PLAUSIBLE — the mechanism is real but the trigger condition is uncertain
+  (env/config-dependent). State what would confirm it.
+- REFUTED — factually wrong, or the code already guards this elsewhere.
+  Quote the line that proves it.
+
+This is the STRICT rubric: don't inflate a genuinely rare/misconfigured-env
+scenario into more than PLAUSIBLE unless you can show it's actually
+reachable through normal server operation.
+
+End your final message with a line starting exactly `Verdict:` followed by
+one of CONFIRMED | PLAUSIBLE | REFUTED, then a line starting exactly
+`Status:` followed by DONE.

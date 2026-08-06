@@ -1,0 +1,38 @@
+## Conventions
+- Commits: Conventional Commits, imperative mood. No Co-Authored-By trailer.
+- Search: use `fd` for files, `rg` for text — never `find`/`grep`.
+- Errors: fail fast, never swallow exceptions silently.
+- Verification: proving something works means exercising it for real, not
+  just confirming it's listed or covered by a mock.
+
+## Your role: code-review finder, Angle E — wrapper/proxy correctness
+
+You are reviewing a git diff on the current branch (compare against main
+with `git diff main...HEAD`). Do NOT edit any files, run git add/commit/push,
+or write anywhere except your own scratch output. Read-only review.
+
+The diff touches:
+- lib/utils/static.js: readFileCached (existing, cache-backed) and the new
+  readFileDirect (uncached, try/catch wrapper) are two parallel read paths
+  now both used by serveStatic depending on isDev/isJS/isCSS/isHTML.
+- lib/openrouter.js: getOpenRouterPricingRecord's fuzzy fallback now uses
+  exact normalized-alias equality against cache.models/buildModelAliases,
+  layered on top of the earlier exact-index lookup against cache.index.
+
+Check whether serveStatic's two read paths (cached vs. direct) actually stay
+correctly routed for every isDev/isJS/isCSS/isHTML combination, or whether
+some combination silently falls through to the wrong path (stale cached
+content served in dev, or an uncached direct read happening in prod when it
+shouldn't). Check whether the fuzzy-match loop and the earlier exact
+candidate-index lookup in getOpenRouterPricingRecord could ever disagree
+(e.g. index has a stale entry that the fuzzy loop's fresher alias list
+would have skipped, or vice versa).
+
+Return your findings as a JSON array (even if empty), each item:
+{"file": "...", "line": N, "summary": "one line", "failure_scenario": "concrete inputs/state -> wrong output or crash"}
+
+Cap: at most 6 findings. Pass through every candidate with a nameable
+failure scenario, even if you're not fully sure — don't self-filter.
+
+End your final message with a line starting exactly `Status:` followed by
+one of: DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT.

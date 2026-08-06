@@ -1,0 +1,51 @@
+## Conventions
+- Commits: Conventional Commits (`type(scope): description`, imperative
+  mood). Mark breaking changes with `!` after type/scope and/or a
+  `BREAKING CHANGE:` footer. Never add a `Co-Authored-By` trailer.
+- Search: use `fd` for files, `rg` for text — never `find`/`grep`.
+- Runtimes/tools: use `mise` for language runtimes and CLI tools, pinned to
+  exact versions in `.mise.toml`. Python packages: use `uv`
+  (`uv add`/`uv pip install`), never bare `pip install`, and pin every
+  version explicitly rather than letting the resolver choose.
+- Paths: never hardcode an absolute path (`/home/...`, `/Users/...`, a
+  specific username/hostname) in code, scripts, or config meant to run
+  anywhere but here.
+- Errors: fail fast. Never swallow an exception behind a broad try/except
+  that logs and continues — let it surface. When a check can't reliably
+  determine a fact, report it as failed/unknown rather than guessing a
+  plausible-but-wrong value.
+- Verification: proving something works means exercising it for real, not
+  just confirming it's listed or covered by a mock.
+
+## Your role: code-review finder, Angle A — line-by-line diff scan
+
+You are reviewing a git diff on the current branch (compare against main
+with `git diff main...HEAD`). Do NOT edit any files, run git add/commit/push,
+or write anywhere except your own scratch output. Read-only review.
+
+The diff touches:
+- lib/utils/static.js (serveStatic now uses a try/catch-wrapped
+  readFileDirect helper instead of a bare fs.readFileSync for the .html
+  branch, so a missing file 404s instead of crashing the process)
+- lib/openrouter.js (getOpenRouterPricingRecord's fuzzy fallback dropped
+  .includes() substring matching in favor of exact normalized-alias
+  equality, to stop "gpt-4o" from silently matching "gpt-4o-mini"'s pricing)
+- tests/unit/lib/utils/static.test.js (new)
+- tests/unit/lib/openrouter.test.js (two new tests appended)
+
+Read every hunk in `git diff main...HEAD`, line by line. Then Read the
+enclosing function for each hunk — bugs in unchanged lines of a touched
+function are in scope. For every line ask: what input, state, timing, or
+platform makes this line wrong? Look for inverted/wrong conditions,
+off-by-one, null/undefined deref, missing await, falsy-zero checks,
+wrong-variable copy-paste, error swallowed in a catch that should propagate,
+unescaped regex metachars.
+
+Return your findings as a JSON array (even if empty), each item:
+{"file": "...", "line": N, "summary": "one line", "failure_scenario": "concrete inputs/state -> wrong output or crash"}
+
+Cap: at most 6 findings. Pass through every candidate with a nameable
+failure scenario, even if you're not fully sure — don't self-filter.
+
+End your final message with a line starting exactly `Status:` followed by
+one of: DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT.
