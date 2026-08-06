@@ -3,6 +3,7 @@ const {
   getOpenRouterPricingRecord,
   setOpenRouterPricingSnapshot
 } = require('../../lib/openrouter');
+const { setModelsDevPricingSnapshot } = require('../../lib/modelsdev');
 const { findLocalPricing, getPricing, calculateCost } = require('../../lib/pricing');
 
 import { beforeEach, describe, expect, it } from 'bun:test';
@@ -15,6 +16,7 @@ describe('server pricing', () => {
       models: [],
       error: null
     });
+    setModelsDevPricingSnapshot({ fetchedAt: 0, source: 'local', catalog: {}, error: null });
   });
 
   it('normalizes OpenRouter pricing to per-1M token rates', () => {
