@@ -3,7 +3,7 @@ import { calculateCostWithPricing } from './modelsdev-pricing.js';
 
 export const ELIGIBILITY_FLOOR = 0.01; // 1% of the week's total tokens
 
-const TOKEN_DIMENSIONS = [
+export const TOKEN_DIMENSIONS = [
     'total',
     'input',
     'output',
@@ -11,6 +11,14 @@ const TOKEN_DIMENSIONS = [
     'cache_write',
     'reasoning'
 ];
+
+// Single source of truth for the pricing-rate field names and their
+// matching presence flag names. Exported so the league-table cache
+// fingerprint can mirror the exact fields `pricingWithPresence` consumes
+// in `calculateCostWithPricing` — see the readme in league-table.js for
+// why mirroring matters.
+export const PRICING_RATE_FIELDS = ['input', 'output', 'cacheRead', 'cacheWrite', 'reasoning'];
+export const PRICING_PRESENCE_FLAGS = ['hasInput', 'hasOutput', 'hasCacheRead', 'hasCacheWrite', 'hasReasoning'];
 
 /** @param {*} model */
 const hasFiniteTokenDimensions = (model) =>
@@ -155,11 +163,15 @@ function pricingWithPresence(pricing) {
 }
 
 /**
+ * The single, guarded effective-$/M used by every surface (title-belt
+ * scoring, league table, etc). Returns null whenever the model's token
+ * dimensions or pricing fail the strict contracts — never a partial or
+ * fabricated number.
  * @param {any} stats
  * @param {any} pricing
  * @returns {number|null}
  */
-function effectiveRatePerMillion(stats, pricing) {
+export function effectiveRatePerMillion(stats, pricing) {
     if (!hasFiniteTokenDimensions(stats)) return null;
     if (!hasUsableFullPricing(pricing, stats)) return null;
     if (!Number.isFinite(stats.total) || stats.total <= 0) return null;
