@@ -127,4 +127,17 @@ describe('odometer', () => {
       timers.restore();
     }
   });
+
+  it('settles a same-value rollback requested while a transition is still in flight', () => {
+    const timers = captureTimers();
+    try {
+      renderOdometer(el, '1,001');
+      updateOdometer(el, '1,002');
+      updateOdometer(el, '1,001');
+      timers.runAll();
+      expect(el.textContent).toContain('1,001');
+    } finally {
+      timers.restore();
+    }
+  });
 });
