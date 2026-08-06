@@ -48,6 +48,11 @@ test.describe('no horizontal overflow on critical selectors', () => {
     await expectNoOverflow(page, '.latest-pill');
   });
 
+  test('daily field report', async ({ page }) => {
+    await expect(page.locator('#dailyFieldReportBody')).not.toBeEmpty({ timeout: 10000 });
+    await expectNoOverflow(page, '.field-report');
+  });
+
   test('weekly title belt (Analytics > Insights)', async ({ page }) => {
     await page.click('button:has-text("Analytics")');
     await page.click('button:has-text("Insights")');
