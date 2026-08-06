@@ -96,6 +96,6 @@ export default [
     }
   },
   {
-    ignores: ['node_modules/**', 'dist/**', 'dist-dashboard/**', 'coverage/**', 'test-results/**', '.worktrees/**']
+    ignores: ['node_modules/**', 'dist/**', 'dist-dashboard/**', 'coverage/**', 'test-results/**', '.worktrees/**', '.claude/worktrees/**']
   }
 ];
