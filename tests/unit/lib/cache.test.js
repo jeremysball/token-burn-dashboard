@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 
-const { startBackgroundUpdater, getHistoricalData } = require('../../../lib/cache');
+const { startBackgroundUpdater, getHistoricalData, __resetForTesting } = require('../../../lib/cache');
 const mockWorker = { once: mock() };
 const mockWorkerConstructor = mock(() => mockWorker);
 
@@ -8,13 +8,13 @@ describe('background cache warmup', () => {
   beforeEach(() => {
     mock.clearAllMocks();
     mockWorker.once.mockClear();
+    // cache.js keeps its data in a module-level singleton shared across
+    // every test in this file; reset it so no test's success can leave
+    // cache.historicalData truthy and short-circuit a later test's warmup
+    // path via getHistoricalData()'s early return.
+    __resetForTesting();
   });
 
-  // Runs first, deliberately, before any other test in this file resolves
-  // cache.historicalData to a truthy value: cache.js keeps that data in a
-  // module-level singleton with no reset hook, so once it's populated,
-  // getHistoricalData()'s early-return short-circuits past the warmup-failure
-  // path this test exercises.
   it('getHistoricalData rejects instead of resolving null when initial warmup fails (#53)', async () => {
     startBackgroundUpdater({
       WorkerImpl: mockWorkerConstructor,
