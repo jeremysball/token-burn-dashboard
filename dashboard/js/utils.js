@@ -370,3 +370,38 @@ export function ensureWidgetBuilt(container, flagKey, build) {
     container.dataset[flagKey] = 'true';
     return true;
 }
+
+// ===== STATISTICS =====
+/**
+ * Mean and population stddev of a numeric series. Mirrors the formula
+ * in computeSeriesStats() (dashboard/js/views/analytics/tabs/spikes.js:52-61)
+ * — same n=0 guard, same sum/n mean, same sum-of-squares/n variance, same
+ * Math.sqrt. The brief's preferred shape was to import computeSeriesStats
+ * directly, but that creates an import cycle (utils → spikes → shared →
+ * config → utils) that breaks config.js's formatModelPrice re-export at
+ * module-init time, so the formula is inlined here instead. Behavior is
+ * identical to computeSeriesStats(values.map(v => ({ total: v }))).mean
+ * / .std for the same input shape.
+ * @param {number[]} values
+ * @returns {{mean: number, stddev: number}}
+ */
+export const meanStddev = (values) => {
+    const arr = (values || []).filter((v) => typeof v === 'number');
+    const n = arr.length;
+    if (n === 0) return { mean: 0, stddev: 0 };
+    const mean = arr.reduce((s, v) => s + v, 0) / n;
+    const variance = arr.reduce((s, v) => s + (v - mean) ** 2, 0) / n;
+    return { mean, stddev: Math.sqrt(variance) };
+};
+
+// ===== MARKDOWN HELPERS =====
+/**
+ * Convert markdown bold to HTML <b>. Mirrors the existing field-report
+ * response renderers. Pattern-only transform with no content escaping —
+ * preserves current behavior on untrusted taskferry output.
+ * @param {string} text
+ * @returns {string}
+ */
+export function formatMarkdownBoldToHtml(text) {
+    return text.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+}

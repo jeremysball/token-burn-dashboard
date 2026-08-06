@@ -22,7 +22,9 @@ import {
   formatModelPrice,
   escapeHtml,
   resizeVisiblePlots,
-  positionNotifications
+  positionNotifications,
+  meanStddev,
+  formatMarkdownBoldToHtml
 } from '../../dashboard/js/utils.js';
 
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
@@ -521,5 +523,39 @@ describe('hasUsableFullPricing', () => {
   });
   it('returns false for null pricing', () => {
     expect(hasUsableFullPricing(null)).toBe(false);
+  });
+});
+
+describe('meanStddev', () => {
+  it('returns correct mean and stddev for a populated array', () => {
+    const { mean, stddev } = meanStddev([10, 20, 30]);
+    expect(mean).toBeCloseTo(20, 5);
+    expect(stddev).toBeCloseTo(8.165, 2);
+  });
+
+  it('returns zeros for an empty array', () => {
+    const { mean, stddev } = meanStddev([]);
+    expect(mean).toBe(0);
+    expect(stddev).toBe(0);
+  });
+
+  it('returns zero stddev for a single value', () => {
+    const { mean, stddev } = meanStddev([42]);
+    expect(mean).toBe(42);
+    expect(stddev).toBe(0);
+  });
+});
+
+describe('formatMarkdownBoldToHtml', () => {
+  it('converts a single bold pair', () => {
+    expect(formatMarkdownBoldToHtml('hello **world**')).toBe('hello <b>world</b>');
+  });
+
+  it('converts multiple bold pairs', () => {
+    expect(formatMarkdownBoldToHtml('**a** and **b**')).toBe('<b>a</b> and <b>b</b>');
+  });
+
+  it('returns text unchanged when there are no bold markers', () => {
+    expect(formatMarkdownBoldToHtml('no bold here')).toBe('no bold here');
   });
 });
