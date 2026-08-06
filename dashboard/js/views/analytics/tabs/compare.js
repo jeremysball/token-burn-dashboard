@@ -14,9 +14,22 @@ function badgeCell(badge) {
 }
 
 /** @param {import('../../../league-table.js').LeagueRow} row @param {boolean} hidden @returns {string} */
-function rowHtml(row, hidden) {
+function otherRowHtml(row, hidden) {
     return `
-        <tr class="${hidden ? 'league-other-row' : ''}" ${hidden ? 'style="display:none"' : ''}>
+        <tr class="league-other-row" style="display:${hidden ? 'none' : 'table-row'}">
+            <td class="num">${row.rank}</td>
+            <td>${escapeHtml(displayModel(row.name))}</td>
+            <td>${badgeCell(row.badge)}</td>
+            <td class="num">${row.effectiveRatePerMillion !== null ? '$' + row.effectiveRatePerMillion.toFixed(2) : '—'}</td>
+            <td class="num">${row.cachePct.toFixed(0)}%</td>
+        </tr>
+    `;
+}
+
+/** @param {import('../../../league-table.js').LeagueRow} row @returns {string} */
+function topRowHtml(row) {
+    return `
+        <tr>
             <td class="num">${row.rank}</td>
             <td>${escapeHtml(displayModel(row.name))}</td>
             <td>${badgeCell(row.badge)}</td>
@@ -61,9 +74,9 @@ export function renderCompareTab(container) {
                 <tr><th>Rank</th><th>Model</th><th>Badge</th><th class="num">Effective $/M</th><th class="num">Cache %</th></tr>
             </thead>
             <tbody>
-                ${top.map((row) => rowHtml(row, false)).join('')}
+                ${top.map(topRowHtml).join('')}
                 ${toggleRow}
-                ${others.map((row) => rowHtml(row, !wasExpanded)).join('')}
+                ${others.map((row) => otherRowHtml(row, !wasExpanded)).join('')}
             </tbody>
         </table>
     `;

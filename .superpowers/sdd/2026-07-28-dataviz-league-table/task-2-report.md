@@ -514,3 +514,286 @@ ship their `compare.js|complexity` /
 - No changes to `dashboard/js/league-table.js` (Task 1) — used as-is.
 
 Status: DONE
+
+---
+
+# Fix round 2 — toggle-hide regression after preserved-expanded re-render
+
+**Plan:** `.superpowers/plans/2026-07-28-dataviz-league-table.md`
+**Branch:** `dataviz-league-table`
+**Base commit (post round 1):** `c9d95da`
+**Implementer commit:** see "Commit" section below (to be filled at commit time)
+
+## Status
+
+**DONE** — The round-1 regression is fixed by giving the `others` rows
+a stable class, and a regression test now covers the exact failure
+sequence the re-reviewer found.
+
+## Root cause confirmed
+
+In round 1 I added a `hidden` parameter to `rowHtml(row, hidden)` that
+*conditionally* applied the `.league-other-row` class and
+`style="display:none"` only when `hidden` was true. When
+`wasExpanded` was true, `others.map((row) => rowHtml(row, !wasExpanded))`
+called `rowHtml(row, false)`, so the others rows were rendered **without**
+the `.league-other-row` class and **with** `display: table-row`.
+
+Right after the `innerHTML` rebuild, the round-1 code did:
+
+```js
+const hiddenRows = container.querySelectorAll('.league-other-row');
+const expand = () => {
+    const expanded = toggle.dataset.expanded === 'true';
+    toggle.dataset.expanded = String(!expanded);
+    /** @type {HTMLElement} */ (toggle.querySelector('td')).textContent = expanded ? `+${others.length} others` : `− Hide ${others.length} others`;
+    hiddenRows.forEach((row) => { /** @type {HTMLElement} */ (row).style.display = expanded ? 'none' : 'table-row'; });
+};
+```
+
+When the render landed in the already-expanded state, the `others` rows
+never received `.league-other-row`, so `hiddenRows` was an empty
+NodeList. The label would flip on click, but the `forEach` had nothing
+to iterate, so the rows stayed visible. Verified by running the new
+regression test against the unfixed `c9d95da` source — it failed at
+the `expect(othersRows.length).toBe(2)` assertion with `Received: 0`,
+then passed once the fix was applied.
+
+The re-reviewer was right that my round-1 tests missed this: the
+round-1 "preserves the expanded toggle state across an ambient
+re-render" test asserted the *post-re-render* state (label and
+visibility) but never re-clicked the toggle to verify the *collapse*
+path still worked. The new regression test below explicitly clicks
+the toggle after a preserved-expanded re-render and asserts the
+others rows go back to `display: none`.
+
+## Fix
+
+**Option 1 from the brief** — give the `others` rows a stable class
+that's always present regardless of which state they were rendered in,
+and use only inline `style.display` to control visibility. The toggle
+handler's `querySelectorAll('.league-other-row')` is now guaranteed
+to find all the `others` rows no matter which state they were
+rendered in.
+
+Concretely, in `dashboard/js/views/analytics/tabs/compare.js`:
+
+1. Split the previous `rowHtml(row, hidden)` into two functions:
+   - `topRowHtml(row)` — renders a top-8 row with no special class.
+   - `otherRowHtml(row, hidden)` — renders an `others` row with
+     `class="league-other-row"` *always* present, and
+     `style="display:${hidden ? 'none' : 'table-row'}"` for the
+     initial visibility.
+2. The `top` rows are now rendered via `top.map(topRowHtml)` and
+   only the `others` rows go through `otherRowHtml`. The class
+   `league-other-row` is therefore reserved for the `others` rows
+   and is a stable selector for the `expand()` closure's
+   `querySelectorAll`.
+3. The `expand()` closure is unchanged in shape: it still toggles
+   `toggle.dataset.expanded`, the label text, and the
+   `style.display` of every `.league-other-row`. Because the class
+   is now always present (regardless of whether the row was rendered
+   visible or hidden), the captured `hiddenRows` NodeList always has
+   the right number of elements.
+
+```js
+function otherRowHtml(row, hidden) {
+    return `
+        <tr class="league-other-row" style="display:${hidden ? 'none' : 'table-row'}">
+            <td class="num">${row.rank}</td>
+            <td>${escapeHtml(displayModel(row.name))}</td>
+            <td>${badgeCell(row.badge)}</td>
+            <td class="num">${row.effectiveRatePerMillion !== null ? '$' + row.effectiveRatePerMillion.toFixed(2) : '—'}</td>
+            <td class="num">${row.cachePct.toFixed(0)}%</td>
+        </tr>
+    `;
+}
+
+function topRowHtml(row) {
+    return `
+        <tr>
+            <td class="num">${row.rank}</td>
+            <td>${escapeHtml(displayModel(row.name))}</td>
+            <td>${badgeCell(row.badge)}</td>
+            <td class="num">${row.effectiveRatePerMillion !== null ? '$' + row.effectiveRatePerMillion.toFixed(2) : '—'}</td>
+            <td class="num">${row.cachePct.toFixed(0)}%</td>
+        </tr>
+    `;
+}
+```
+
+Call sites:
+
+```js
+${top.map(topRowHtml).join('')}
+${toggleRow}
+${others.map((row) => otherRowHtml(row, !wasExpanded)).join('')}
+```
+
+I considered the alternative of "give the toggle's row-toggling logic
+a data attribute selector that doesn't depend on hidden/visible
+state" (option 2 from the brief), but it would have meant adding a
+data-attribute round-trip in the `innerHTML` string for the
+otherwise-purpose of being a stable selector — which is exactly what
+the class already is. Splitting the functions is a one-time
+refactor; it doesn't add new runtime state or risk drift between
+the data attribute and the visibility style. Option 1 it is.
+
+## New regression test (the case the round-1 tests missed)
+
+Added to `tests/unit/league-table-render.test.js` (8th test, after
+the round-1 tests):
+
+```js
+it('clicking "Hide" after a preserved-expanded re-render actually hides the rows (regression for round-1 bug)', () => {
+    setCurrentData(fixtureCurrentData(10));
+    renderCompareTab(container);
+
+    // Expand the "others" section.
+    const toggle = container.querySelector('.league-others-toggle');
+    toggle.dispatchEvent(new Event('click', { bubbles: true }));
+    expect(toggle.dataset.expanded).toBe('true');
+
+    // Ambient SSE-driven refresh while still expanded.
+    renderCompareTab(container);
+
+    const toggleAfterRerender = container.querySelector('.league-others-toggle');
+    expect(toggleAfterRerender.dataset.expanded).toBe('true');
+    // All 10 model rows must be visible right after the re-render.
+    let visibleDataRows = container.querySelectorAll('tbody tr:not(.league-others-toggle)');
+    expect(visibleDataRows.length).toBe(10);
+
+    // Now collapse. The label must flip back to "+N others" AND the
+    // others rows must actually be hidden (display:none), not just
+    // relabeled. This is the exact case the round-1 fix broke: the
+    // captured `hiddenRows` NodeList was empty after the re-render
+    // because the `others` rows were rendered without the
+    // `.league-other-row` class when wasExpanded was true, so the
+    // expand() closure had nothing to toggle.
+    toggleAfterRerender.dispatchEvent(new Event('click', { bubbles: true }));
+    expect(toggleAfterRerender.dataset.expanded).toBe('false');
+    expect(container.textContent).toContain('+2 others');
+    const othersRows = container.querySelectorAll('.league-other-row');
+    expect(othersRows.length).toBe(2);
+    for (const row of othersRows) {
+        expect((/** @type {HTMLElement} */ (row)).style.display).toBe('none');
+    }
+});
+```
+
+This test reproduces the exact failure sequence the re-reviewer
+traced:
+- render expanded (10 models) → click toggle → assert `data-expanded === 'true'`
+- simulate ambient re-render (call `renderCompareTab` again) → assert
+  toggle still expanded and all 10 rows visible
+- click toggle to collapse → assert label flipped AND `others` rows
+  are `style.display === 'none'` (this is the assertion that
+  specifically catches the round-1 bug — the others rows being
+  `display: none` after the second click, not just the label flipping)
+
+Before the fix, this test failed with `expect(othersRows.length).toBe(2)` — `Received: 0`
+because the `others` rows were rendered without the
+`.league-other-row` class in the expanded state. After the fix, the
+test passes.
+
+I also added an explicit comment in the test pointing at the
+specific round-1 failure mode (the empty `hiddenRows` NodeList
+captured in the `expand()` closure) so future readers know why the
+test exists.
+
+The other existing tests (`renders exactly 8 visible ranked rows…`,
+`expands the "+N others" row on click…`, `preserves the expanded
+toggle state across an ambient re-render…`,
+`a re-render on a previously-collapsed toggle stays collapsed…`) all
+continue to pass without modification, because:
+
+- `.league-other-row` is now exclusively on the `others` rows
+  (8 top rows no longer carry it), so the existing
+  `tr:not(.league-others-toggle):not(.league-other-row)` selector
+  still returns the 8 top rows.
+- The existing assertions on
+  `container.querySelectorAll('.league-other-row')` still find the
+  same N=2 rows; their `style.display` is `'none'` when rendered
+  collapsed and `'table-row'` (not `'none'`) when rendered visible
+  or after the user expanded them.
+- The expansion-state-preservation assertions still hold.
+
+## Full suite re-run (real output)
+
+```
+$ bun test tests/unit/league-table-render.test.js
+bun test v1.3.11 (af24e281)
+
+ 8 pass
+ 0 fail
+ 29 expect() calls
+Ran 8 tests across 1 file. [498.00ms]
+```
+
+(7 → 8 tests, 21 → 29 expect() calls, vs round 1.)
+
+```
+$ bun run test
+…
+ 602 pass
+ 0 fail
+ 1385 expect() calls
+Ran 602 tests across 59 files. [14.62s]
+```
+
+(601 → 602 tests vs round 1 — the +1 is the new regression test.)
+
+```
+$ bunx tsc --noEmit
+(no output — clean)
+```
+
+```
+$ bun scripts/lint-baseline.mjs .lint-report.json
+(no output — clean)
+```
+
+The split-into-two-functions refactor actually drops cyclomatic
+complexity slightly (the new `topRowHtml`/`otherRowHtml` are
+straightforward template strings, and the call site
+`top.map(topRowHtml)` is one branch less than the previous
+`top.map((row) => rowHtml(row, false))`). No new lint baseline
+buckets were introduced. `config/eslint-baseline.json` is unchanged
+in this commit.
+
+## Files touched (round 2)
+
+| File | Status | Notes |
+| --- | --- | --- |
+| `dashboard/js/views/analytics/tabs/compare.js` | modified | Split `rowHtml(row, hidden)` into `topRowHtml(row)` and `otherRowHtml(row, hidden)`. The `otherRowHtml` always emits `class="league-other-row"`; visibility is controlled only by `style="display:${hidden ? 'none' : 'table-row'}"`. Call sites updated to use the new functions. |
+| `tests/unit/league-table-render.test.js` | modified | +1 test (the regression for the round-1 bug, 7 → 8 tests). |
+| `config/eslint-baseline.json` | unchanged | The refactor doesn't add new warning buckets. |
+
+## Out of scope (intentionally untouched)
+
+- The `expand()` closure in `compare.js:87-92` is unchanged in
+  shape — it still toggles `data-expanded`, the label text, and
+  `style.display` of every `.league-other-row`. The fix lives in
+  the *render* path, not the click handler, because the handler was
+  always doing the right thing — it just had no rows to operate on
+  in the expanded-re-render case.
+- No changes to `dashboard/js/league-table.js` (Task 1) or the
+  design CSS (round 1 already locked the narrow-viewport clipping
+  fix).
+- The toggle's `aria-expited`/`aria-controls`/focus management
+  remains as in round 0 / round 1 — out of scope for this fix.
+
+## Lessons for the next round
+
+If a future reviewer asks for a similar "preserve state across
+re-render" feature, the rule of thumb I should follow: any
+*selector* used by a click handler attached after a full
+`innerHTML` rebuild must be findable in **all** render states
+(visible and hidden), not just the initial collapsed state. Either
+tag the elements with a stable class that doesn't depend on
+visibility, or query them through a data-attribute that the render
+emits unconditionally. Visibility should be a separate, orthogonal
+mechanism (e.g., `style.display` or a `hidden` attribute that's
+read by both the render and the click handler).
+
+Status: DONE

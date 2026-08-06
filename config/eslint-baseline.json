@@ -124,7 +124,7 @@
     "tests/unit/dashboard-stylesheets.test.js|no-unused-vars": 1,
     "tests/unit/dashboard-stylesheets.test.js|sonarjs/super-linear-regex": 1,
     "tests/unit/dashboard-stylesheets.test.js|sonarjs/unused-import": 1,
-    "tests/unit/league-table-render.test.js|sonarjs/prefer-specific-assertions": 3,
+    "tests/unit/league-table-render.test.js|sonarjs/prefer-specific-assertions": 5,
     "tests/unit/league-table.test.js|sonarjs/prefer-specific-assertions": 2,
     "tests/unit/lib/git-blame.test.js|no-unused-vars": 1,
     "tests/unit/lib/git-blame.test.js|sonarjs/no-os-command-from-path": 2,

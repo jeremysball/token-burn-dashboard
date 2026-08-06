@@ -114,4 +114,39 @@ describe('renderCompareTab (league table)', () => {
         const othersRowsAfterRerender = container.querySelectorAll('.league-other-row');
         expect(othersRowsAfterRerender[0].style.display).toBe('none');
     });
+
+    it('clicking "Hide" after a preserved-expanded re-render actually hides the rows (regression for round-1 bug)', () => {
+        setCurrentData(fixtureCurrentData(10));
+        renderCompareTab(container);
+
+        // Expand the "others" section.
+        const toggle = container.querySelector('.league-others-toggle');
+        toggle.dispatchEvent(new Event('click', { bubbles: true }));
+        expect(toggle.dataset.expanded).toBe('true');
+
+        // Ambient SSE-driven refresh while still expanded.
+        renderCompareTab(container);
+
+        const toggleAfterRerender = container.querySelector('.league-others-toggle');
+        expect(toggleAfterRerender.dataset.expanded).toBe('true');
+        // All 10 model rows must be visible right after the re-render.
+        let visibleDataRows = container.querySelectorAll('tbody tr:not(.league-others-toggle)');
+        expect(visibleDataRows.length).toBe(10);
+
+        // Now collapse. The label must flip back to "+N others" AND the
+        // others rows must actually be hidden (display:none), not just
+        // relabeled. This is the exact case the round-1 fix broke: the
+        // captured `hiddenRows` NodeList was empty after the re-render
+        // because the `others` rows were rendered without the
+        // `.league-other-row` class when wasExpanded was true, so the
+        // expand() closure had nothing to toggle.
+        toggleAfterRerender.dispatchEvent(new Event('click', { bubbles: true }));
+        expect(toggleAfterRerender.dataset.expanded).toBe('false');
+        expect(container.textContent).toContain('+2 others');
+        const othersRows = container.querySelectorAll('.league-other-row');
+        expect(othersRows.length).toBe(2);
+        for (const row of othersRows) {
+            expect((/** @type {HTMLElement} */ (row)).style.display).toBe('none');
+        }
+    });
 });
