@@ -1,7 +1,10 @@
 const path = require('path');
-const { getCommitLOC, generateGitBlameReport, isValidCommitHash } = require('../../../lib/git-blame');
+const fs = require('fs');
+const os = require('os');
+const crypto = require('crypto');
+const { getCommitLOC, generateGitBlameReport, isValidCommitHash, getSessionTimeWindow } = require('../../../lib/git-blame');
 
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 
 describe('lib/git-blame getCommitLOC', () => {
   const cwd = path.resolve(__dirname, '../../'); // repo root, a real git repo
@@ -45,5 +48,44 @@ describe('lib/git-blame getCommitLOC integration shape', () => {
     expect(isValidCommitHash('abc; rm -rf /')).toBe(false);
     expect(isValidCommitHash('$(whoami)')).toBe(false);
     expect(isValidCommitHash('a'.repeat(40))).toBe(true);
+  });
+});
+
+describe('lib/git-blame getSessionTimeWindow (delegates to session-parser cache, #67)', () => {
+  const tmpFiles = [];
+  afterEach(() => {
+    while (tmpFiles.length) {
+      fs.rmSync(tmpFiles.pop(), { force: true });
+    }
+  });
+
+  /** @param {string} contents */
+  const writeTmpSession = (contents) => {
+    const file = path.join(os.tmpdir(), `git-blame-time-window-${crypto.randomUUID()}.jsonl`);
+    fs.writeFileSync(file, contents, 'utf-8');
+    tmpFiles.push(file);
+    return file;
+  };
+
+  test('derives startTime/endTime/midpoint from message timestamps', () => {
+    const file = writeTmpSession([
+      JSON.stringify({ type: 'message', message: { timestamp: 1000, usage: { input: 10, output: 5 } } }),
+      JSON.stringify({ type: 'message', message: { timestamp: 3000, usage: { input: 10, output: 5 } } })
+    ].join('\n') + '\n');
+
+    const window = getSessionTimeWindow(file);
+    expect(window.startTime).toBe(1000);
+    expect(window.endTime).toBe(3000);
+    expect(window.midpoint).toBe(2000);
+  });
+
+  test('falls back to file mtime when no usage-carrying lines parse', () => {
+    const file = writeTmpSession('not valid jsonl\n');
+    const mtime = fs.statSync(file).mtime.getTime();
+
+    const window = getSessionTimeWindow(file);
+    expect(window.startTime).toBe(mtime);
+    expect(window.endTime).toBe(mtime);
+    expect(window.midpoint).toBe(mtime);
   });
 });

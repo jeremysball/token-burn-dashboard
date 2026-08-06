@@ -168,6 +168,18 @@ describe('isAuthorized', () => {
   it('accepts a case-insensitive Bearer prefix', () => {
     expect(isAuthorized({ headers: { authorization: 'bearer secret' } }, 'secret')).toBe(true);
   });
+
+  it('rejects a token that differs only in length (no timingSafeEqual length-mismatch throw)', () => {
+    expect(isAuthorized({ headers: { authorization: 'Bearer secre' } }, 'secret')).toBe(false);
+    expect(isAuthorized({ headers: { authorization: 'Bearer secretlonger' } }, 'secret')).toBe(false);
+  });
+
+  it('uses a constant-time comparison rather than plain string equality', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const src = fs.readFileSync(path.join(__dirname, '../../../lib/security.js'), 'utf-8');
+    expect(src).toMatch(/timingSafeEqual/);
+  });
 });
 
 describe('isPathWithinRoot', () => {
