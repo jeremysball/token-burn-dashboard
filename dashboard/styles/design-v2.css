@@ -2196,3 +2196,17 @@ input:focus-visible,
 .belt-title { flex: none; color: var(--mono-text-muted); font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; min-width: 130px; }
 .belt-model { color: var(--mono-accent); font-weight: 700; font-size: 0.92rem; }
 .belt-detail { color: var(--mono-text-muted); font-size: 0.82rem; }
+
+.field-report {
+  background: var(--mono-surface);
+  border: 1px solid var(--mono-border);
+  border-radius: var(--radius-lg);
+  border-top: 3px solid var(--mono-accent);
+  padding: 22px 24px;
+  font-size: 0.9rem;
+  line-height: 1.75;
+  color: var(--mono-text);
+  margin-bottom: 24px;
+}
+.field-report .fr-date { color: var(--mono-text-muted); font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 12px; }
+.field-report b { color: var(--mono-accent); }

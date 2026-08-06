@@ -22,7 +22,9 @@ import {
   formatModelPrice,
   escapeHtml,
   resizeVisiblePlots,
-  positionNotifications
+  positionNotifications,
+  meanStddev,
+  formatMarkdownBoldToHtml
 } from '../../dashboard/js/utils.js';
 
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
@@ -521,5 +523,69 @@ describe('hasUsableFullPricing', () => {
   });
   it('returns false for null pricing', () => {
     expect(hasUsableFullPricing(null)).toBe(false);
+  });
+});
+
+describe('meanStddev', () => {
+  it('returns correct mean and stddev for a populated array', () => {
+    const { mean, stddev } = meanStddev([10, 20, 30]);
+    expect(mean).toBeCloseTo(20, 5);
+    expect(stddev).toBeCloseTo(8.165, 2);
+  });
+
+  it('returns zeros for an empty array', () => {
+    const { mean, stddev } = meanStddev([]);
+    expect(mean).toBe(0);
+    expect(stddev).toBe(0);
+  });
+
+  it('returns zero stddev for a single value', () => {
+    const { mean, stddev } = meanStddev([42]);
+    expect(mean).toBe(42);
+    expect(stddev).toBe(0);
+  });
+});
+
+describe('formatMarkdownBoldToHtml', () => {
+  it('converts a single bold pair', () => {
+    expect(formatMarkdownBoldToHtml('hello **world**')).toBe('hello <b>world</b>');
+  });
+
+  it('converts multiple bold pairs', () => {
+    expect(formatMarkdownBoldToHtml('**a** and **b**')).toBe('<b>a</b> and <b>b</b>');
+  });
+
+  it('returns text unchanged when there are no bold markers', () => {
+    expect(formatMarkdownBoldToHtml('no bold here')).toBe('no bold here');
+  });
+
+  it('escapes raw HTML before applying the bold-markdown replacement', () => {
+    // C19-3 (XSS fix): taskferry's `data.insights` is treated as
+    // untrusted, so any HTML markup in the response must be escaped
+    // before the result is assigned via innerHTML. Only the `**...**`
+    // pairs should produce HTML; the rest should be inert text. The
+    // escaped form keeps the words "onerror" / "alert" as characters,
+    // but they sit in a text node, not as live markup.
+    const out = formatMarkdownBoldToHtml('<img src=x onerror=alert(1)> **safe**');
+    expect(out).not.toContain('<img');
+    expect(out).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(out).toContain('<b>safe</b>');
+  });
+
+  it('escapes injected <script> tags and quoted attributes', () => {
+    // A common XSS payload is `" onmouseover="alert(1)"` — an attacker
+    // tries to break out of an attribute and inject their own. The
+    // escaping should turn the leading/trailing `"` into `&quot;`
+    // (so the payload sits inert in the text node), and the rest of
+    // the text survives as inert characters.
+    const out = formatMarkdownBoldToHtml('" onmouseover="alert(1)"');
+    expect(out).toContain('&quot;');
+    expect(out).not.toContain('" onmouseover="');
+  });
+
+  it('coerces non-string input to a string before escaping', () => {
+    expect(formatMarkdownBoldToHtml(null)).toBe('');
+    expect(formatMarkdownBoldToHtml(undefined)).toBe('');
+    expect(formatMarkdownBoldToHtml(42)).toBe('42');
   });
 });
