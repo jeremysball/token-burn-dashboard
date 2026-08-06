@@ -171,6 +171,36 @@ describe('computeCacheScenario', () => {
         expect(result.actualPaid).toBeCloseTo(0, 8);
     });
 
+    it('excludes a model whose presence flags say input/cacheRead pricing is absent, despite nonzero numeric fields', () => {
+        const data = {
+            total_input: 1_000_000,
+            total_cache_read: 99_000_000,
+            tokens_by_model: {
+                'flagged-absent/model': { input: 1_000_000, cache_read: 99_000_000, output: 0, cache_write: 0, reasoning: 0, total: 100_000_000 }
+            },
+            pricing_by_model: {
+                'flagged-absent/model': { input: 0, cacheRead: 0, hasInput: false, hasCacheRead: false, output: 15, cacheWrite: 3.75 }
+            }
+        };
+        const result = computeCacheScenario(data, 50);
+        expect(result.eligibleModels).not.toContain('flagged-absent/model');
+    });
+
+    it('keeps a model eligible when input/cacheRead presence flags are false but the token counts are zero', () => {
+        const data = {
+            total_input: 0,
+            total_cache_read: 0,
+            tokens_by_model: {
+                'flagged-absent-zero-usage/model': { input: 0, cache_read: 0, output: 0, cache_write: 0, reasoning: 0, total: 0 }
+            },
+            pricing_by_model: {
+                'flagged-absent-zero-usage/model': { input: 0, cacheRead: 0, hasInput: false, hasCacheRead: false, output: 15, cacheWrite: 3.75 }
+            }
+        };
+        const result = computeCacheScenario(data, 50);
+        expect(result.eligibleModels).toContain('flagged-absent-zero-usage/model');
+    });
+
     it('excludes a model with nonzero reasoning tokens but missing reasoning rate', () => {
         const data = {
             total_input: 1_000_000,

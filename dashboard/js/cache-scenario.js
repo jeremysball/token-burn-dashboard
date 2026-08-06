@@ -43,8 +43,8 @@ function hasUsableFixedRate(pricing, field, tokenCount) {
  */
 function isModelEligible(pricing, stats) {
     const counts = getTokenCounts(stats);
-    return getUsablePricingRate(pricing, 'input') !== null
-        && getUsablePricingRate(pricing, 'cacheRead') !== null
+    return getUsablePricingRate(pricing, 'input', counts.input) !== null
+        && getUsablePricingRate(pricing, 'cacheRead', counts.cacheRead) !== null
         && hasUsableFixedRate(pricing, 'output', counts.output)
         && hasUsableFixedRate(pricing, 'cacheWrite', counts.cacheWrite)
         && hasUsableFixedRate(pricing, 'reasoning', counts.reasoning);
