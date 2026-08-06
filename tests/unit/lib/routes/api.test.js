@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:te
 import { EventEmitter } from 'events';
 import * as path from 'path';
 import {
+  createDailyReportHandler,
   createInsightsHandler,
   createTokensHandler,
   handleGitBlameRoute
@@ -44,6 +45,15 @@ function createMockRes() {
 
 async function submitSummary(handler, summary, res = createMockRes()) {
   const req = createMockReq('/api/insights/analyze');
+  const promise = handler(req, res, undefined);
+  req.emit('data', Buffer.from(JSON.stringify(summary)));
+  req.emit('end');
+  await promise;
+  return res;
+}
+
+async function submitDailyReport(handler, summary, res = createMockRes()) {
+  const req = createMockReq('/api/insights/daily-report');
   const promise = handler(req, res, undefined);
   req.emit('data', Buffer.from(JSON.stringify(summary)));
   req.emit('end');
@@ -349,6 +359,78 @@ describe('createInsightsHandler taskferry analysis', () => {
     res.emit('close');
 
     expect(cancelArgs).toEqual(['cancel', 'oc_test_cancel']);
+  });
+});
+
+describe('handleDailyReportRoute', () => {
+  const validDailyReportSummary = {
+    date: '2026-07-28',
+    totalTokensToday: 500000,
+    totalCostToday: 4.2,
+    topModelToday: 'anthropic/claude-sonnet-5',
+    peakHour: {
+      hour: 14,
+      totalTokens: 200000,
+      tokenShareByModel: { 'anthropic/claude-sonnet-5': 0.76, 'kimi/k2p5': 0.24 },
+      costShareByModel: { 'anthropic/claude-sonnet-5': 0.6, 'kimi/k2p5': 0.4 }
+    },
+    baseline: { meanHourlyTokens: 90000, stddevHourlyTokens: 30000 },
+    hourlyBuckets: [{ hour: 13, totalTokens: 80000 }, { hour: 14, totalTokens: 200000 }]
+  };
+
+  it('rejects a malformed body with 400 before dispatching anything', async () => {
+    const execFileImpl = mock();
+    const handler = createDailyReportHandler({ execFileImpl });
+
+    const res = await submitDailyReport(handler, { date: 123 });
+
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Invalid request body/);
+    expect(execFileImpl).not.toHaveBeenCalled();
+  });
+
+  it('dispatches taskferry with a daily-report-shaped prompt and returns its message on success', async () => {
+    const fsImpl = createScratchFs();
+    let dispatchPrompt;
+    const execFileImpl = mock((file, args, options, callback) => {
+      const subcommand = args[0];
+      if (subcommand === 'dispatch') {
+        dispatchPrompt = args[args.indexOf('--prompt') + 1];
+        process.nextTick(() => callback(null, 'id: task-1\nstatus: running\n', ''));
+      } else if (subcommand === 'wait') {
+        process.nextTick(() => callback(null, 'id: task-1\nstatus: done\nexitCode: 0\n', ''));
+      } else if (subcommand === 'result') {
+        process.nextTick(() => callback(null, `taskId: task-1\nstatus: done\nmessage: ${JSON.stringify('A quiet day...')}\n`, ''));
+      } else {
+        process.nextTick(() => callback(null, '', ''));
+      }
+    });
+
+    const res = await submitDailyReport(createDailyReportHandler({ execFileImpl, fsImpl }), validDailyReportSummary);
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ insights: 'A quiet day...', source: 'taskferry' });
+    expect(dispatchPrompt).toContain('tokenShareByModel');
+    expect(dispatchPrompt).toContain('costShareByModel');
+    expect(dispatchPrompt).toContain('z-score');
+  });
+
+  it('returns 503 without a silent fallback when taskferry dispatch fails', async () => {
+    const fsImpl = createScratchFs();
+    const execFileImpl = mock((file, args, options, callback) => {
+      if (args[0] === 'dispatch') process.nextTick(() => callback(new Error('TASKFERRY_INTERNAL_FAILURE_SENTINEL')));
+      else process.nextTick(() => callback(null, '', ''));
+    });
+    const consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await submitDailyReport(createDailyReportHandler({ execFileImpl, fsImpl }), validDailyReportSummary);
+
+    expect(res.statusCode).toBe(503);
+    const parsed = JSON.parse(res.body);
+    expect(typeof parsed.error).toBe('string');
+    expect(parsed.error).not.toContain('TASKFERRY_INTERNAL_FAILURE_SENTINEL');
+    expect(res.body).not.toMatch(/quota|daily|hour|model/i);
+    consoleErrorSpy.mockRestore();
   });
 });
 
