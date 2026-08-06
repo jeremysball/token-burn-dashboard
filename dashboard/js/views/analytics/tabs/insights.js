@@ -1,6 +1,6 @@
 import {
     fmtNum, currentData, historyData, fileHistoricalData,
-    getPricingForModel, cacheDiscountRatioFromPricing, escapeHtml
+    getPricingForModel, cacheDiscountRatioFromPricing, escapeHtml, cacheHitRatePct
 } from './shared.js';
 import { getGitBlameCache } from './shared.js';
 
@@ -80,7 +80,7 @@ export const calculateDeepInsights = () => {
     // 2. Cache Efficiency - Calculate real savings from model pricing
     const totalCacheRead = data.total_cache_read || 0;
     const totalInput = data.total_input || 0;
-    const cacheRate = totalCacheRead / (totalInput + totalCacheRead || 1);
+    const cacheRate = cacheHitRatePct(totalInput, totalCacheRead, data.total_cache_write) / 100;
 
     // Use each model's own cache discount. Applying the top model's pricing to
     // all cached tokens overstates savings when the workload mixes models.
@@ -350,7 +350,7 @@ export const generateLLMInsights = async () => {
             cost: total_cost
         },
         modelCount: models.length,
-        cacheRate: currentData.total_cache_read / (currentData.total_input + currentData.total_cache_read || 1),
+        cacheRate: cacheHitRatePct(currentData.total_input, currentData.total_cache_read, currentData.total_cache_write) / 100,
         inputOutputRatio: currentData.total_input / (currentData.total_output || 1),
         models: models.map(([name, stats]) => {
             const pricing = pricing_by_model?.[name];
@@ -368,7 +368,7 @@ export const generateLLMInsights = async () => {
                 cost: cost
                     ? { input: cost.input, output: cost.output, cacheRead: cost.cache_read, cacheWrite: cost.cache_write, reasoning: cost.reasoning, total: cost.total }
                     : null,
-                cacheRate: stats.cache_read / (stats.input + stats.cache_read || 1),
+                cacheRate: cacheHitRatePct(stats.input, stats.cache_read, stats.cache_write) / 100,
                 pricePerMillion: pricing
                     ? { input: pricing.input, output: pricing.output, cacheRead: pricing.cacheRead, cacheWrite: pricing.cacheWrite, source: pricing.source }
                     : null

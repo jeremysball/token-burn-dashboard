@@ -296,15 +296,24 @@ export const positionNotifications = () => {
  * Cache-hit rate as a percentage (0-100), the convention established
  * at insights.js:371 and reused by cache-slider, live-event-feed,
  * league-table, and weekly-report. Returns 0 when no cacheable volume.
+ *
+ * cacheWrite (Anthropic's cache_creation_input_tokens) must be included in
+ * the denominator: it's genuinely fresh, non-cached-read volume billed at
+ * full input price, reported separately from input_tokens. Omitting it
+ * makes Anthropic usage read as ~100% cache hit rate, since Anthropic's
+ * input_tokens only counts the handful of tokens that are neither cached
+ * nor newly written to cache.
  * @param {number|null|undefined} input
  * @param {number|null|undefined} cacheRead
+ * @param {number|null|undefined} [cacheWrite]
  * @returns {number}
  */
-export function cacheHitRatePct(input, cacheRead) {
+export function cacheHitRatePct(input, cacheRead, cacheWrite) {
     const inTokens = Number(input) || 0;
-    const outTokens = Number(cacheRead) || 0;
-    const total = inTokens + outTokens;
-    return total > 0 ? (outTokens / total) * 100 : 0;
+    const readTokens = Number(cacheRead) || 0;
+    const writeTokens = Number(cacheWrite) || 0;
+    const total = inTokens + readTokens + writeTokens;
+    return total > 0 ? (readTokens / total) * 100 : 0;
 }
 
 /**

@@ -4,11 +4,11 @@ import { cacheHitRatePct, getUsablePricingRate } from './utils.js';
 /**
  * Blended real cache-hit rate across the whole fleet, as a percentage.
  * Delegates to the shared cacheHitRatePct helper for the core formula.
- * @param {{total_input?: number, total_cache_read?: number}|null} currentData
+ * @param {{total_input?: number, total_cache_read?: number, total_cache_write?: number}|null} currentData
  * @returns {number}
  */
 export function getRealCacheHitRatePct(currentData) {
-    return cacheHitRatePct(currentData?.total_input, currentData?.total_cache_read);
+    return cacheHitRatePct(currentData?.total_input, currentData?.total_cache_read, currentData?.total_cache_write);
 }
 
 /**

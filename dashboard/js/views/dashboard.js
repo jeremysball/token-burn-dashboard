@@ -1,5 +1,5 @@
 import { CHART_COLORS, getEmoji, getPricingForModel } from '../config.js';
-import { fmtNum, fmtInt, fmtCur, createSparkline, splitModelKey, displayModel, escapeHtml, parseModelKey, notify } from '../utils.js';
+import { fmtNum, fmtInt, fmtCur, createSparkline, splitModelKey, displayModel, escapeHtml, parseModelKey, notify, cacheHitRatePct } from '../utils.js';
 import { currentData, historyData, fileHistoricalData, dataSource, dataRevision } from '../state.js';
 import { updateEquivTickers } from '../equiv-ticker.js';
 import { renderOdometer, updateOdometer } from '../odometer.js';
@@ -12,6 +12,7 @@ import { renderDailyFieldReport } from '../daily-report.js';
  *   total_tokens: number,
  *   total_cost?: {total?: number},
  *   total_cache_read: number,
+ *   total_cache_write: number,
  *   total_input: number,
  *   pricing_by_model?: Record<string, {input?: number, output?: number, cacheRead?: number, cacheWrite?: number, source?: string}>,
  *   tokens_by_model: Record<string, {total: number}>,
@@ -440,7 +441,7 @@ const generateInsights = (fullRender = true) => {
     }
 
     // Cache efficiency
-    const cacheRate = cd.total_cache_read / (cd.total_input + cd.total_cache_read || 1);
+    const cacheRate = cacheHitRatePct(cd.total_input, cd.total_cache_read, cd.total_cache_write) / 100;
     insights.push({
         icon: cacheRate > 0.5 ? '▲' : '▽',
         title: 'Cache Efficiency',

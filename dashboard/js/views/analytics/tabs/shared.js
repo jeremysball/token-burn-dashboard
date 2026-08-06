@@ -1,5 +1,5 @@
 import { CHART_COLORS, getPricing } from '../../../config.js';
-import { fmtNum, fmtInt, fmtCur, fmtMultiple, getPlotlyLayout, notify, splitModelKey, displayModel } from '../../../utils.js';
+import { fmtNum, fmtInt, fmtCur, fmtMultiple, getPlotlyLayout, notify, splitModelKey, displayModel, cacheHitRatePct } from '../../../utils.js';
 import { currentData, historyData, fileHistoricalData, analyticsRange, setAnalyticsRange, searchTerm, sortCol, sortAsc } from '../../../state.js';
 
 const isCompactViewport = () => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
@@ -213,5 +213,6 @@ export {
     getPricingSourceMeta,
     getCutoffTime,
     createSparkline,
-    escapeHtml
+    escapeHtml,
+    cacheHitRatePct
 };
