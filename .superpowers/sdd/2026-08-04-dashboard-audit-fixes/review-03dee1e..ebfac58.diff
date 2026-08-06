@@ -1,0 +1,744 @@
+# Review package: 03dee1e..HEAD
+
+## Commits
+ebfac58 fix(test): harden lifecycle probe cleanup and CI coverage
+d9e9fef fix(dashboard): await server stdio closure across lifecycle paths
+
+## Files changed
+ .github/workflows/check.yml              |   6 +-
+ package.json                             |   1 +
+ tests/playwright/lifecycle-probe.js      | 392 +++++++++++++++++++++++++++++++
+ tests/playwright/real-server-fixtures.js |  35 ++-
+ tests/playwright/rogue-server.js         | 158 +++++++++++++
+ 5 files changed, 583 insertions(+), 9 deletions(-)
+
+## Diff
+diff --git a/.github/workflows/check.yml b/.github/workflows/check.yml
+index b699dc8..f8236df 100644
+--- a/.github/workflows/check.yml
++++ b/.github/workflows/check.yml
+@@ -5,31 +5,35 @@ on:
+   push:
+     branches: [main]
+ 
+ jobs:
+   check:
+     name: check / ${{ matrix.leg }}
+     runs-on: ubuntu-latest
+     strategy:
+       fail-fast: false
+       matrix:
+-        leg: [lint, typecheck, unit]
++        leg: [lint, typecheck, unit, lifecycle]
+     steps:
+       - uses: actions/checkout@v5
+ 
+       - uses: oven-sh/setup-bun@v2
+         with:
+           bun-version: 1.3.11
+ 
+       - run: bun install --frozen-lockfile
+ 
+       - name: lint
+         if: matrix.leg == 'lint'
+         run: bun run lint:baseline
+ 
+       - name: typecheck
+         if: matrix.leg == 'typecheck'
+         run: bun run typecheck
+ 
+       - name: unit
+         if: matrix.leg == 'unit'
+         run: bun test tests/unit --coverage --coverage-reporter=lcov && bun run coverage:check
++
++      - name: lifecycle
++        if: matrix.leg == 'lifecycle'
++        run: bun run test:lifecycle
+diff --git a/package.json b/package.json
+index cb4b972..04f89a9 100644
+--- a/package.json
++++ b/package.json
+@@ -7,20 +7,21 @@
+   "packageManager": "bun@1.3.11",
+   "scripts": {
+     "start": "bun server.js",
+     "dev": "bun server.js",
+     "test": "bun test tests/unit --coverage",
+     "coverage": "bun test tests/unit --coverage --coverage-reporter=lcov",
+     "coverage:check": "bun scripts/check-coverage.mjs",
+     "test:watch": "bun test tests/unit --watch",
+     "test:e2e": "bunx playwright test tests/playwright/overflow.spec.js --reporter=list",
+     "test:e2e:audit": "bunx playwright test tests/playwright/dashboard-audit-live.spec.js --reporter=list",
++    "test:lifecycle": "bun tests/playwright/lifecycle-probe.js",
+     "lint": "bunx eslint .",
+     "lint:fix": "bunx eslint . --fix",
+     "lint:json": "bunx eslint . --format json --output-file .lint-report.json",
+     "lint:baseline": "bun run lint:json && bun scripts/lint-baseline.mjs .lint-report.json",
+     "lint:baseline:update": "bun run lint:json && bun scripts/lint-baseline.mjs --update .lint-report.json",
+     "typecheck": "bunx tsc --noEmit",
+     "check": "bun run lint && bun run typecheck",
+     "prepare": "bun scripts/install-hooks.mjs",
+     "dev:ui": "bunx --bun vite",
+     "build:ui": "bunx --bun vite build && bun scripts/copy-static-data.mjs"
+diff --git a/tests/playwright/lifecycle-probe.js b/tests/playwright/lifecycle-probe.js
+new file mode 100644
+index 0000000..b847d71
+--- /dev/null
++++ b/tests/playwright/lifecycle-probe.js
+@@ -0,0 +1,392 @@
++/**
++ * Lifecycle probe for tests/playwright/real-server-fixtures.js.
++ *
++ * Exercises the two P1 findings from the final scoped review using the
++ * real spawn and lifecycle path that the fixture uses in production.
++ * The rogue server (tests/playwright/rogue-server.js) is the target
++ * because it deliberately forks a grandchild that inherits stdout,
++ * so killing the rogue leaves the inherited pipe open until the
++ * grandchild exits on its own timer.
++ *
++ *   1. startRealServer() must reject promptly on synchronous and
++ *      asynchronous signal termination, even when a descendant holds
++ *      an inherited stdio pipe past the child's exit. The previous
++ *      implementation awaited childClosed inside the startup catch
++ *      block, which turned a millisecond-scale rejection into a
++ *      multi-second stdio-flush delay.
++ *
++ *   2. stopRealServer() must never return before childClosed resolves.
++ *      The previous implementation could return after the SIGTERM
++ *      timeout race when exitCode/signalCode was set, even though
++ *      childClosed was still pending because a descendant held an
++ *      inherited stdio pipe.
++ *
++ * The probe relies on a per-run unique set of files so concurrent
++ * probes cannot collide:
++ *
++ *   ROGUE_PARENT_PID_FILE      — written by the rogue after spawn.
++ *   ROGUE_GRANDCHILD_PID_FILE  — written by the rogue when the
++ *                                 grandchild 'spawn' event fires.
++ *   ROGUE_GRANDCHILD_READY_FILE — written by the grandchild after
++ *                                 its first successful write to the
++ *                                 inherited stdout. The probe waits
++ *                                 for this marker before signalling
++ *                                 the parent.
++ *   ROGUE_GRANDCHILD_EXIT_FILE  — written by the grandchild as its
++ *                                 last act before process.exit(0).
++ *                                 stopRealServer's await of childClosed
++ *                                 can only fire after the grandchild's
++ *                                 inherited handles release the pipe,
++ *                                 which is exactly when the exit marker
++ *                                 is written — so its presence proves
++ *                                 the assertion directly.
++ *
++ * Cleanup reads only the PIDs from this run's files, signals them if
++ * alive, and removes the files. Already-gone PIDs/files are expected.
++ * Unexpected filesystem or process errors surface as probe failures
++ * rather than being silently swallowed. Cleanup runs in try/finally so
++ * assertion failures never leave a rogue grandchild alive.
++ *
++ * Run with: bun tests/playwright/lifecycle-probe.js
++ */
++const fs = require('fs');
++const os = require('os');
++const path = require('path');
++const crypto = require('crypto');
++const { startRealServer, stopRealServer } = require('./real-server-fixtures');
++
++const ROGUE_SERVER_PATH = path.resolve(__dirname, 'rogue-server.js');
++const STARTUP_REJECTION_BUDGET_MS = 2000;
++const STOP_GRANDCHILD_LIFETIME_MS = 7000;
++const STOP_PROBE_HARD_LIMIT_MS = 11000;
++const READY_HARD_LIMIT_MS = 5000;
++
++function assert(condition, message) {
++  if (!condition) {
++    throw new Error(`lifecycle probe assertion failed: ${message}`);
++  }
++}
++
++function uniqueFiles(label) {
++  // crypto.randomBytes avoids the sonarjs/pseudo-random warning while
++  // remaining cheap; the value is used purely for filename uniqueness,
++  // not security.
++  const suffix = crypto.randomBytes(4).toString('hex');
++  const base = path.join(
++    os.tmpdir(),
++    `rogue-${label}-${process.pid}-${Date.now()}-${suffix}`
++  );
++  return {
++    parent: `${base}-parent.pid`,
++    grandchild: `${base}-grandchild.pid`,
++    ready: `${base}-grandchild-ready.marker`,
++    exit: `${base}-grandchild-exit.marker`
++  };
++}
++
++function setRogueEnv(files) {
++  process.env.ROGUE_PARENT_PID_FILE = files.parent;
++  process.env.ROGUE_GRANDCHILD_PID_FILE = files.grandchild;
++  process.env.ROGUE_GRANDCHILD_READY_FILE = files.ready;
++  process.env.ROGUE_GRANDCHILD_EXIT_FILE = files.exit;
++}
++
++function clearRogueState() {
++  delete process.env.ROGUE_PARENT_PID_FILE;
++  delete process.env.ROGUE_GRANDCHILD_PID_FILE;
++  delete process.env.ROGUE_GRANDCHILD_READY_FILE;
++  delete process.env.ROGUE_GRANDCHILD_EXIT_FILE;
++  delete process.env.ROGUE_MODE;
++  delete process.env.ROGUE_GRANDCHILD_LIFETIME_MS;
++}
++
++function readPidFromFile(file) {
++  const txt = fs.readFileSync(file, 'utf8').trim();
++  const pid = parseInt(txt, 10);
++  assert(
++    Number.isFinite(pid) && pid > 0,
++    `pid file ${file} did not contain a positive integer: ${JSON.stringify(txt)}`
++  );
++  return pid;
++}
++
++function waitFor(file, timeoutMs, reader) {
++  const start = Date.now();
++  return new Promise((resolve, reject) => {
++    const tick = () => {
++      try {
++        return resolve(reader(file));
++      } catch (e) {
++        if (e && e.code === 'ENOENT') {
++          if (Date.now() - start > timeoutMs) return resolve(null);
++          return setTimeout(tick, 10);
++        }
++        return reject(e);
++      }
++    };
++    tick();
++  });
++}
++
++async function waitForPid(file, timeoutMs) {
++  return waitFor(file, timeoutMs, readPidFromFile);
++}
++
++function fileExists(p) {
++  try {
++    return fs.statSync(p).isFile();
++  } catch (e) {
++    if (e && e.code === 'ENOENT') return false;
++    throw new Error(`unexpected error checking ${p}: ${e && e.message ? e.message : e}`, { cause: e });
++  }
++}
++
++async function waitForFile(file, timeoutMs) {
++  const start = Date.now();
++  while (Date.now() - start <= timeoutMs) {
++    if (fileExists(file)) return true;
++    await new Promise((r) => setTimeout(r, 10));
++  }
++  return false;
++}
++
++function signalOrThrow(pid, signal) {
++  // Treat ESRCH (already gone) as expected. Surface anything else so
++  // unexpected process errors fail the probe rather than being silently
++  // swallowed.
++  try {
++    process.kill(pid, signal);
++  } catch (e) {
++    if (e && e.code === 'ESRCH') return;
++    throw new Error(`unexpected error signalling pid ${pid} with ${signal}: ${e && e.message ? e.message : e}`, { cause: e });
++  }
++}
++
++function unlinkOrThrow(file) {
++  try {
++    fs.unlinkSync(file);
++    return true;
++  } catch (e) {
++    if (e && e.code === 'ENOENT') return false;
++    throw new Error(`unexpected error removing ${file}: ${e && e.message ? e.message : e}`, { cause: e });
++  }
++}
++
++function readPidIfExists(file, errors) {
++  try {
++    return readPidFromFile(file);
++  } catch (e) {
++    if (e && e.code === 'ENOENT') return null;
++    if (errors) errors.push(`read ${file}: ${e.message}`);
++    return null;
++  }
++}
++
++async function cleanupRun(files) {
++  // Best-effort, exact-PID cleanup. We read our own PID files and
++  // signal only those PIDs. Files we wrote are removed.
++  const cleanupErrors = [];
++
++  const grandchildPid = readPidIfExists(files.grandchild, cleanupErrors);
++  const parentPid = readPidIfExists(files.parent, cleanupErrors);
++
++  // Signal in grandchild-then-parent order so the parent never reaps
++  // the grandchild before we get a chance to signal it.
++  if (grandchildPid) signalOrThrow(grandchildPid, 'SIGKILL');
++  if (parentPid) signalOrThrow(parentPid, 'SIGKILL');
++
++  for (const file of [files.ready, files.exit, files.grandchild, files.parent]) {
++    try {
++      unlinkOrThrow(file);
++    } catch (e) {
++      cleanupErrors.push(e.message);
++    }
++  }
++
++  if (cleanupErrors.length > 0) {
++    throw new Error(`cleanup failed: ${cleanupErrors.join('; ')}`, { cause: new Error(cleanupErrors.join('; ')) });
++  }
++}
++
++async function waitForDescendantReady(files) {
++  const parentPid = await waitForPid(files.parent, 5000);
++  assert(parentPid, 'rogue parent must have written its PID within 5s after spawn');
++  const grandchildPid = await waitForPid(files.grandchild, 5000);
++  assert(grandchildPid, 'rogue grandchild must have written its PID within 5s after spawn');
++  const ready = await waitForFile(files.ready, READY_HARD_LIMIT_MS);
++  assert(
++    ready,
++    `rogue grandchild must write its ready marker before SIGTERM; file ${files.ready} did not appear within ${READY_HARD_LIMIT_MS}ms`
++  );
++  return { parentPid, grandchildPid };
++}
++
++async function probeStartupRejection() {
++  const files = uniqueFiles('startup');
++  setRogueEnv(files);
++  process.env.ROGUE_MODE = 'no-banner';
++  process.env.ROGUE_GRANDCHILD_LIFETIME_MS = '8000';
++
++  let err = null;
++  let startPromise = null;
++  try {
++    const t0 = Date.now();
++    startPromise = startRealServer({ serverPath: ROGUE_SERVER_PATH });
++    // Defensive: if the rogue later exits naturally and we abort before
++    // awaiting the promise, suppress the resulting unhandled rejection so
++    // the probe's own assertion is what the test runner sees.
++    startPromise.catch(() => {});
++
++    await waitForDescendantReady(files);
++    const { parentPid } = readDescendantPids(files);
++    signalOrThrow(parentPid, 'SIGTERM');
++
++    try {
++      await startPromise;
++    } catch (e) {
++      err = e;
++    }
++
++    const elapsed = Date.now() - t0;
++    console.log(`startup rejection elapsed: ${elapsed}ms (budget < ${STARTUP_REJECTION_BUDGET_MS}ms)`);
++    console.log(`startup rejection error: ${err ? err.message.split('\n')[0] : 'NONE'}`);
++    assert(err instanceof Error, 'startRealServer must reject when signalled before banner');
++    assert(
++      elapsed < STARTUP_REJECTION_BUDGET_MS,
++      `startRealServer must reject promptly (< ${STARTUP_REJECTION_BUDGET_MS}ms) when a descendant holds an inherited stdio pipe after SIGTERM; got ${elapsed}ms`
++    );
++    assert(
++      /terminated by signal SIGTERM|spawn failed|terminated before emitting/.test(err.message),
++      `startup rejection diagnostic must include termination reason; got: ${err.message}`
++    );
++  } finally {
++    await cleanupRun(files);
++    clearRogueState();
++    if (startPromise) {
++      try { await startPromise; } catch { /* surfaced above */ }
++    }
++  }
++}
++
++function readDescendantPids(files) {
++  // Sibling file existence uses fs.existsSync before the read; see
++  // readPidIfExists. This helper only wraps two reads so probe bodies
++  // stay linear.
++  const errors = [];
++  const parentPid = readPidIfExists(files.parent, errors);
++  const grandchildPid = readPidIfExists(files.grandchild, errors);
++  if (errors.length > 0) throw new Error(errors.join('; '));
++  return { parentPid, grandchildPid };
++}
++
++function assertServerHandle(server) {
++  assert(server && server.child && server.childClosed, 'startRealServer must return a server handle with child and childClosed');
++  assert(server.child.exitCode === null && server.child.signalCode === null, 'fresh rogue server must be alive');
++  assert(server.child.pid && server.child.pid > 0, 'fresh rogue server must expose a pid');
++}
++
++function assertParentPidMatches(server, files) {
++  const parentPid = readPidFromFile(files.parent);
++  assert(
++    parentPid === server.child.pid,
++    `parent PID file (${parentPid}) must match server.child.pid (${server.child.pid}); proves rogue wrote parent PID only after spawn`
++  );
++}
++
++async function assertChildClosedAlreadySettled(server) {
++  // Probe invariant: stopRealServer must not return before childClosed
++  // resolves. A second await that completes immediately is the direct
++  // proof; if it has not yet resolved, stopRealServer returned too early.
++  const verifyStart = Date.now();
++  await server.childClosed;
++  const verifyElapsed = Date.now() - verifyStart;
++  console.log(`post-return childClosed await: ${verifyElapsed}ms (must be near-zero)`);
++  assert(
++    verifyElapsed < 200,
++    `stopRealServer must await childClosed before returning; post-return await took ${verifyElapsed}ms`
++  );
++}
++
++function assertGrandchildExitMarker(files) {
++  // The grandchild-exit marker is the last thing the grandchild writes
++  // before process.exit(0). stopRealServer's childClosed resolves only
++  // when stdio closes — which happens precisely when the grandchild's
++  // inherited handles release the pipe. The marker presence is
++  // therefore the direct proof of the invariant.
++  assert(
++    fileExists(files.exit),
++    `grandchild-exit marker must exist after stopRealServer returns; file ${files.exit} is missing`
++  );
++}
++
++function assertGrandchildIsGone(files) {
++  const recordedGrandchildPid = readPidFromFile(files.grandchild);
++  let alive = true;
++  try {
++    process.kill(recordedGrandchildPid, 0);
++  } catch (e) {
++    if (e && e.code === 'ESRCH') alive = false;
++    else throw new Error(`unexpected signal-0 error on grandchild ${recordedGrandchildPid}: ${e && e.message ? e.message : e}`, { cause: e });
++  }
++  assert(!alive, `grandchild pid ${recordedGrandchildPid} should be gone after stopRealServer returns`);
++}
++
++async function probeStopRealServerAwaitsClose() {
++  const files = uniqueFiles('stop');
++  setRogueEnv(files);
++  process.env.ROGUE_MODE = 'banner';
++  process.env.ROGUE_GRANDCHILD_LIFETIME_MS = String(STOP_GRANDCHILD_LIFETIME_MS);
++
++  let server = null;
++  try {
++    server = await startRealServer({ serverPath: ROGUE_SERVER_PATH });
++    assertServerHandle(server);
++    assertParentPidMatches(server, files);
++    await waitForDescendantReady(files);
++
++    const t0 = Date.now();
++    process.kill(server.child.pid, 'SIGTERM');
++    await stopRealServer(server);
++    const elapsed = Date.now() - t0;
++    console.log(`stopRealServer elapsed: ${elapsed}ms (hard limit < ${STOP_PROBE_HARD_LIMIT_MS}ms)`);
++
++    await assertChildClosedAlreadySettled(server);
++    assertGrandchildExitMarker(files);
++    assertGrandchildIsGone(files);
++
++    // Operational upper timeout: a hung implementation that ignores the
++    // marker and never closes stdio must not hang CI.
++    assert(
++      elapsed < STOP_PROBE_HARD_LIMIT_MS,
++      `stopRealServer must complete within hard limit; got ${elapsed}ms (limit ${STOP_PROBE_HARD_LIMIT_MS}ms)`
++    );
++  } finally {
++    if (server) {
++      try {
++        if (server.child && server.child.exitCode === null && server.child.signalCode === null) {
++          await stopRealServer(server).catch(() => {});
++        }
++      } catch { /* surface only cleanup errors below */ }
++    }
++    await cleanupRun(files);
++    clearRogueState();
++  }
++}
++
++async function main() {
++  console.log('--- probe 1: startRealServer rejection stays prompt under SIGTERM + descendant-held-pipe');
++  await probeStartupRejection();
++  console.log('  PASS');
++
++  console.log('--- probe 2: stopRealServer awaits childClosed unconditionally');
++  await probeStopRealServerAwaitsClose();
++  console.log('  PASS');
++
++  console.log('--- lifecycle probe: ALL PASS');
++}
++
++main().catch((err) => {
++  console.error('--- lifecycle probe: FAIL');
++  console.error(err && err.stack ? err.stack : err);
++  process.exit(1);
++});
+diff --git a/tests/playwright/real-server-fixtures.js b/tests/playwright/real-server-fixtures.js
+index afb0935..ad32881 100644
+--- a/tests/playwright/real-server-fixtures.js
++++ b/tests/playwright/real-server-fixtures.js
+@@ -49,24 +49,29 @@ function formatTermination(prefix, reason, stderr) {
+  *
+  *   childClosed — resolves only on the canonical 'close' event (stdio
+  *     flushed) or on a spawn 'error'. stopRealServer awaits this so it
+  *     never returns while inherited stdio pipes remain held by a
+  *     descendant.
+  *
+  * The reserved port is released before the banner-parsing promise starts, so
+  * the TCP probe can only succeed once the child actually binds the port. The
+  * actual port is parsed from the server's stdout banner, which handles the
+  * case where server.js falls back to an adjacent port on EADDRINUSE.
++ *
++ * The optional `options.serverPath` argument allows focused lifecycle probes
++ * to inject a deliberate target (e.g. a rogue child that holds an inherited
++ * stdio pipe via a surviving descendant) without altering the production
++ * path. The default is the repository's real server.js.
+  */
+-async function startRealServer() {
++async function startRealServer(options = {}) {
+   const { port, release } = await reservePort();
+-  const serverPath = path.resolve(__dirname, '..', '..', 'server.js');
++  const serverPath = options.serverPath || path.resolve(__dirname, '..', '..', 'server.js');
+   const child = spawn('bun', [serverPath], {
+     cwd: path.resolve(__dirname, '..', '..'),
+     stdio: ['ignore', 'pipe', 'pipe'],
+     env: { ...process.env, PORT: String(port) }
+   });
+ 
+   // Collect stderr for diagnostics in error messages.
+   let stderr = '';
+   child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+ 
+@@ -194,24 +199,29 @@ async function startRealServer() {
+ 
+     return {
+       baseUrl: `http://127.0.0.1:${actualPort}/`,
+       port: actualPort,
+       child,
+       childClosed
+     };
+   } catch (err) {
+     // Kill only if the child is still alive (exit/signal not yet observed).
+     if (!exited) child.kill('SIGKILL');
+-    // Drain the stdio-flush promise so callers don't observe inherited pipes
+-    // still held by a descendant. This is safe even when the child already
+-    // exited, since childClosed resolves on 'error' too.
+-    await childClosed;
++    // Do NOT await childClosed on the startup error path. A descendant
++    // holding an inherited stdio pipe (e.g. a SIGTERM'd child whose
++    // grandchild survived) keeps the canonical 'close' event pending for
++    // seconds, which would turn a millisecond-scale rejection into a
++    // multi-second delay. Startup rejection must remain prompt on both
++    // synchronous and asynchronous signal termination. Attach a no-op
++    // catch so the orphaned lifecycle promise can never surface as an
++    // unhandled rejection if it ever fails to settle.
++    childClosed.catch(() => {});
+     throw err;
+   }
+ }
+ 
+ /**
+  * Stop a real server child process deterministically.
+  *
+  * Sends SIGTERM, waits up to 5s, then force-kills with SIGKILL.
+  * Awaits the canonical 'close' event (stdio flushed) via childClosed
+  * rather than 'exit', so this function never returns while inherited
+@@ -228,18 +238,27 @@ async function stopRealServer(server) {
+     return;
+   }
+ 
+   // Send SIGTERM and wait up to 5s for a clean exit (and stdio flush).
+   child.kill('SIGTERM');
+   const raced = await Promise.race([
+     childClosed.then(() => 'done'),
+     new Promise((r) => setTimeout(() => r('timeout'), 5000))
+   ]);
+ 
+-  // If still alive after SIGTERM, force-kill and wait for stdio to flush.
++  // After the timeout, force-kill only when the child still appears alive.
++  // Do NOT await childClosed inside this branch — the unconditional await
++  // below guarantees that this function never returns before stdio is fully
++  // flushed, even when a descendant still holds an inherited pipe after
++  // signal termination.
+   if (raced === 'timeout' && child.exitCode === null && child.signalCode === null) {
+     child.kill('SIGKILL');
+-    await childClosed;
+   }
++
++  // Always await childClosed before returning. When the 'done' branch
++  // already resolved it this is a no-op; when the timeout branch fired and
++  // a descendant holds the pipe, this blocks until the pipe drains so
++  // callers never observe inherited handles still in use.
++  await childClosed;
+ }
+ 
+ module.exports = { startRealServer, stopRealServer };
+diff --git a/tests/playwright/rogue-server.js b/tests/playwright/rogue-server.js
+new file mode 100644
+index 0000000..c0f03d3
+--- /dev/null
++++ b/tests/playwright/rogue-server.js
+@@ -0,0 +1,158 @@
++/**
++ * Rogue server for the real-server-fixture lifecycle probe.
++ *
++ * Runs under Bun (matching the spawn shape of startRealServer) and
++ * deliberately exhibits two behaviors that the production server does
++ * not:
++ *
++ *   1. Forks a grandchild that inherits stdout, so when this script is
++ *      killed the inherited pipe stays open until the grandchild itself
++ *      exits. This delays the canonical 'close' event on the parent
++ *      child process for several seconds, exercising the descendant-
++ *      held-pipe path that the fixture must handle deterministically.
++ *
++ *   2. Exits promptly on SIGTERM/SIGKILL without forwarding the signal
++ *      to the grandchild, so the grandchild leaks past the parent and
++ *      truly holds the pipe open across the fixture's await window.
++ *
++ * The mode is selected by the ROGUE_MODE environment variable:
++ *
++ *   'banner' (default) — prints the listening URL immediately so
++ *      startRealServer returns successfully. Used to exercise the
++ *      stopRealServer path against an already-started server.
++ *
++ *   'no-banner' — never prints the listening URL, so the banner wait in
++ *      startRealServer can only resolve via termination. Used to
++ *      exercise the startup catch path.
++ *
++ * The grandchild exits on its own after ROGUE_GRANDCHILD_LIFETIME_MS
++ * (default 5000ms).
++ *
++ * File-based readiness protocol (consumed by lifecycle-probe.js).
++ * Each invocation reads its own unique file paths so concurrent probes
++ * never collide:
++ *
++ *   ROGUE_PARENT_PID_FILE      — written by this script AFTER the
++ *      grandchild has been spawned. The probe uses this PID to signal
++ *      exactly this instance without scanning ps.
++ *
++ *   ROGUE_GRANDCHILD_PID_FILE  — written by this script in the
++ *      grandchild's 'spawn' event handler. The probe uses it during
++ *      cleanup if the grandchild outlives the parent.
++ *
++ *   ROGUE_GRANDCHILD_READY_FILE — written by the grandchild after its
++ *      first successful process.stdout.write(''). The probe waits for
++ *      this marker before signalling the parent, so the marker proves
++ *      the inherited stdout pipe is alive on the descendant side before
++ *      the SIGTERM.
++ *
++ *   ROGUE_GRANDCHILD_EXIT_FILE — written by the grandchild as its last
++ *      action before process.exit(0). stopRealServer's childClosed can
++ *      only resolve after the grandchild's inherited handles release
++ *      the pipe — exactly when this marker is written — so the marker
++ *      is the direct proof that the descendant actually exited before
++ *      stopRealServer returned.
++ */
++const cp = require('child_process');
++const fs = require('fs');
++
++const mode = process.env.ROGUE_MODE || 'banner';
++const port = process.env.PORT || 0;
++
++// Per-run unique file paths. We don't reference these by name in the
++// parent; they are passed through to the grandchild via process.env
++// so the read of ROGUE_GRANDCHILD_*_FILE happens inside the spawned
++// grandchild's -e script. parentPidFile is the only one this script
++// reads directly.
++const parentPidFile = process.env.ROGUE_PARENT_PID_FILE || '';
++const grandchildPidFile = process.env.ROGUE_GRANDCHILD_PID_FILE || '';
++
++function failFast(message, cause) {
++  // Surface unexpected filesystem errors rather than silently swallowing
++  // them, per the probe's contract. We still exit non-zero so the probe
++  // can see this rogue instance died for an unrelated reason.
++  process.stderr.write(`rogue-server: ${message}\n`);
++  if (cause) process.stderr.write(`${cause.stack || cause.message || cause}\n`);
++  process.exit(2);
++}
++
++function writeMarker(file, contents) {
++  if (!file) return;
++  try {
++    fs.writeFileSync(file, contents);
++  } catch (e) {
++    failFast(`failed to write ${file}`, e);
++  }
++}
++
++// Spawn the grandchild FIRST. cp.spawn returns synchronously after the
++// OS has created the child descriptor, so by writing the parent PID
++// below we guarantee the descriptor exists. The grandchild runs with
++// the same environment as this script, including ROGUE_GRANDCHILD_*
++// marker file paths.
++const grandchildSource = `
++const fs = require('fs');
++const readyFile = process.env.ROGUE_GRANDCHILD_READY_FILE || '';
++const exitFile = process.env.ROGUE_GRANDCHILD_EXIT_FILE || '';
++const lifetime = Number(process.env.ROGUE_GRANDCHILD_LIFETIME_MS || 5000);
++if (!readyFile || !exitFile) {
++  process.stderr.write('rogue grandchild: missing marker file env\\n');
++  process.exit(2);
++}
++try { process.stdout.write(''); } catch { /* pipe existence check */ }
++fs.writeFileSync(readyFile, String(process.pid));
++const start = Date.now();
++const interval = setInterval(() => {
++  try { process.stdout.write(''); } catch { /* best-effort hold */ }
++  if (Date.now() - start > lifetime) {
++    clearInterval(interval);
++    try {
++      fs.writeFileSync(exitFile, String(process.pid));
++    } catch (e) {
++      process.stderr.write('rogue grandchild: failed to write exit marker\\n');
++      process.stderr.write((e && e.stack) || String(e));
++      process.exit(2);
++    }
++    process.exit(0);
++  }
++}, 100);
++`;
++
++const grandchild = cp.spawn(process.execPath, ['-e', grandchildSource], {
++  stdio: 'inherit'
++});
++
++grandchild.on('spawn', () => {
++  if (grandchildPidFile) writeMarker(grandchildPidFile, String(grandchild.pid));
++});
++
++grandchild.on('error', (err) => {
++  failFast('grandchild spawn error', err);
++});
++
++// Parent readiness: write the parent PID AFTER cp.spawn has returned,
++// but BEFORE the parent logs the banner. The probe treats the PID
++// file's existence as proof that the child descriptor was created.
++writeMarker(parentPidFile, String(process.pid));
++
++// On SIGTERM, exit promptly. We deliberately do NOT forward the signal
++// to the grandchild — the orphan grandchild is what holds the inherited
++// pipe open, which is exactly the behaviour the fixture must handle.
++process.on('SIGTERM', () => process.exit(0));
++// SIGKILL cannot be caught; the kernel kills us instantly.
++
++if (mode === 'banner') {
++  // Emit the banner synchronously so startRealServer returns the
++  // server handle immediately and the probe can move on to
++  // exercising stopRealServer.
++  process.stdout.write(`http://127.0.0.1:${port}\n`);
++}
++
++// Keep this process alive until signalled or the grandchild finishes.
++const keepAlive = setInterval(() => {}, 60000);
++grandchild.on('exit', () => {
++  // Once the grandchild is gone, the inherited pipe is closed and the
++  // parent's 'close' event can finally fire. We can exit too.
++  clearInterval(keepAlive);
++  process.exit(0);
++});

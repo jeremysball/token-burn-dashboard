@@ -1,6 +1,18 @@
 import { CHART_COLORS, historyData, fileHistoricalData, isCompactViewport, getPlotlyLayout, getCutoffTime, analyticsRange, setAnalyticsRange, resolveAvailableRange } from './shared.js';
 import { detectDeadAirBands } from '../../../dead-air.js';
 
+const HOUR_MS = 3600 * 1000;
+
+/** @param {boolean} usingFileHistory @param {Array<{time: number}>} filtered @param {number} chartEnd @returns {Array<{start: number, end: number}>} */
+const getTimelineDeadAirBands = (usingFileHistory, filtered, chartEnd) => usingFileHistory
+    ? detectDeadAirBands(filtered, 3, chartEnd)
+    : [];
+
+/** @param {string} range @param {number} chartEnd @param {number} finalObservedTime @returns {number} */
+const getTimelineXAxisEnd = (range, chartEnd, finalObservedTime) => range === 'all'
+    ? Math.max(chartEnd, finalObservedTime)
+    : chartEnd;
+
 /**
  * @param {HTMLElement|null|undefined} container
  */
@@ -10,7 +22,8 @@ export function renderTimelineTab(container) {
     const Plotly = /** @type {any} */ (globalThis)['Plotly'];
     if (!container || !Plotly) return;
 
-    const sourceData = fileHistoricalData.length > 0 ? fileHistoricalData : historyData;
+    const usingFileHistory = fileHistoricalData.length > 0;
+    const sourceData = usingFileHistory ? fileHistoricalData : historyData;
     const resolvedRange = resolveAvailableRange(sourceData, analyticsRange);
     if (resolvedRange !== analyticsRange) {
         setAnalyticsRange(resolvedRange);
@@ -22,8 +35,8 @@ export function renderTimelineTab(container) {
     const cutoff = getCutoffTime();
     const filtered = sourceData.filter(h => h.time > cutoff);
 
-    // If even "all" has insufficient data, show the empty state.
-    if (filtered.length < 2) {
+    // File history can still render a single valid point at the chart boundary.
+    if (filtered.length < 1) {
         /** @type {Record<string, string>} */
         const rangeLabels = { '1h': '1 hour', '24h': '24 hours', '7d': '7 days', '30d': '30 days', 'all': 'all time' };
         const currentRange = rangeLabels[analyticsRange] || analyticsRange;
@@ -37,7 +50,11 @@ export function renderTimelineTab(container) {
     }
 
     const mobile = isCompactViewport();
-    const deadAirBands = detectDeadAirBands(filtered);
+    const chartEnd = Math.floor(Date.now() / HOUR_MS) * HOUR_MS;
+    const finalObservedTime = filtered[filtered.length - 1].time;
+    const xAxisEnd = getTimelineXAxisEnd(analyticsRange, chartEnd, finalObservedTime);
+    const rangeStart = { all: filtered[0].time }[analyticsRange] ?? cutoff;
+    const deadAirBands = getTimelineDeadAirBands(usingFileHistory, filtered, chartEnd);
     const deadAirShapes = deadAirBands.map((band) => ({
         type: 'rect',
         xref: 'x',
@@ -72,6 +89,12 @@ export function renderTimelineTab(container) {
     Plotly.newPlot('timeline-chart-container', traces, {
         ...getPlotlyLayout(),
         margin: mobile ? { t: 16, r: 16, b: 40, l: 52 } : { t: 20, r: 20, b: 40, l: 60 },
+        xaxis: {
+            range: [
+                new Date(rangeStart),
+                new Date(xAxisEnd)
+            ]
+        },
         yaxis: { title: 'Tokens', automargin: true },
         shapes: deadAirShapes,
         annotations: deadAirAnnotations

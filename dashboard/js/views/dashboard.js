@@ -1,6 +1,6 @@
 import { CHART_COLORS, getEmoji, getPricingForModel } from '../config.js';
 import { fmtNum, fmtInt, fmtCur, createSparkline, splitModelKey, displayModel, escapeHtml, parseModelKey, notify } from '../utils.js';
-import { currentData, historyData, fileHistoricalData } from '../state.js';
+import { currentData, historyData, fileHistoricalData, dataSource, dataRevision } from '../state.js';
 import { updateEquivTickers } from '../equiv-ticker.js';
 import { renderOdometer, updateOdometer } from '../odometer.js';
 import { renderCacheSlider } from '../cache-slider.js';
@@ -43,7 +43,11 @@ export const renderDashboard = (fullRender = true) => {
     // fires only when total_tokens actually changed and only after the
     // first paint — never on page load, never while idle (spec-mandated;
     // an earlier mockup draft that rolled on load/idle was corrected
-    // during review).
+    // during review). The gate is request-based: dataset.value records the
+    // newest *requested* total before updateOdometer is called, so a repeat
+    // of the same requested total is skipped, but the dataset is never used
+    // as proof the DOM has settled. The odometer's own replay state drains
+    // any newest pending target after each transition settles.
     const heroTokens = document.getElementById('hero-tokens');
     if (heroTokens) {
         const currentTokens = parseInt(heroTokens.dataset.value || '0');
@@ -97,7 +101,7 @@ export const renderDashboard = (fullRender = true) => {
     if (cacheSection) renderCacheSlider(cacheSection, cd);
 
     const liveFeedSection = document.getElementById('live-feed-section');
-    if (liveFeedSection) renderLiveEventFeed(liveFeedSection, cd);
+    if (liveFeedSection) renderLiveEventFeed(liveFeedSection, cd, { source: dataSource ?? undefined, revision: dataRevision });
 
     // Render top models over the last 48 hours (update in place unless full render)
     renderTopModels(getTokensByModelLast48h(tokens_by_model), fullRender);

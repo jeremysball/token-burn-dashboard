@@ -1,0 +1,221 @@
+diff --git a/dashboard/js/dead-air.js b/dashboard/js/dead-air.js
+index ffa22f0..2c0572f 100644
+--- a/dashboard/js/dead-air.js
++++ b/dashboard/js/dead-air.js
+@@ -1,25 +1,49 @@
+ // dashboard/js/dead-air.js
+ const HOUR_MS = 3600 * 1000;
+ 
++/** @param {*} buckets @param {number|undefined} chartEnd @returns {boolean} */
++const hasValidHourlyInput = (buckets, chartEnd) => {
++    if (!Array.isArray(buckets)) return false;
++    if (chartEnd !== undefined && (!Number.isFinite(chartEnd) || chartEnd % HOUR_MS !== 0)) return false;
++    return buckets.every((bucket, index) => {
++        const time = bucket?.time;
++        return Number.isFinite(time) && time % HOUR_MS === 0 && (index === 0 || time > buckets[index - 1].time);
++    });
++};
++
++/** @param {Array<{time: number}>} buckets @param {number} thresholdHours @returns {Array<{start: number, end: number}>} */
++const detectInternalBands = (buckets, thresholdHours) => {
++    /** @type {Array<{start: number, end: number}>} */
++    const bands = [];
++    for (let i = 1; i < buckets.length; i++) {
++        const prevTime = buckets[i - 1].time;
++        const currTime = buckets[i].time;
++        const missingHours = (currTime - prevTime) / HOUR_MS - 1;
++        if (missingHours >= thresholdHours) bands.push({ start: prevTime + HOUR_MS, end: currTime });
++    }
++    return bands;
++};
++
+ /**
+  * Detects runs of missing hourly buckets in an already hour-aggregated,
+  * ascending-by-time series, e.g. the Timeline tab's `filtered` array.
+  * @param {Array<{time: number}>} buckets sorted ascending by `time`
+  * @param {number} [thresholdHours=3]
++ * @param {number} [chartEnd]
+  * @returns {Array<{start: number, end: number}>}
+  */
+-export function detectDeadAirBands(buckets, thresholdHours = 3) {
+-    if (!buckets || buckets.length < 2) return [];
++export function detectDeadAirBands(buckets, thresholdHours = 3, chartEnd = undefined) {
++    if (!Number.isFinite(thresholdHours) || thresholdHours <= 0 || !hasValidHourlyInput(buckets, chartEnd) || buckets.length === 0) return [];
+ 
+-    /** @type {Array<{start: number, end: number}>} */
+-    const bands = [];
+-    for (let i = 1; i < buckets.length; i++) {
+-        const prevTime = buckets[i - 1].time;
+-        const currTime = buckets[i].time;
+-        const missingHours = Math.round((currTime - prevTime) / HOUR_MS) - 1;
++    const bands = detectInternalBands(buckets, thresholdHours);
++
++    const lastTime = buckets[buckets.length - 1].time;
++    if (chartEnd !== undefined && chartEnd > lastTime) {
++        const missingHours = (chartEnd - lastTime) / HOUR_MS - 1;
+         if (missingHours >= thresholdHours) {
+-            bands.push({ start: prevTime + HOUR_MS, end: currTime });
++            bands.push({ start: lastTime + HOUR_MS, end: chartEnd });
+         }
+     }
++
+     return bands;
+ }
+diff --git a/dashboard/js/views/analytics/tabs/timeline.js b/dashboard/js/views/analytics/tabs/timeline.js
+index 61d1ff1..772f34c 100644
+--- a/dashboard/js/views/analytics/tabs/timeline.js
++++ b/dashboard/js/views/analytics/tabs/timeline.js
+@@ -1,6 +1,18 @@
+ import { CHART_COLORS, historyData, fileHistoricalData, isCompactViewport, getPlotlyLayout, getCutoffTime, analyticsRange, setAnalyticsRange, resolveAvailableRange } from './shared.js';
+ import { detectDeadAirBands } from '../../../dead-air.js';
+ 
++const HOUR_MS = 3600 * 1000;
++
++/** @param {boolean} usingFileHistory @param {Array<{time: number}>} filtered @param {number} chartEnd @returns {Array<{start: number, end: number}>} */
++const getTimelineDeadAirBands = (usingFileHistory, filtered, chartEnd) => usingFileHistory
++    ? detectDeadAirBands(filtered, 3, chartEnd)
++    : [];
++
++/** @param {string} range @param {number} chartEnd @param {number} finalObservedTime @returns {number} */
++const getTimelineXAxisEnd = (range, chartEnd, finalObservedTime) => range === 'all'
++    ? Math.max(chartEnd, finalObservedTime)
++    : chartEnd;
++
+ /**
+  * @param {HTMLElement|null|undefined} container
+  */
+@@ -10,7 +22,8 @@ export function renderTimelineTab(container) {
+     const Plotly = /** @type {any} */ (globalThis)['Plotly'];
+     if (!container || !Plotly) return;
+ 
+-    const sourceData = fileHistoricalData.length > 0 ? fileHistoricalData : historyData;
++    const usingFileHistory = fileHistoricalData.length > 0;
++    const sourceData = usingFileHistory ? fileHistoricalData : historyData;
+     const resolvedRange = resolveAvailableRange(sourceData, analyticsRange);
+     if (resolvedRange !== analyticsRange) {
+         setAnalyticsRange(resolvedRange);
+@@ -22,8 +35,8 @@ export function renderTimelineTab(container) {
+     const cutoff = getCutoffTime();
+     const filtered = sourceData.filter(h => h.time > cutoff);
+ 
+-    // If even "all" has insufficient data, show the empty state.
+-    if (filtered.length < 2) {
++    // File history can still render a single valid point at the chart boundary.
++    if (filtered.length < 1) {
+         /** @type {Record<string, string>} */
+         const rangeLabels = { '1h': '1 hour', '24h': '24 hours', '7d': '7 days', '30d': '30 days', 'all': 'all time' };
+         const currentRange = rangeLabels[analyticsRange] || analyticsRange;
+@@ -37,7 +50,11 @@ export function renderTimelineTab(container) {
+     }
+ 
+     const mobile = isCompactViewport();
+-    const deadAirBands = detectDeadAirBands(filtered);
++    const chartEnd = Math.floor(Date.now() / HOUR_MS) * HOUR_MS;
++    const finalObservedTime = filtered[filtered.length - 1].time;
++    const xAxisEnd = getTimelineXAxisEnd(analyticsRange, chartEnd, finalObservedTime);
++    const rangeStart = { all: filtered[0].time }[analyticsRange] ?? cutoff;
++    const deadAirBands = getTimelineDeadAirBands(usingFileHistory, filtered, chartEnd);
+     const deadAirShapes = deadAirBands.map((band) => ({
+         type: 'rect',
+         xref: 'x',
+@@ -72,6 +89,12 @@ export function renderTimelineTab(container) {
+     Plotly.newPlot('timeline-chart-container', traces, {
+         ...getPlotlyLayout(),
+         margin: mobile ? { t: 16, r: 16, b: 40, l: 52 } : { t: 20, r: 20, b: 40, l: 60 },
++        xaxis: {
++            range: [
++                new Date(rangeStart),
++                new Date(xAxisEnd)
++            ]
++        },
+         yaxis: { title: 'Tokens', automargin: true },
+         shapes: deadAirShapes,
+         annotations: deadAirAnnotations
+diff --git a/tests/unit/dead-air.test.js b/tests/unit/dead-air.test.js
+index 77a5e6b..f89b3c8 100644
+--- a/tests/unit/dead-air.test.js
++++ b/tests/unit/dead-air.test.js
+@@ -43,4 +43,19 @@ describe('detectDeadAirBands', () => {
+     const buckets = fixtureBuckets(0, [0, 3]); // 2-hour gap
+     expect(detectDeadAirBands(buckets, 2)).toEqual([{ start: HOUR, end: 3 * HOUR }]);
+   });
++
++  it('detects a trailing gap through the completed chart boundary', () => {
++    const h = (hour) => hour * HOUR;
++    expect(detectDeadAirBands([{ time: h(9) }], 3, h(13))).toEqual([{ start: h(10), end: h(13) }]);
++    expect(detectDeadAirBands([{ time: h(9) }], 3, h(12))).toEqual([]);
++    expect(detectDeadAirBands([{ time: h(9) }], 3, h(8))).toEqual([]);
++  });
++
++  it('rejects non-hour-aligned, duplicate, descending, and invalid one-bucket input', () => {
++    const h = (hour) => hour * HOUR;
++    expect(detectDeadAirBands([{ time: h(9) + 5 * 60_000 }, { time: h(13) }], 3, h(16))).toEqual([]);
++    expect(detectDeadAirBands([{ time: h(9) }])).toEqual([]);
++    expect(detectDeadAirBands([{ time: h(9) }, { time: h(9) }, { time: h(13) }], 3, h(16))).toEqual([]);
++    expect(detectDeadAirBands([{ time: h(13) }, { time: h(9) }], 3, h(16))).toEqual([]);
++  });
+ });
+diff --git a/tests/unit/timeline.test.js b/tests/unit/timeline.test.js
+new file mode 100644
+index 0000000..0b5dda1
+--- /dev/null
++++ b/tests/unit/timeline.test.js
+@@ -0,0 +1,58 @@
++import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
++import { renderTimelineTab } from '../../dashboard/js/views/analytics/tabs/timeline.js';
++import { analyticsRange, setAnalyticsRange, setFileHistoricalData, setHistoryData } from '../../dashboard/js/state.js';
++
++const HOUR = 3600 * 1000;
++const h = (hour) => hour * HOUR;
++const originalDateNow = Date.now;
++
++describe('renderTimelineTab dead-air provenance', () => {
++    let originalAnalyticsRange;
++
++    beforeEach(() => {
++        originalAnalyticsRange = analyticsRange;
++        Date.now = () => h(16);
++        document.body.innerHTML = '';
++        global.Plotly = { newPlot: mock(() => Promise.resolve()) };
++        setAnalyticsRange('all');
++        setFileHistoricalData([]);
++        setHistoryData([]);
++    });
++
++    afterEach(() => {
++        Date.now = originalDateNow;
++        setAnalyticsRange(originalAnalyticsRange);
++        delete global.Plotly;
++        setFileHistoricalData([]);
++        setHistoryData([]);
++    });
++
++    function render(source) {
++        const container = document.createElement('div');
++        document.body.appendChild(container);
++        source();
++        renderTimelineTab(container);
++        return global.Plotly.newPlot.mock.calls[0][2];
++    }
++
++    it('adds dead-air shapes and annotations only for file-backed history', () => {
++        const fileLayout = render(() => setFileHistoricalData([{ time: h(9), total: 100 }, { time: h(13), total: 100 }]));
++        expect(fileLayout.shapes).toHaveLength(1);
++        expect(fileLayout.annotations).toHaveLength(1);
++
++        global.Plotly.newPlot.mockClear();
++        setFileHistoricalData([]);
++        const sseLayout = render(() => setHistoryData([{ time: h(9), total: 100 }, { time: h(13), total: 100 }]));
++        expect(sseLayout.shapes).toEqual([]);
++        expect(sseLayout.annotations).toEqual([]);
++    });
++
++    it('renders one file-backed bucket through the trailing chart boundary', () => {
++        const layout = render(() => setFileHistoricalData([{ time: h(9), total: 100 }]));
++        expect(global.Plotly.newPlot).toHaveBeenCalledTimes(1);
++        expect(layout.shapes).toHaveLength(1);
++        expect(layout.shapes[0].x0).toEqual(new Date(h(10)));
++        expect(layout.shapes[0].x1).toEqual(new Date(h(16)));
++        expect(layout.xaxis.range[1]).toEqual(new Date(h(16)));
++    });
++});

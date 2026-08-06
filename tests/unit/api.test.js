@@ -1,5 +1,6 @@
 import { fetchTokens, fetchHistorical, refreshData, updateData, connectSSE, disconnectSSE } from '../../dashboard/js/api.js';
-import { setCurrentData, setHistoryData, setFileHistoricalData, setEventSource, historyData } from '../../dashboard/js/state.js';
+import { loadCache, setCurrentData, setHistoryData, setFileHistoricalData, setEventSource, historyData, setDataRevision, setDataSource, dataRevision, dataSource, currentData } from '../../dashboard/js/state.js';
+import { renderLiveEventFeed, resetLiveEventFeedForTest } from '../../dashboard/js/live-event-feed.js';
 
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 
@@ -13,6 +14,12 @@ describe('API Module', () => {
     setHistoryData([]);
     setFileHistoricalData([]);
     setEventSource(null);
+    setDataRevision(0);
+    setDataSource(null);
+    resetLiveEventFeedForTest();
+    localStorage.clear();
+    window.renderAll = undefined;
+    document.body.innerHTML = '<section id="live-feed-section"></section>';
   });
 
   describe('fetchTokens', () => {
@@ -81,7 +88,6 @@ describe('API Module', () => {
       fetch.mockRejectedValueOnce(new Error('Network error'));
 
       await refreshData();
-      // Should not throw, error is handled
     });
   });
 
@@ -107,7 +113,6 @@ describe('API Module', () => {
 
       updateData(newData);
 
-      // Data should be updated
       expect(historyData.length).toBeGreaterThan(0);
     });
 
@@ -121,8 +126,100 @@ describe('API Module', () => {
       };
 
       updateData(newData);
-      // Should initialize history with zero point
       expect(historyData.length).toBeGreaterThan(0);
+    });
+
+    it('increments dataRevision on each call', () => {
+      expect(dataRevision).toBe(0);
+      updateData({ total_tokens: 100 });
+      expect(dataRevision).toBe(1);
+      updateData({ total_tokens: 200 });
+      expect(dataRevision).toBe(2);
+    });
+
+    it('sets dataSource to fresh-http by default', () => {
+      updateData({ total_tokens: 100 });
+      expect(dataSource).toBe('fresh-http');
+    });
+
+    it('accepts cache source', () => {
+      updateData({ total_tokens: 100 }, { source: 'cache' });
+      expect(dataSource).toBe('cache');
+    });
+
+    it('accepts live-sse source', () => {
+      updateData({ total_tokens: 100 }, { source: 'live-sse' });
+      expect(dataSource).toBe('live-sse');
+    });
+
+    it('normalizes total_reasoning and per-model reasoning', () => {
+      updateData({
+        total_tokens: 1000,
+        total_reasoning: 50,
+        tokens_by_model: {
+          'gpt-4': { total: 1000, input: 950, output: 0, cache_read: 0, cache_write: 0, reasoning: 50 },
+          'claude-3': { total: 500, input: 500, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 },
+        }
+      });
+      expect(currentData?.total_reasoning).toBe(50);
+      expect(currentData?.tokens_by_model['gpt-4'].reasoning).toBe(50);
+      expect(currentData?.tokens_by_model['claude-3'].reasoning).toBe(0);
+    });
+
+    it('does not put orchestration metadata into the persisted API payload', () => {
+      updateData({ total_tokens: 100 }, { source: 'cache' });
+      expect(currentData?.source).toBeUndefined();
+      expect(currentData?.revision).toBeUndefined();
+    });
+
+    it('processes cache, fresh HTTP, and SSE snapshots through the API/render path', async () => {
+      const container = /** @type {HTMLElement} */ (document.getElementById('live-feed-section'));
+      window.renderAll = () => renderLiveEventFeed(container, currentData, {
+        source: dataSource ?? undefined,
+        revision: dataRevision,
+      });
+
+      const snapshotA = {
+        total_tokens: 100,
+        tokens_by_model: { 'a/model-1': { total: 100, input: 50, cache_read: 50 } },
+      };
+      localStorage.setItem('tokenBurnCacheVersion', 'v2');
+      localStorage.setItem('tokenBurnCache', JSON.stringify(snapshotA));
+      const cached = loadCache();
+      updateData(cached, { source: 'cache' });
+      expect(dataSource).toBe('cache');
+      expect(container.querySelector('#latestPillText').textContent).toMatch(/waiting/i);
+
+      const snapshotB = {
+        total_tokens: 200,
+        tokens_by_model: { 'a/model-1': { total: 200, input: 100, cache_read: 100 } },
+      };
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(snapshotB),
+      }).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve([]),
+      });
+      await refreshData();
+      expect(dataSource).toBe('fresh-http');
+      expect(container.querySelector('#latestPillText').textContent).toMatch(/waiting/i);
+
+      const snapshotC = {
+        total_tokens: 350,
+        pricing_by_model: { 'a/model-1': { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75, reasoning: 0.05 } },
+        tokens_by_model: { 'a/model-1': { total: 350, input: 150, cache_read: 150 } },
+      };
+      connectSSE();
+      const esInstance = EventSource.mock.results[0].value;
+      esInstance.onmessage({ data: JSON.stringify(snapshotC) });
+      const eventText = container.querySelector('#latestPillText').textContent;
+      expect(dataSource).toBe('live-sse');
+      expect(eventText).toContain('model-1');
+      expect(eventText).toMatch(/150 tokens/i);
+
+      window.renderAll();
+      expect(container.querySelector('#latestPillText').textContent).toBe(eventText);
     });
   });
 
@@ -146,7 +243,6 @@ describe('API Module', () => {
       const esInstance = EventSource.mock.results[0].value;
       esInstance.onerror();
 
-      // Wait for reconnection (5s timeout) with polling
       const deadline = Date.now() + 7000;
       while (EventSource.mock.calls.length < 2 && Date.now() < deadline) {
         await Bun.sleep(100);
@@ -154,14 +250,14 @@ describe('API Module', () => {
       expect(EventSource).toHaveBeenCalledTimes(2);
     }, { timeout: 10000 });
 
-    it('processes incoming messages', () => {
+    it('processes incoming messages with live-sse source', () => {
       connectSSE();
 
       const esInstance = EventSource.mock.results[0].value;
       const messageData = { total_tokens: 2000 };
 
       esInstance.onmessage({ data: JSON.stringify(messageData) });
-      // Data should be processed
+      expect(dataSource).toBe('live-sse');
     });
   });
 

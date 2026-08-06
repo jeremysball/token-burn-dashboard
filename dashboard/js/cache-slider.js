@@ -8,6 +8,34 @@ let latestData = null;
 let lastRenderedSliderValue = null;
 /** @type {any} */
 let lastRenderedData = null;
+/** @type {{step: number, decimals: number}|null} */
+let lastRenderedPrecision = null;
+
+/**
+ * Determine a deterministic slider step and decimal count from the
+ * maximum real hit-rate percentage. Produces enough decimal places
+ * for any positive rate below 0.1%, never rounds a positive rate to
+ * zero, and stays stable between renders.
+ * @param {number} realRatePct
+ * @returns {{step: number, decimals: number}}
+ */
+export function getCacheSliderPrecision(realRatePct) {
+    if (realRatePct <= 0) return { step: 0.1, decimals: 1 };
+    const decimals = Math.max(2, Math.ceil(-Math.log10(realRatePct)) + 1);
+    const step = Math.pow(10, -decimals);
+    return { step, decimals };
+}
+
+/**
+ * Format a hit-rate percentage value with a fixed number of decimal
+ * places so that slider max, step, value, and readout stay consistent.
+ * @param {number} value
+ * @param {number} decimals
+ * @returns {string}
+ */
+export function formatCacheRatePct(value, decimals) {
+    return value.toFixed(decimals);
+}
 
 /**
  * @param {HTMLElement} container
@@ -43,25 +71,53 @@ function buildSection(container) {
     const slider = /** @type {HTMLInputElement} */ (container.querySelector('#cacheSlider'));
     slider.addEventListener('input', () => {
         slider.dataset.userMoved = 'true';
-        renderReadout(container, parseFloat(slider.value));
+        renderReadout(container, parseFloat(slider.value), lastRenderedPrecision);
     });
 }
 
 /**
  * @param {HTMLElement} container
  * @param {number} hitRatePct
+ * @param {{step: number, decimals: number}|null} precision
  */
-function renderReadout(container, hitRatePct) {
+function renderReadout(container, hitRatePct, precision) {
     const scenario = computeCacheScenario(latestData, hitRatePct);
     const savedEl = /** @type {HTMLElement} */ (container.querySelector('#cacheSavedValue'));
     const paidEl = /** @type {HTMLElement} */ (container.querySelector('#cachePaidValue'));
     const readout = /** @type {HTMLElement} */ (container.querySelector('#cacheReadout'));
     const barWrap = /** @type {HTMLElement} */ (container.querySelector('#cacheBarWrap'));
+    const slider = /** @type {HTMLInputElement} */ (container.querySelector('#cacheSlider'));
 
-    savedEl.innerHTML = `${fmtCur(scenario.savedVsNoCache)}<small>at ${hitRatePct.toFixed(1)}% hit rate</small>`;
-    paidEl.textContent = fmtCur(scenario.paid);
-    readout.textContent = `${hitRatePct.toFixed(1)}% hit rate`;
+    const userMoved = slider.dataset.userMoved === 'true';
+    const savedValue = userMoved ? scenario.savedVsNoCache : scenario.actualSavedVsNoCache;
+    const paidValue = userMoved ? scenario.requestedPaid : scenario.actualPaid;
+
+    const decimals = precision ? precision.decimals : 1;
+    savedEl.innerHTML = `${fmtCur(savedValue)}<small>at ${formatCacheRatePct(hitRatePct, decimals)}% hit rate</small>`;
+    paidEl.textContent = fmtCur(paidValue);
+    readout.textContent = `${formatCacheRatePct(hitRatePct, decimals)}% hit rate`;
     barWrap.style.setProperty('--paid-pct', `${scenario.paidPct.toFixed(1)}%`);
+}
+
+/**
+ * @param {HTMLElement} container
+ * @param {any} currentData
+ */
+/**
+ * @param {HTMLInputElement} slider
+ * @param {number} realRate
+ * @param {{step: number, decimals: number}} precision
+ */
+function applySliderPrecision(slider, realRate, precision) {
+    slider.max = formatCacheRatePct(realRate, precision.decimals);
+    slider.step = formatCacheRatePct(precision.step, precision.decimals);
+    if (slider.dataset.userMoved !== 'true') {
+        slider.value = formatCacheRatePct(realRate, precision.decimals);
+    } else {
+        slider.value = parseFloat(slider.value) > realRate
+            ? formatCacheRatePct(realRate, precision.decimals)
+            : slider.value;
+    }
 }
 
 /**
@@ -74,17 +130,15 @@ export function renderCacheSlider(container, currentData) {
 
     const slider = /** @type {HTMLInputElement} */ (container.querySelector('#cacheSlider'));
     const realRate = getRealCacheHitRatePct(currentData);
-    slider.max = realRate.toFixed(1);
-    if (slider.dataset.userMoved !== 'true') {
-        slider.value = realRate.toFixed(1);
-    } else if (parseFloat(slider.value) > realRate) {
-        slider.value = realRate.toFixed(1);
-    }
+    const precision = getCacheSliderPrecision(realRate);
+    lastRenderedPrecision = precision;
+
+    applySliderPrecision(slider, realRate, precision);
 
     // C19: skip renderReadout when neither slider position nor data changed
     const currentSliderValue = parseFloat(slider.value);
     if (currentSliderValue === lastRenderedSliderValue && currentData === lastRenderedData) return;
     lastRenderedSliderValue = currentSliderValue;
     lastRenderedData = currentData;
-    renderReadout(container, currentSliderValue);
+    renderReadout(container, currentSliderValue, precision);
 }

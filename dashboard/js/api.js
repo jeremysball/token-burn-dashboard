@@ -1,5 +1,5 @@
 import { MAX_HISTORY_POINTS, WEEKLY_HISTORY_DAYS } from './config.js';
-import { setIsStale, setEventSource, currentData, setCurrentData, saveCache, getDataSignature, setLastDataSignature, lastDataSignature, historyData, setHistoryData, weeklyData, setWeeklyData, setFileHistoricalData, eventSource } from './state.js';
+import { setIsStale, setEventSource, currentData, setCurrentData, saveCache, getDataSignature, setLastDataSignature, lastDataSignature, historyData, setHistoryData, weeklyData, setWeeklyData, setFileHistoricalData, eventSource, setDataRevision, setDataSource, dataRevision } from './state.js';
 import { notify } from './utils.js';
 
 // ===== API =====
@@ -52,7 +52,7 @@ export const refreshData = async () => {
 
     try {
         tokens = await fetchTokens();
-        updateData(tokens);
+        updateData(tokens, { source: 'fresh-http' });
     } catch (err) {
         notify('Refresh failed: ' + (err instanceof Error ? err.message : String(err)), 'error');
         return;
@@ -80,8 +80,35 @@ export const refreshData = async () => {
 
 /**
  * @param {*} data
+ * @param {{source?: string}|undefined} opts
  */
-export const updateData = (data) => {
+export const updateData = (data, opts = {}) => {
+    const source = opts.source || 'fresh-http';
+
+    setDataRevision(dataRevision + 1);
+    setDataSource(source);
+
+    const tokensByModel = data?.tokens_by_model || {};
+    const normalizedModels = {};
+    for (const [k, v] of Object.entries(tokensByModel)) {
+        // Preserve missing and non-finite dimensions for strict consumers to reject.
+        // @ts-ignore
+        normalizedModels[k] = {
+            // @ts-ignore
+            total: v?.total,
+            // @ts-ignore
+            input: v?.input,
+            // @ts-ignore
+            output: v?.output,
+            // @ts-ignore
+            cache_read: v?.cache_read,
+            // @ts-ignore
+            cache_write: v?.cache_write,
+            // @ts-ignore
+            reasoning: v?.reasoning,
+        };
+    }
+
     const safeData = {
         ...data,
         total_tokens: data?.total_tokens || 0,
@@ -89,7 +116,8 @@ export const updateData = (data) => {
         total_output: data?.total_output || 0,
         total_cache_read: data?.total_cache_read || 0,
         total_cache_write: data?.total_cache_write || 0,
-        tokens_by_model: data?.tokens_by_model || {},
+        total_reasoning: data?.total_reasoning || 0,
+        tokens_by_model: normalizedModels,
         costs_by_model: data?.costs_by_model || {},
         pricing_by_model: data?.pricing_by_model || {},
         total_cost: data?.total_cost || { total: 0 },
@@ -149,23 +177,30 @@ export const updateData = (data) => {
     
     // Update weekly data
     const dayKey = new Date().toISOString().split('T')[0];
-    const existingDay = weeklyData.find(d => d.day === dayKey);
-    
-    if (existingDay) {
-        if (safeData.total_tokens > existingDay.tokens) {
-            existingDay.tokens = safeData.total_tokens;
-            existingDay.models = safeData.tokens_by_model;
-        }
-    } else {
-        weeklyData.push({
-            day: dayKey,
-            tokens: safeData.total_tokens,
-            models: safeData.tokens_by_model
-        });
-        if (weeklyData.length > WEEKLY_HISTORY_DAYS) {
-            setWeeklyData(weeklyData.slice(-WEEKLY_HISTORY_DAYS));
-        }
+    const snapshots = [...weeklyData, {
+        day: dayKey,
+        tokens: safeData.total_tokens,
+        models: safeData.tokens_by_model
+    }];
+    /** @param {*} day */
+    const isCalendarDay = (day) => {
+        if (typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return false;
+        const parsed = new Date(`${day}T00:00:00.000Z`);
+        if (!Number.isFinite(parsed.getTime())) return false;
+        return parsed.toISOString().slice(0, 10) === day;
+    };
+    const byDay = new Map();
+    for (const snapshot of snapshots) {
+        if (!isCalendarDay(snapshot?.day)) continue;
+        const existing = byDay.get(snapshot.day);
+        const newTokens = Number.isFinite(snapshot?.tokens) ? snapshot.tokens : -Infinity;
+        const existingTokens = existing && Number.isFinite(existing.tokens) ? existing.tokens : -Infinity;
+        if (!existing || newTokens > existingTokens) byDay.set(snapshot.day, snapshot);
     }
+    const retained = [...byDay.values()]
+        .sort((a, b) => a.day.localeCompare(b.day))
+        .slice(-WEEKLY_HISTORY_DAYS);
+    setWeeklyData(retained);
     
     setCurrentData(safeData);
     saveCache(safeData);
@@ -187,7 +222,7 @@ export const connectSSE = () => {
         try {
             setIsStale(false);
             const data = JSON.parse(e.data);
-            updateData(data);
+            updateData(data, { source: 'live-sse' });
         } catch {}
     };
     

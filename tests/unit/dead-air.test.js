@@ -43,4 +43,19 @@ describe('detectDeadAirBands', () => {
     const buckets = fixtureBuckets(0, [0, 3]); // 2-hour gap
     expect(detectDeadAirBands(buckets, 2)).toEqual([{ start: HOUR, end: 3 * HOUR }]);
   });
+
+  it('detects a trailing gap through the completed chart boundary', () => {
+    const h = (hour) => hour * HOUR;
+    expect(detectDeadAirBands([{ time: h(9) }], 3, h(13))).toEqual([{ start: h(10), end: h(13) }]);
+    expect(detectDeadAirBands([{ time: h(9) }], 3, h(12))).toEqual([]);
+    expect(detectDeadAirBands([{ time: h(9) }], 3, h(8))).toEqual([]);
+  });
+
+  it('rejects non-hour-aligned, duplicate, descending, and invalid one-bucket input', () => {
+    const h = (hour) => hour * HOUR;
+    expect(detectDeadAirBands([{ time: h(9) + 5 * 60_000 }, { time: h(13) }], 3, h(16))).toEqual([]);
+    expect(detectDeadAirBands([{ time: h(9) }])).toEqual([]);
+    expect(detectDeadAirBands([{ time: h(9) }, { time: h(9) }, { time: h(13) }], 3, h(16))).toEqual([]);
+    expect(detectDeadAirBands([{ time: h(13) }, { time: h(9) }], 3, h(16))).toEqual([]);
+  });
 });
