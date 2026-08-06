@@ -86,10 +86,15 @@ function renderReadout(container, hitRatePct, precision) {
     const paidEl = /** @type {HTMLElement} */ (container.querySelector('#cachePaidValue'));
     const readout = /** @type {HTMLElement} */ (container.querySelector('#cacheReadout'));
     const barWrap = /** @type {HTMLElement} */ (container.querySelector('#cacheBarWrap'));
+    const slider = /** @type {HTMLInputElement} */ (container.querySelector('#cacheSlider'));
+
+    const userMoved = slider.dataset.userMoved === 'true';
+    const savedValue = userMoved ? scenario.savedVsNoCache : scenario.actualSavedVsNoCache;
+    const paidValue = userMoved ? scenario.requestedPaid : scenario.actualPaid;
 
     const decimals = precision ? precision.decimals : 1;
-    savedEl.innerHTML = `${fmtCur(scenario.savedVsNoCache)}<small>at ${formatCacheRatePct(hitRatePct, decimals)}% hit rate</small>`;
-    paidEl.textContent = fmtCur(scenario.paid);
+    savedEl.innerHTML = `${fmtCur(savedValue)}<small>at ${formatCacheRatePct(hitRatePct, decimals)}% hit rate</small>`;
+    paidEl.textContent = fmtCur(paidValue);
     readout.textContent = `${formatCacheRatePct(hitRatePct, decimals)}% hit rate`;
     barWrap.style.setProperty('--paid-pct', `${scenario.paidPct.toFixed(1)}%`);
 }
