@@ -382,6 +382,22 @@ describe('Utils Module', () => {
       expect(() => resizeVisiblePlots()).not.toThrow();
       global.Plotly = original;
     });
+
+    it('does not resize #compare-chart-container even if it has a `.data` Plotly marker (regression: Compare tab is now a static table)', () => {
+      // Regression for the stale LIVE_PLOT_CONTAINER_IDS entry: the Compare
+      // tab no longer hosts a Plotly chart, so resizeVisiblePlots must skip
+      // it. The id is still present in the DOM (it now hosts a <table>) and
+      // could conceivably have a `.data` field from some legacy code path,
+      // but resizeVisiblePlots must not call Plotly.Plots.resize on it.
+      document.getElementById('dashboard-live-chart').data = [{}];
+      document.getElementById('timeline-chart-container').data = [{}];
+      const compare = /** @type {any} */ (document.getElementById('compare-chart-container'));
+      compare.data = [{}]; // simulate stale state
+      resizeVisiblePlots();
+      const resizedIds = global.Plotly.Plots.resize.mock.calls.map(([el]) => el.id);
+      expect(resizedIds).not.toContain('compare-chart-container');
+      expect(resizedIds).toEqual(['dashboard-live-chart', 'timeline-chart-container']);
+    });
   });
 
   describe('positionNotifications', () => {

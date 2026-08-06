@@ -7,32 +7,30 @@ const BADGE_ICON = { volumeCrown: 'icon-crown', thriftKing: 'icon-thrift', somme
 const BADGE_LABEL = { volumeCrown: 'Volume Crown', thriftKing: 'Thrift King', sommelier: 'The Sommelier', mostImproved: 'Most Improved' };
 const BADGE_SHORT_LABEL = { volumeCrown: 'Crown', thriftKing: 'Thrift', sommelier: 'Sommelier', mostImproved: 'Improved' };
 
-/** @param {import('../../../league-table.js').LeagueRow['badge']} badge @returns {string} */
+/** @param {import('../../../league-table.js').BadgeKey} badge @returns {string} */
 function badgeCell(badge) {
-    if (!badge) return '';
     return `<span class="league-badge" title="${escapeHtml(BADGE_LABEL[badge])}"><svg aria-hidden="true"><use href="#${BADGE_ICON[badge]}"></use></svg><span class="league-badge-label">${escapeHtml(BADGE_SHORT_LABEL[badge])}</span></span>`;
 }
 
-/** @param {import('../../../league-table.js').LeagueRow} row @param {boolean} hidden @returns {string} */
-function otherRowHtml(row, hidden) {
+/**
+ * Render one league-table row. `hidden` controls the inline display style
+ * (table-row vs none). `isOther` marks the row as a "more results" entry
+ * that participates in the toggle — only those rows carry the
+ * `.league-other-row` class the renderer queries to expand/collapse. The
+ * top-8 rows are always visible and are not class-marked, matching the
+ * original two-template behavior the toggle and existing tests rely on.
+ * @param {import('../../../league-table.js').LeagueRow} row
+ * @param {{hidden: boolean, isOther: boolean}} opts
+ * @returns {string}
+ */
+function rowHtml(row, { hidden, isOther }) {
+    const badges = (row.badges || []).map(badgeCell).join('');
+    const classAttr = isOther ? ' class="league-other-row"' : '';
     return `
-        <tr class="league-other-row" style="display:${hidden ? 'none' : 'table-row'}">
+        <tr${classAttr} style="display:${hidden ? 'none' : 'table-row'}">
             <td class="num">${row.rank}</td>
             <td>${escapeHtml(displayModel(row.name))}</td>
-            <td>${badgeCell(row.badge)}</td>
-            <td class="num">${row.effectiveRatePerMillion !== null ? '$' + row.effectiveRatePerMillion.toFixed(2) : '—'}</td>
-            <td class="num">${row.cachePct.toFixed(0)}%</td>
-        </tr>
-    `;
-}
-
-/** @param {import('../../../league-table.js').LeagueRow} row @returns {string} */
-function topRowHtml(row) {
-    return `
-        <tr>
-            <td class="num">${row.rank}</td>
-            <td>${escapeHtml(displayModel(row.name))}</td>
-            <td>${badgeCell(row.badge)}</td>
+            <td>${badges}</td>
             <td class="num">${row.effectiveRatePerMillion !== null ? '$' + row.effectiveRatePerMillion.toFixed(2) : '—'}</td>
             <td class="num">${row.cachePct.toFixed(0)}%</td>
         </tr>
@@ -71,12 +69,12 @@ export function renderCompareTab(container) {
     container.innerHTML = `
         <table class="mono-table">
             <thead>
-                <tr><th>Rank</th><th>Model</th><th>Badge</th><th class="num">Effective $/M</th><th class="num">Cache %</th></tr>
+                <tr><th>Rank</th><th>Model</th><th>Badges</th><th class="num">Effective $/M</th><th class="num">Cache %</th></tr>
             </thead>
             <tbody>
-                ${top.map(topRowHtml).join('')}
+                ${top.map((row) => rowHtml(row, { hidden: false, isOther: false })).join('')}
                 ${toggleRow}
-                ${others.map((row) => otherRowHtml(row, !wasExpanded)).join('')}
+                ${others.map((row) => rowHtml(row, { hidden: !wasExpanded, isOther: true })).join('')}
             </tbody>
         </table>
     `;

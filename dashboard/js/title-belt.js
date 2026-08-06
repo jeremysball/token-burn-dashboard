@@ -155,11 +155,15 @@ function pricingWithPresence(pricing) {
 }
 
 /**
+ * The single, guarded effective-$/M used by every surface (title-belt
+ * scoring, league table, etc). Returns null whenever the model's token
+ * dimensions or pricing fail the strict contracts — never a partial or
+ * fabricated number.
  * @param {any} stats
  * @param {any} pricing
  * @returns {number|null}
  */
-function effectiveRatePerMillion(stats, pricing) {
+export function effectiveRatePerMillion(stats, pricing) {
     if (!hasFiniteTokenDimensions(stats)) return null;
     if (!hasUsableFullPricing(pricing, stats)) return null;
     if (!Number.isFinite(stats.total) || stats.total <= 0) return null;

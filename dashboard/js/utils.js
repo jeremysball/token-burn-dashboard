@@ -265,7 +265,6 @@ export const getPlotlyConfig = () => ({
 // ===== PLOTLY RESIZE =====
 const LIVE_PLOT_CONTAINER_IDS = [
     'dashboard-live-chart',
-    'compare-chart-container',
     'timeline-chart-container',
     'calendar-container',
     'distribution-chart-container'
