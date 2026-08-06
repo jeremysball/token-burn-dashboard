@@ -146,6 +146,26 @@ export const formatModelPrice = (pricing) => {
     return `${input.toFixed(2)} in / ${output.toFixed(2)} out`;
 };
 
+// Source badge metadata, single source of truth for every view that shows
+// where a model's pricing came from. `cssClass` avoids the literal "." in
+// "models.dev" so it stays a valid single CSS class token.
+/** @type {Record<string, {label: string, cssClass: string, title: string}>} */
+const PRICING_SOURCE_META = {
+    'models.dev': { label: 'Models.dev', cssClass: 'modelsdev', title: 'Pricing sourced from Models.dev' },
+    openrouter: { label: 'OpenRouter', cssClass: 'openrouter', title: 'Pricing sourced from OpenRouter' },
+    local: { label: 'Local', cssClass: 'local', title: 'Using local fallback pricing' }
+};
+
+/**
+ * @param {*} pricing
+ * @returns {{source: string, cssClass: string, label: string, title: string}}
+ */
+export const getPricingSourceMeta = (pricing) => {
+    const source = /** @type {string} */ (pricing?.source);
+    const meta = (source && PRICING_SOURCE_META[source]) || PRICING_SOURCE_META.local;
+    return { source: (source && PRICING_SOURCE_META[source]) ? source : 'local', ...meta };
+};
+
 /**
  * @param {string} text
  * @returns {string}

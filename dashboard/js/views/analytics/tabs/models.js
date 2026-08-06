@@ -43,8 +43,8 @@ export function renderModelsTab(tbody) {
         const sparkData = historyData.slice(-20).map(h => (h.models?.[name]) || 0);
         const pricing = getPricingForModel(name);
         const priceSummary = formatModelPrice(pricing);
-        const priceTitle = `${formatModelPriceDetails(pricing)} · ${pricing.source === 'openrouter' ? 'OpenRouter' : 'local fallback'}`;
         const sourceMeta = getPricingSourceMeta(pricing);
+        const priceTitle = `${formatModelPriceDetails(pricing)} · ${sourceMeta.label}`;
         const displayName = name.split('/').pop();
 
         return `
@@ -58,7 +58,7 @@ export function renderModelsTab(tbody) {
                                 <span class="model-price" title="${escapeHtml(priceTitle)}" style="font-size: 0.72rem; color: var(--mono-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                                     ${escapeHtml(priceSummary)}
                                 </span>
-                                <span class="pricing-source-badge ${sourceMeta.source}" title="${escapeHtml(sourceMeta.title)}">via ${escapeHtml(sourceMeta.label)}</span>
+                                <span class="pricing-source-badge ${sourceMeta.cssClass}" title="${escapeHtml(sourceMeta.title)}">via ${escapeHtml(sourceMeta.label)}</span>
                             </div>
                         </div>
                     </div>
