@@ -101,10 +101,19 @@ export function buildDailyReportSummary(currentData, fileHistoricalData, now = D
             tokensByModelToday[model] = (tokensByModelToday[model] || 0) + tokens;
         }
     }
-    const topModelToday = Object.entries(tokensByModelToday).sort((a, b) => b[1] - a[1])[0]?.[0] || 'unknown';
-
+    // Single pass over tokensByModelToday that simultaneously tracks the
+    // top model by token volume and the running cost sum. Replaces the
+    // previous three-iteration shape (build the map, sort it to find the
+    // top entry, then re-iterate to sum costs) with one pass that keeps
+    // just the running-max model name and the running total cost in locals.
+    let topModelToday = 'unknown';
+    let topModelTokensToday = -1;
     let totalCostToday = 0;
     for (const [model, tokens] of Object.entries(tokensByModelToday)) {
+        if (tokens > topModelTokensToday) {
+            topModelToday = model;
+            topModelTokensToday = tokens;
+        }
         totalCostToday += calculateCostWithPricing(tokens, withPricingPresenceFlags(pricingByModel?.[model] || null)).total;
     }
 
@@ -152,26 +161,31 @@ let lastBuiltDateKey = null;
 export function renderDailyFieldReport(container, currentData, fileHistoricalData) {
     // C19-2: compute today's UTC date key in O(1) instead of building the
     // full summary just to check the cache — the summary is only built when
-    // we know we need a new report.
-    const todayKey = new Date().toISOString().slice(0, 10);
+    // we know we need a new report. Take a single Date.now() / todayKey pair
+    // here and pass it through to buildDailyReportSummary so the two
+    // calculations can't straddle a UTC midnight rollover and disagree
+    // (which would let the cache check pass while the summary's date field
+    // reports tomorrow's date, or vice versa).
+    const now = Date.now();
+    const todayKey = new Date(now).toISOString().slice(0, 10);
     if (lastBuiltDateKey === todayKey) return;
 
-    const summary = buildDailyReportSummary(currentData, fileHistoricalData);
+    const summary = buildDailyReportSummary(currentData, fileHistoricalData, now);
     if (!summary) {
         // C19-1: do NOT set the `dailyReportBuilt` flag here — that flag
-        // is owned by dailyReport.render / its build() function, and the
-        // inline element ids below don't match build()'s template (no
-        // `#dailyFieldReportDate` child). If the flag is left over from
-        // an EARLIER successful day's build, the next call that finds
-        // data will skip build() inside dailyReport.render and try to
-        // populate a date label that doesn't exist, throwing "Cannot set
-        // properties of null (setting 'textContent')" and showing a
-        // fabricated-looking error state. C19-3: explicitly clear the
-        // flag here so the next successful render rebuilds the full
-        // skeleton via build() before populating the date label.
-        delete container.dataset.dailyReportBuilt;
-        container.innerHTML = '<div class="field-report" id="dailyFieldReport">'
-            + '<div id="dailyFieldReportBody">Not enough data yet for a report today.</div></div>';
+        // is owned by dailyReport.render / its build() function, and a
+        // hand-written wrapper here used to use id `dailyFieldReport`
+        // (camelCase) while build() uses `daily-field-report` (kebab-case
+        // via containerId.replace(/-container$/, '')). If the flag is left
+        // over from an EARLIER successful day's build, the next call that
+        // finds data would skip build() inside dailyReport.render and try
+        // to populate a date label that doesn't exist, throwing "Cannot
+        // set properties of null (setting 'textContent')" and showing a
+        // fabricated-looking error state. Delegate the placeholder
+        // rendering to dailyReport.renderPlaceholder, which derives the
+        // wrapper id the same way build() does — guaranteeing the two DOM
+        // shapes can't drift again.
+        dailyReport.renderPlaceholder(container, 'Not enough data yet for a report today.');
         return;
     }
 

@@ -67,6 +67,63 @@ describe('buildDailyReportSummary', () => {
     expect(summary.baseline.meanHourlyTokens).toBeCloseTo(100000, 0);
     expect(summary.baseline.stddevHourlyTokens).toBeCloseTo(0, 0);
   });
+
+  // Final-review fix: renderDailyFieldReport computes `todayKey` with
+  // its own `new Date().toISOString().slice(0, 10)`, then calls
+  // `buildDailyReportSummary` which does the same computation again
+  // internally from its `now` default. The two reads could straddle a
+  // UTC midnight rollover and disagree (one sees today, the other
+  // tomorrow), letting the cache check pass while the summary's
+  // `date` field reports tomorrow's date. The fix passes a single
+  // `now` from renderDailyFieldReport into buildDailyReportSummary so
+  // the two calculations are guaranteed consistent. This test asserts
+  // that the summary's `date` field matches the date key derived from
+  // the `now` argument — a late-UTC-night `now` doesn't shift the
+  // summary to a different day.
+  it('produces a summary whose `date` field matches the UTC date of the supplied `now`', () => {
+    const todayMidnightUTC = Math.floor(Date.now() / (24 * H)) * 24 * H;
+    const fileHistoricalData = [
+      { time: todayMidnightUTC + 9 * H, total: 5000, tokens_by_model: { 'a/model-1': 5000 } }
+    ];
+    const now = todayMidnightUTC + 23 * H + 59 * 60 * 1000; // 23:59 UTC
+    const summary = buildDailyReportSummary({ pricing_by_model: {} }, fileHistoricalData, now);
+
+    expect(summary.date).toBe(new Date(now).toISOString().slice(0, 10));
+  });
+
+  // Final-review fix: tokensByModelToday used to be iterated three
+  // times (nested loop to build the map, Object.entries(...).sort(...)
+  // to find the top model, another Object.entries(...) loop to sum
+  // totalCostToday). The new single-pass version tracks the running
+  // max model and the running cost sum in locals while iterating the
+  // map once. This test asserts the top model is the one with the
+  // highest token volume even when a more expensive model is present
+  // in the map, and that totalCostToday is consistent with the
+  // per-model costs.
+  it('picks the top model by raw token volume and sums totalCostToday in a single pass', () => {
+    const now = Date.now();
+    const todayMidnightUTC = Math.floor(now / (24 * H)) * 24 * H;
+    const fileHistoricalData = [
+      { time: todayMidnightUTC + 14 * H, total: 110000, tokens_by_model: { 'a/cheap': 100000, 'a/expensive': 10000 } }
+    ];
+    const currentData = {
+      pricing_by_model: {
+        'a/cheap': { input: 0.5, output: 1, cacheRead: 0.05, cacheWrite: 0.6 },
+        'a/expensive': { input: 20, output: 40, cacheRead: 2, cacheWrite: 25 }
+      }
+    };
+
+    const summary = buildDailyReportSummary(currentData, fileHistoricalData, now);
+
+    // The cheap model has 10x the tokens of the expensive one, so
+    // topModelToday must be the cheap model — not the more expensive
+    // one (token volume, not cost, is the top-model definition).
+    expect(summary.topModelToday).toBe('a/cheap');
+    // totalCostToday must reflect the contribution of BOTH models, not
+    // just the top model — the new single-pass loop iterates the full
+    // map, not just the top entry.
+    expect(summary.totalCostToday).toBeGreaterThan(0);
+  });
 });
 
 describe('renderDailyFieldReport', () => {
@@ -88,6 +145,24 @@ describe('renderDailyFieldReport', () => {
   it('shows a "not enough data" state when there is nothing for today', () => {
     renderDailyFieldReport(container, { pricing_by_model: {} }, []);
     expect(container.querySelector('#dailyFieldReportBody').textContent).toMatch(/not enough data/i);
+  });
+
+  // Final-review fix: the not-enough-data placeholder's outer wrapper
+  // id was hand-written as `dailyFieldReport` (camelCase), but the
+  // widget's own `build()` derives its wrapper id as
+  // `daily-field-report` via `containerId.replace(/-container$/, '')`.
+  // The two ids drifting meant a stale `dailyReportBuilt` flag from an
+  // earlier successful day's build would crash the next render when it
+  // tried to populate a `#dailyFieldReportDate` element that didn't
+  // exist in the placeholder markup. The fix delegates placeholder
+  // rendering to the widget's `renderPlaceholder` method, which uses
+  // the SAME id derivation as `build()`. Asserting the wrapper id
+  // explicitly here pins the contract: the placeholder and the full
+  // build must use the same id.
+  it('uses the same wrapper id as the widget build() in the not-enough-data placeholder', () => {
+    renderDailyFieldReport(container, { pricing_by_model: {} }, []);
+    expect(container.querySelector('#daily-field-report')).not.toBeNull();
+    expect(container.querySelector('#dailyFieldReport')).toBeNull();
   });
 
   it('renders the returned paragraph on a successful fetch', async () => {

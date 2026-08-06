@@ -17,9 +17,24 @@ import { formatMarkdownBoldToHtml, ensureWidgetBuilt, escapeHtml } from './utils
  */
 
 /**
+ * Derive the wrapper element id the widget's `build()` writes into the
+ * container. Exposed as a module-level helper so the "not enough data"
+ * placeholder branch (and any other consumer that needs the same id) can
+ * share the exact same derivation — keeping the two DOM shapes from
+ * drifting (which previously caused the daily-report placeholder to
+ * render with id `dailyFieldReport` while build() produced `daily-field-report`).
+ * @param {ReportWidgetOptions} opts
+ * @returns {string}
+ */
+function widgetWrapperId(opts) {
+    return opts.containerId.replace(/-container$/, '');
+}
+
+/**
  * @param {ReportWidgetOptions} opts
  * @returns {{
  *   render: (container: HTMLElement, summary: any) => void,
+ *   renderPlaceholder: (container: HTMLElement, message: string) => void,
  *   resetForTest: () => void
  * }}
  */
@@ -41,11 +56,27 @@ export function createTaskferryReportWidget(opts) {
     /** @param {HTMLElement} container */
     function build(container) {
         container.innerHTML = `
-            <div class="field-report" id="${opts.containerId.replace(/-container$/, '')}">
+            <div class="field-report" id="${widgetWrapperId(opts)}">
                 <div class="fr-date" id="${opts.dateLabelId}"></div>
                 <div id="${opts.bodyId}">${opts.loadingText}</div>
             </div>
         `;
+    }
+
+    /**
+     * Render a minimal "not enough data yet" placeholder using the same
+     * wrapper/body ids the widget's `build()` writes. Both the widget's own
+     * `notEnoughText` no-data path and external callers (e.g. the daily
+     * report's pre-build data check) use this so the placeholder DOM can't
+     * drift from the full build's DOM and leave a stale `buildFlag` that
+     * would crash the next render.
+     * @param {HTMLElement} container
+     * @param {string} message
+     */
+    function renderPlaceholder(container, message) {
+        delete container.dataset[opts.buildFlag];
+        container.innerHTML = `<div class="field-report" id="${widgetWrapperId(opts)}">`
+            + `<div id="${opts.bodyId}">${escapeHtml(message)}</div></div>`;
     }
 
     /** @param {HTMLElement} container @param {any} summary */
@@ -120,5 +151,5 @@ export function createTaskferryReportWidget(opts) {
         generation = 0;
     }
 
-    return { render, resetForTest };
+    return { render, renderPlaceholder, resetForTest };
 }
