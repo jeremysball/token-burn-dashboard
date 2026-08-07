@@ -565,6 +565,14 @@ body {
   color: var(--mono-text-dim);
 }
 
+.pricing-source-badge.modelsdev {
+  color: var(--mono-text-dim);
+}
+
+.pricing-source-badge.modelsdev-partial {
+  color: var(--mono-text-dim);
+}
+
 .pricing-source-badge.local {
   color: var(--mono-text-dim);
 }
