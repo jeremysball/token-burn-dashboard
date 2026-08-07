@@ -29,7 +29,10 @@ export function renderDistributionTab(container) {
 
     /** @type {any} */ (globalThis).Plotly.newPlot('distribution-chart-container', data, {
         ...getPlotlyLayout({ showlegend: false }),
-        margin: mobile ? { t: 20, r: 16, b: 40, l: 16 } : { t: 40, r: 40, b: 80, l: 40 }
+        // Outside labels for slices near the top can extend above the plot
+        // area; a top margin this small clips the topmost slice's label
+        // against the panel edge instead of leaving room for it.
+        margin: mobile ? { t: 20, r: 16, b: 40, l: 16 } : { t: 110, r: 40, b: 80, l: 40 }
     }, {
         displayModeBar: false,
         responsive: true
