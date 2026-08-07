@@ -1,5 +1,5 @@
 import { CHART_COLORS, getEmoji, getPricingForModel } from '../config.js';
-import { fmtNum, fmtInt, fmtCur, createSparkline, splitModelKey, displayModel, escapeHtml, parseModelKey, notify, cacheHitRatePct } from '../utils.js';
+import { fmtNum, fmtInt, fmtCur, createSparkline, splitModelKey, displayModel, escapeHtml, parseModelKey, notify, cacheHitRatePct, getPricingSourceMeta } from '../utils.js';
 import { currentData, historyData, fileHistoricalData, dataSource, dataRevision } from '../state.js';
 import { updateEquivTickers } from '../equiv-ticker.js';
 import { renderOdometer, updateOdometer } from '../odometer.js';
@@ -318,12 +318,11 @@ const renderTopModels = (tokens_by_model, fullRender = true) => {
         const modelNameEl = /** @type {HTMLElement|null} */ (card.querySelector('.top-model-name'));
         const pricing = getPricingForModel(name, /** @type {DashboardData} */ (currentData)?.pricing_by_model);
         const priceSummary = `${fmtCur(pricing.input || 0)} in / ${fmtCur(pricing.output || 0)} out`;
-        const priceDetails = `${priceSummary} · cache ${fmtCur(pricing.cacheRead || 0)} read / ${fmtCur(pricing.cacheWrite || 0)} write · ${pricing.source === 'openrouter' ? 'OpenRouter' : 'local fallback'}`;
-        const sourceLabel = pricing.source === 'openrouter' ? 'OpenRouter' : 'Local';
-        const sourceTitle = pricing.source === 'openrouter'
-            ? 'Pricing sourced from OpenRouter'
-            : 'Using local fallback pricing';
-        const sourceClass = pricing.source === 'openrouter' ? 'openrouter' : 'local';
+        const sourceMeta = getPricingSourceMeta(pricing);
+        const priceDetails = `${priceSummary} · cache ${fmtCur(pricing.cacheRead || 0)} read / ${fmtCur(pricing.cacheWrite || 0)} write · ${sourceMeta.label}`;
+        const sourceLabel = sourceMeta.label;
+        const sourceTitle = sourceMeta.title;
+        const sourceClass = sourceMeta.cssClass;
         const { model } = splitModelKey(name);
         const parsed = parseModelKey(name);
         const providerLabel = parsed.routingProvider ? (parsed.vendor || parsed.routingProvider) : parsed.provider;
@@ -380,12 +379,11 @@ const createTopModelCard = (name, stats, i) => {
     const color = CHART_COLORS[i % CHART_COLORS.length];
     const pricing = getPricingForModel(name, /** @type {DashboardData} */ (currentData)?.pricing_by_model);
     const priceSummary = `${fmtCur(pricing.input || 0)} in / ${fmtCur(pricing.output || 0)} out`;
-    const priceDetails = `${priceSummary} · cache ${fmtCur(pricing.cacheRead || 0)} read / ${fmtCur(pricing.cacheWrite || 0)} write · ${pricing.source === 'openrouter' ? 'OpenRouter' : 'local fallback'}`;
-    const sourceLabel = pricing.source === 'openrouter' ? 'OpenRouter' : 'Local';
-    const sourceClass = pricing.source === 'openrouter' ? 'openrouter' : 'local';
-    const sourceTitle = pricing.source === 'openrouter'
-        ? 'Pricing sourced from OpenRouter'
-        : 'Using local fallback pricing';
+    const sourceMeta = getPricingSourceMeta(pricing);
+    const priceDetails = `${priceSummary} · cache ${fmtCur(pricing.cacheRead || 0)} read / ${fmtCur(pricing.cacheWrite || 0)} write · ${sourceMeta.label}`;
+    const sourceLabel = sourceMeta.label;
+    const sourceClass = sourceMeta.cssClass;
+    const sourceTitle = sourceMeta.title;
     const { model } = splitModelKey(name);
     const parsed = parseModelKey(name);
     const providerLabel = parsed.routingProvider ? (parsed.vendor || parsed.routingProvider) : parsed.provider;

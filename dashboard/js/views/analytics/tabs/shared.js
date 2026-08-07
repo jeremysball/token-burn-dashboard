@@ -1,5 +1,5 @@
 import { CHART_COLORS, getPricing } from '../../../config.js';
-import { fmtNum, fmtInt, fmtCur, fmtMultiple, getPlotlyLayout, notify, splitModelKey, displayModel, cacheHitRatePct } from '../../../utils.js';
+import { fmtNum, fmtInt, fmtCur, fmtMultiple, getPlotlyLayout, notify, splitModelKey, displayModel, cacheHitRatePct, getPricingSourceMeta } from '../../../utils.js';
 import { currentData, historyData, fileHistoricalData, analyticsRange, setAnalyticsRange, searchTerm, sortCol, sortAsc } from '../../../state.js';
 
 const isCompactViewport = () => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
@@ -78,16 +78,6 @@ const formatModelPriceDetails = (pricing) => {
     const cacheWrite = fmtCur(pricing.cacheWrite || 0);
 
     return `${input} in / ${output} out · cache ${cacheRead} read / ${cacheWrite} write`;
-};
-
-/** @param {*} pricing @returns {{source: string, label: string, title: string}} */
-const getPricingSourceMeta = (pricing) => {
-    const source = pricing?.source === 'openrouter' ? 'openrouter' : 'local';
-    return {
-        source,
-        label: source === 'openrouter' ? 'OpenRouter' : 'Local',
-        title: source === 'openrouter' ? 'Pricing sourced from OpenRouter' : 'Using local fallback pricing'
-    };
 };
 
 /**
