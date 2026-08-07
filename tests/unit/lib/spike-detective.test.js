@@ -196,6 +196,48 @@ describe('spike-detective session lookup (Claude + Pi formats)', () => {
     expect(found.tokens).toBe(715); // full session total: 500+200 + 10+5
   });
 
+  it('investigateSpike headline totals reflect only the windowed portion of a long-running session (#118 finding 4)', () => {
+    // A session mostly happens hours before the investigated spike, with
+    // only a small slice of usage actually inside the window. The
+    // investigation's headline totalTokens must reflect that small slice,
+    // not the session's whole-file total (which would hugely overstate
+    // what happened during the spike itself).
+    const claudeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sd-claude-windowed-'));
+    const projectDir = path.join(claudeRoot, 'test-project');
+    fs.mkdirSync(projectDir);
+    const sessionId = crypto.randomUUID();
+    const sessionFile = path.join(projectDir, `${sessionId}.jsonl`);
+
+    const spikeTime = Date.now();
+    const farBeforeTime = spikeTime - 6 * 60 * 60 * 1000; // 6 hours before the window
+
+    // Bulk of usage well outside the 30-minute investigation window.
+    fs.writeFileSync(sessionFile, JSON.stringify({
+      type: 'assistant',
+      message: { model: 'claude-sonnet-5', usage: { input_tokens: 50000, output_tokens: 20000 } },
+      timestamp: new Date(farBeforeTime).toISOString()
+    }) + '\n');
+    // A small slice of usage actually inside the window.
+    fs.appendFileSync(sessionFile, JSON.stringify({
+      type: 'assistant',
+      message: { model: 'claude-sonnet-5', usage: { input_tokens: 100, output_tokens: 50 } },
+      timestamp: new Date(spikeTime).toISOString()
+    }) + '\n');
+
+    const emptyExtraDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sd-extra-empty-'));
+    tmpDirs.push(claudeRoot, emptyExtraDir);
+    process.env.CLAUDE_PROJECTS_DIR = claudeRoot;
+    process.env.EXTRA_SESSION_DIRS = emptyExtraDir;
+
+    const { investigateSpike } = reloadSpikeDetective();
+    const result = investigateSpike(spikeTime, 30);
+
+    const session = result.sessions.find(s => s.id === sessionId);
+    expect(session).toBeDefined();
+    expect(session.tokens).toBe(70150); // whole-session total, unchanged
+    expect(result.summary.totalTokens).toBe(150); // windowed slice only
+  });
+
   it('finds a session even when the first sampled line is not the chronologically earliest (#117 finding 7)', () => {
     // approxSessionStartTime's cheap pre-filter must take the *minimum*
     // timestamp across the sampled lines, not just the first one found -

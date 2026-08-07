@@ -145,7 +145,25 @@ export const renderSpikesList = (spikes) => {
         `;
     }).join('');
 
-    /** @param {any} spike */ const trigger = (spike) => { if (isValidSpikeTime(spike.time)) investigateSpike(spike.time); };
+    /**
+     * A spike's `time` is the *start* of its hourly bucket (see
+     * lib/historical-data.js's hourly aggregation), but investigateSpike
+     * treats its timestamp as a *center* and expands a window symmetrically
+     * around it. Passing the bucket start straight through as the center
+     * only covers the bucket's first half (and half of the *previous*
+     * hour), missing whatever drove the spike in the second half — while
+     * still finding sessions that merely overlap that off-center sliver.
+     * Center on the bucket's midpoint with a window matching its full
+     * width so the investigation covers exactly the hour the card's own
+     * numbers came from.
+     * @param {any} spike
+     */
+    const trigger = (spike) => {
+        if (!isValidSpikeTime(spike.time)) return;
+        const bucketWidthMinutes = 60;
+        const bucketMidpoint = spike.time + (bucketWidthMinutes * 60 * 1000) / 2;
+        investigateSpike(bucketMidpoint, bucketWidthMinutes);
+    };
     listEl.querySelectorAll('.spike-card').forEach(card => {
         const el = /** @type {HTMLElement} */ (card);
         const spike = validSpikes[Number(el.dataset.spikeIndex)];
@@ -162,8 +180,9 @@ export const renderSpikesList = (spikes) => {
 
 /**
  * @param {number} timestamp
+ * @param {number} [windowMinutes=30]
  */
-export const investigateSpike = async (timestamp) => {
+export const investigateSpike = async (timestamp, windowMinutes = 30) => {
     const investigationEl = document.getElementById('spike-investigation');
     const detailsEl = document.getElementById('spike-details');
     const sessionsEl = document.getElementById('spike-sessions');
@@ -178,7 +197,7 @@ export const investigateSpike = async (timestamp) => {
     investigationEl.scrollIntoView({ behavior: 'smooth' });
 
     try {
-        const response = await fetch(`/api/spikes/investigate?timestamp=${timestamp}&window=30`);
+        const response = await fetch(`/api/spikes/investigate?timestamp=${timestamp}&window=${windowMinutes}`);
         if (!response.ok) throw new Error('Failed to investigate');
 
         const data = await response.json();
