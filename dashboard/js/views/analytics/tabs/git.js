@@ -5,6 +5,21 @@ import { getGitBlameCache, setGitBlameCache, getGitBlameCwd, setGitBlameCwd } fr
 
 // ===== GIT BLAME TAB =====
 
+/**
+ * Shared markup for a Git Blame panel's empty/error placeholder.
+ * @param {string} icon
+ * @param {string} title
+ * @param {string} message - already trusted/escaped
+ * @returns {string}
+ */
+const gitBlameEmptyState = (icon, title, message) => `
+    <div class="git-blame-empty">
+        <div class="git-blame-empty-icon">${icon}</div>
+        <h4>${title}</h4>
+        <p>${message}</p>
+    </div>
+`;
+
 export const renderGitBlameTab = () => {
     if (getGitBlameCache()) {
         renderGitBlameData(getGitBlameCache());
@@ -51,21 +66,9 @@ export const loadGitBlame = async () => {
         }
     } catch (err) {
         const ce = document.getElementById('git-commits-list');
-        if (ce) ce.innerHTML = `
-            <div class="git-blame-empty">
-                <div class="git-blame-empty-icon">!</div>
-                <h4>Unable to load git data</h4>
-                <p>${escapeHtml(err instanceof Error ? err.message : String(err))}</p>
-            </div>
-        `;
+        if (ce) ce.innerHTML = gitBlameEmptyState('!', 'Unable to load git data', escapeHtml(err instanceof Error ? err.message : String(err)));
         const fe = document.getElementById('git-files-list');
-        if (fe) fe.innerHTML = `
-            <div class="git-blame-empty">
-                <div class="git-blame-empty-icon">∅</div>
-                <h4>No project data</h4>
-                <p>Could not load project cost analysis</p>
-            </div>
-        `;
+        if (fe) fe.innerHTML = gitBlameEmptyState('∅', 'No project data', 'Could not load project cost analysis');
     }
 };
 
@@ -93,33 +96,13 @@ const updateDirectorySelector = (directories, selectedCwd) => {
     }
 };
 
-/**
- * @param {*} data
- */
-export const renderGitBlameData = (data) => {
-    // Summary stats
-    const totalCommits = data.commits.length;
-    const totalCost = data.commits.reduce(/** @param {number} sum @param {{cost: number}} c */ (sum, c) => sum + c.cost, 0);
-    const totalSessions = data.commits.reduce(/** @param {number} sum @param {{sessions: number}} c */ (sum, c) => sum + c.sessions, 0);
-    
-    const tcEl = document.getElementById('git-total-commits');
-    if (tcEl) tcEl.textContent = fmtInt(totalCommits);
-    const tcostEl = document.getElementById('git-total-cost');
-    if (tcostEl) tcostEl.textContent = `$${totalCost.toFixed(2)}`;
-    const tsEl = document.getElementById('git-total-sessions');
-    if (tsEl) tsEl.textContent = fmtInt(totalSessions);
-    
-    // Commits list - now with files
-    const commitsList = document.getElementById('git-commits-list');
-    const visibleCommits = data.commits.slice(0, 10);
-    if (commitsList) commitsList.innerHTML = visibleCommits.map(
-        /** @param {*} commit @param {number} idx */
-        (commit, idx) => {
-        const files = commit.files || [];
-        const fileList = files.slice(0, 3).map(/** @param {string} f */ f => `<span class="commit-file">${escapeHtml(f.split('/').pop())}</span>`).join('');
-        const moreFiles = files.length > 3 ? `<span class="commit-file-more">+${files.length - 3} more</span>` : '';
-        
-        return `
+/** @param {*} commit @param {number} idx @returns {string} */
+const commitCardHtml = (commit, idx) => {
+    const files = commit.files || [];
+    const fileList = files.slice(0, 3).map(/** @param {string} f */ f => `<span class="commit-file">${escapeHtml(f.split('/').pop())}</span>`).join('');
+    const moreFiles = files.length > 3 ? `<span class="commit-file-more">+${files.length - 3} more</span>` : '';
+
+    return `
         <div class="git-commit-item" data-commit-index="${idx}" role="button" tabindex="0" style="cursor: pointer;">
             <div class="commit-main">
                 <div class="commit-hash">${escapeHtml(commit.hash)}</div>
@@ -134,9 +117,21 @@ export const renderGitBlameData = (data) => {
                 <span class="commit-stat">${fmtInt(commit.sessions)} session${commit.sessions !== 1 ? 's' : ''}</span>
             </div>
         </div>
-    `}).join('');
+    `;
+};
 
-    if (commitsList) commitsList.querySelectorAll('.git-commit-item').forEach(item => {
+/**
+ * @param {HTMLElement} commitsList
+ * @param {*[]} visibleCommits
+ */
+const renderCommitsList = (commitsList, visibleCommits) => {
+    if (visibleCommits.length === 0) {
+        commitsList.innerHTML = gitBlameEmptyState('∅', 'No commits found', 'No commits with linked sessions in this window. Try a longer range or a different directory.');
+        return;
+    }
+    commitsList.innerHTML = visibleCommits.map(commitCardHtml).join('');
+
+    commitsList.querySelectorAll('.git-commit-item').forEach(item => {
         const el = /** @type {HTMLElement} */ (item);
         const commit = visibleCommits[Number(el.dataset.commitIndex)];
         if (!commit) return;
@@ -149,19 +144,51 @@ export const renderGitBlameData = (data) => {
             }
         });
     });
-    
-    // Project list
+};
+
+/** @param {*} project @returns {string} */
+const projectCardHtml = (project) => `
+    <div class="git-file-item">
+        <div class="file-name">${escapeHtml(project.project || project.file)}</div>
+        <div class="file-cost">$${project.cost.toFixed(2)} across ${fmtInt(project.commits)} commits</div>
+        ${project.files?.length ? `<div class="commit-click-hint">${project.files.map(/** @param {string} f */ f => escapeHtml(f.split('/').pop())).join(' · ')}</div>` : ''}
+    </div>
+`;
+
+/**
+ * @param {HTMLElement} filesList
+ * @param {*[]} projects
+ */
+const renderProjectsList = (filesList, projects) => {
+    if (projects.length === 0) {
+        filesList.innerHTML = gitBlameEmptyState('∅', 'No project data', 'No project cost data for this window yet.');
+        return;
+    }
+    filesList.innerHTML = projects.slice(0, 10).map(projectCardHtml).join('');
+};
+
+/**
+ * @param {*} data
+ */
+export const renderGitBlameData = (data) => {
+    // Summary stats
+    const totalCommits = data.commits.length;
+    const totalCost = data.commits.reduce(/** @param {number} sum @param {{cost: number}} c */ (sum, c) => sum + c.cost, 0);
+    const totalSessions = data.commits.reduce(/** @param {number} sum @param {{sessions: number}} c */ (sum, c) => sum + c.sessions, 0);
+
+    const tcEl = document.getElementById('git-total-commits');
+    if (tcEl) tcEl.textContent = fmtInt(totalCommits);
+    const tcostEl = document.getElementById('git-total-cost');
+    if (tcostEl) tcostEl.textContent = `$${totalCost.toFixed(2)}`;
+    const tsEl = document.getElementById('git-total-sessions');
+    if (tsEl) tsEl.textContent = fmtInt(totalSessions);
+
+    const commitsList = /** @type {HTMLElement|null} */ (document.getElementById('git-commits-list'));
+    if (commitsList) renderCommitsList(commitsList, data.commits.slice(0, 10));
+
     const projects = data.projects || data.files || [];
-    const filesList = document.getElementById('git-files-list');
-    if (filesList) filesList.innerHTML = projects.slice(0, 10).map(
-        /** @param {*} project */
-        (project) => `
-        <div class="git-file-item">
-            <div class="file-name">${escapeHtml(project.project || project.file)}</div>
-            <div class="file-cost">$${project.cost.toFixed(2)} across ${fmtInt(project.commits)} commits</div>
-            ${project.files?.length ? `<div class="commit-click-hint">${project.files.map(/** @param {string} f */ f => escapeHtml(f.split('/').pop())).join(' · ')}</div>` : ''}
-        </div>
-    `).join('');
+    const filesList = /** @type {HTMLElement|null} */ (document.getElementById('git-files-list'));
+    if (filesList) renderProjectsList(filesList, projects);
 };
 
 /**
