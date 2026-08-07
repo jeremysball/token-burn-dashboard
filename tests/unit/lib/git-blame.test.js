@@ -2,6 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const crypto = require('crypto');
+const { execFileSync } = require('child_process');
 const { getCommitLOC, generateGitBlameReport, isValidCommitHash, getSessionTimeWindow } = require('../../../lib/git-blame');
 
 import { afterEach, describe, expect, test } from 'bun:test';
@@ -204,5 +205,83 @@ describe('lib/git-blame session lookup (Claude + Pi formats, #117 finding 4)', (
     expect(usage.totalTokens).toBe(280);
     expect(usage.totalCost).toBeGreaterThan(0);
     expect(usage.models['openai/gpt-5.6-luna']).toBeDefined();
+  });
+});
+
+describe('generateGitBlameReport session attribution across adjacent commit windows (review round 2 finding)', () => {
+  const origExtraDirs = process.env.EXTRA_SESSION_DIRS;
+  const origClaudeDir = process.env.CLAUDE_PROJECTS_DIR;
+  const tmpDirs = [];
+
+  afterEach(() => {
+    if (origExtraDirs === undefined) delete process.env.EXTRA_SESSION_DIRS;
+    else process.env.EXTRA_SESSION_DIRS = origExtraDirs;
+    if (origClaudeDir === undefined) delete process.env.CLAUDE_PROJECTS_DIR;
+    else process.env.CLAUDE_PROJECTS_DIR = origClaudeDir;
+    while (tmpDirs.length) {
+      fs.rmSync(tmpDirs.pop(), { recursive: true, force: true });
+    }
+  });
+
+  const reloadGitBlame = () => {
+    delete require.cache[require.resolve('../../../lib/session-discovery')];
+    delete require.cache[require.resolve('../../../lib/git-blame')];
+    return require('../../../lib/git-blame');
+  };
+
+  /** @param {string} repoDir @param {string[]} args @param {Record<string,string>} [env] */
+  const git = (repoDir, args, env) => execFileSync('git', args, { cwd: repoDir, env: env ? { ...process.env, ...env } : process.env });
+
+  const commitAt = (repoDir, isoDate, message) => {
+    fs.writeFileSync(path.join(repoDir, 'file.txt'), `${message}\n`, { flag: 'a' });
+    git(repoDir, ['add', '.']);
+    git(repoDir, ['commit', '-m', message], { GIT_AUTHOR_DATE: isoDate, GIT_COMMITTER_DATE: isoDate });
+  };
+
+  test('a session spanning two adjacent commit windows is attributed exactly once, not summed into both', () => {
+    const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gb-report-repo-'));
+    git(repoDir, ['init']);
+    git(repoDir, ['config', 'user.email', 'test@example.com']);
+    git(repoDir, ['config', 'user.name', 'Test']);
+
+    const t0 = Date.now() - 5 * 60 * 1000; // 5 minutes ago, well inside the report window
+    commitAt(repoDir, new Date(t0).toISOString(), 'oldest');
+    commitAt(repoDir, new Date(t0 + 60_000).toISOString(), 'middle');
+    commitAt(repoDir, new Date(t0 + 120_000).toISOString(), 'newest');
+
+    // Session usage spans [t0+10s, t0+90s]: overlaps the "oldest" commit's
+    // window [t0, t0+60s] AND the "middle" commit's window [t0+60s, t0+120s],
+    // but its midpoint (t0+50s) only ever fell in one window under the old
+    // midpoint-only match. 100 tokens per event, 200 total across the file.
+    const claudeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gb-report-claude-'));
+    const projectDir = path.join(claudeRoot, 'test-project');
+    fs.mkdirSync(projectDir);
+    const sessionFile = path.join(projectDir, `${crypto.randomUUID()}.jsonl`);
+    fs.writeFileSync(sessionFile, [
+      JSON.stringify({
+        type: 'assistant',
+        message: { model: 'claude-sonnet-5', usage: { input_tokens: 100, output_tokens: 0 } },
+        timestamp: new Date(t0 + 10_000).toISOString()
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        message: { model: 'claude-sonnet-5', usage: { input_tokens: 100, output_tokens: 0 } },
+        timestamp: new Date(t0 + 90_000).toISOString()
+      })
+    ].join('\n') + '\n');
+
+    const emptyExtraDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gb-report-extra-empty-'));
+    tmpDirs.push(repoDir, claudeRoot, emptyExtraDir);
+    process.env.CLAUDE_PROJECTS_DIR = claudeRoot;
+    process.env.EXTRA_SESSION_DIRS = emptyExtraDir;
+
+    const { generateGitBlameReport } = reloadGitBlame();
+    const report = generateGitBlameReport(1, repoDir);
+
+    const totalTokens = report.reduce((sum, c) => sum + c.tokens, 0);
+    expect(totalTokens).toBe(200);
+
+    const commitsWithTokens = report.filter(c => c.tokens > 0);
+    expect(commitsWithTokens).toHaveLength(1);
   });
 });

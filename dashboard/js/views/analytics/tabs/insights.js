@@ -133,9 +133,12 @@ export const calculateDeepInsights = () => {
 
     // Cache-write tokens have their own (typically higher) rate, not the
     // input rate, so price them separately rather than blending them into
-    // the input-rate estimate.
-    const avgCacheWriteCostPerToken = Number(pricing?.cacheWrite);
-    const cacheWriteMissingSavings = Number.isFinite(avgCacheWriteCostPerToken)
+    // the input-rate estimate. pricing.cacheWrite is $ per 1M tokens (same
+    // convention as pricing.input/output/cacheRead), so it must be scaled
+    // down to $/token before comparing against avgCacheReadCostPerToken.
+    const rawCacheWriteRate = Number(pricing?.cacheWrite);
+    const avgCacheWriteCostPerToken = rawCacheWriteRate / 1e6;
+    const cacheWriteMissingSavings = Number.isFinite(rawCacheWriteRate)
         ? Math.max(0, totalCacheWrite * (avgCacheWriteCostPerToken - avgCacheReadCostPerToken))
         : totalCacheWrite * (1 - cacheDiscountRatio) * avgInputCostPerToken;
     const inputMissingSavings = totalInput * (1 - cacheDiscountRatio) * avgInputCostPerToken;

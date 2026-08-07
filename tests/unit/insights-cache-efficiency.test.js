@@ -47,8 +47,15 @@ describe('Cache Efficiency insight - low hit rate missing-savings estimate', () 
         expect(match).not.toBeNull();
         const missingSavings = parseFloat(match[1]);
 
-        // (totalInput + totalCacheWrite) * (1 - cacheDiscountRatio) * avgInputCostPerToken
-        // = 805_000 * 0.9 * 0.000003 ≈ 2.17
-        expect(missingSavings).toBeGreaterThan(1);
+        // cache-write is priced at its own $/1M rate (3.75), not blended into
+        // the input rate: cacheWriteMissingSavings = 800_000 * (0.00000375 -
+        // 0.0000003) = 2.76; inputMissingSavings = 5_000 * 0.9 * 0.000003 =
+        // 0.0135. Total ≈ 2.7735. A tight band here catches two regressions
+        // a bare `toBeGreaterThan(1)` let through: reverting to the old
+        // blended-at-input-rate formula (≈2.17, below the lower bound) and a
+        // $/1M-vs-$/token units bug treating pricing.cacheWrite as a raw
+        // per-token rate (≈$3,000,000, far above the upper bound).
+        expect(missingSavings).toBeGreaterThan(2.5);
+        expect(missingSavings).toBeLessThan(50);
     });
 });

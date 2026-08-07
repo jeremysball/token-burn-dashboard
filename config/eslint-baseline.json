@@ -122,7 +122,7 @@
     "tests/unit/dashboard-stylesheets.test.js|sonarjs/super-linear-regex": 1,
     "tests/unit/dashboard-stylesheets.test.js|sonarjs/unused-import": 1,
     "tests/unit/lib/git-blame.test.js|no-unused-vars": 1,
-    "tests/unit/lib/git-blame.test.js|sonarjs/no-os-command-from-path": 2,
+    "tests/unit/lib/git-blame.test.js|sonarjs/no-os-command-from-path": 3,
     "tests/unit/lib/historical.test.js|sonarjs/prefer-specific-assertions": 7,
     "tests/unit/lib/historical.test.js|sonarjs/pseudo-random": 1,
     "tests/unit/lib/routes/api.test.js|max-lines": 1,
