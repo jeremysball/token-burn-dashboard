@@ -94,11 +94,18 @@ describe('Models.dev pricing merge', () => {
     });
 
     const pricing = getPricing('anthropic/claude-haiku-4-5');
-    expect(pricing.source).toBe('models.dev');
+    // cacheWrite wasn't published by Models.dev for this model, so it falls
+    // back to OpenRouter's value rather than the local default -- which
+    // makes this a blended record, not a pure Models.dev quote, so the
+    // source is tagged 'models.dev-partial' rather than 'models.dev'.
+    expect(pricing.source).toBe('models.dev-partial');
     expect(pricing.input).toBeCloseTo(1, 5);
     expect(pricing.output).toBeCloseTo(5, 5);
-    // cacheWrite wasn't published by Models.dev for this model, so it falls
-    // back to OpenRouter's value rather than the local default.
     expect(pricing.cacheWrite).toBeCloseTo(2.5, 5);
+    // Models.dev didn't publish a reasoning rate either, so it should fall
+    // back to Models.dev's OWN output rate (5) -- not OpenRouter's reasoning
+    // rate (10, itself defaulted from OpenRouter's stale output rate) --
+    // otherwise reasoning tokens would be billed at 2x the real output rate.
+    expect(pricing.reasoning).toBeCloseTo(5, 5);
   });
 });
