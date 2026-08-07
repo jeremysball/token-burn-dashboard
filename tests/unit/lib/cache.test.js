@@ -19,7 +19,9 @@ describe('background cache warmup', () => {
     startBackgroundUpdater({
       WorkerImpl: mockWorkerConstructor,
       extractHistoricalDataImpl: mock(() => Promise.reject(new Error('boom'))),
-      getOpenRouterPricingSnapshotImpl: mock(() => ({}))
+      getOpenRouterPricingSnapshotImpl: mock(() => ({})),
+      refreshOpenRouterPricingImpl: mock(() => Promise.resolve({})),
+      refreshModelsDevPricingImpl: mock(() => Promise.resolve({}))
     });
 
     await expect(getHistoricalData()).rejects.toThrow(/warmup failed/);
@@ -32,7 +34,9 @@ describe('background cache warmup', () => {
     startBackgroundUpdater({
       WorkerImpl: mockWorkerConstructor,
       extractHistoricalDataImpl,
-      getOpenRouterPricingSnapshotImpl
+      getOpenRouterPricingSnapshotImpl,
+      refreshOpenRouterPricingImpl: mock(() => Promise.resolve({})),
+      refreshModelsDevPricingImpl: mock(() => Promise.resolve({}))
     });
 
     expect(extractHistoricalDataImpl).not.toHaveBeenCalled();

@@ -97,6 +97,80 @@ describe('getModelsDevPricingRecord', () => {
     setModelsDevPricingSnapshot({ catalog: HAIKU_CATALOG });
     expect(getModelsDevPricingRecord('totally-unknown-model')).toBeNull();
   });
+
+  describe('alias collisions across resellers', () => {
+    it('resolves a fully-qualified id to its own provider, never a different provider whose compound modelId embeds the same bare alias', () => {
+      // A reseller's own modelId can itself contain a "/" (mirroring a
+      // models.dev-style catalog entry like modelscope hosting
+      // "ZhipuAI/GLM-4.5"). Stripping only the outer provider prefix then
+      // derives a "bare" alias ("zhipuai/glm-4.5") that collides with a
+      // *different* provider's real, fully-qualified id -- that direct id
+      // must always win.
+      setModelsDevPricingSnapshot({
+        catalog: {
+          zhipuai: {
+            models: { 'glm-4.5': { name: 'GLM-4.5', cost: { input: 0.6, output: 2.2 } } }
+          },
+          reseller: {
+            models: { 'ZhipuAI/GLM-4.5': { name: 'GLM-4.5', cost: { input: 0, output: 0 } } }
+          }
+        }
+      });
+
+      expect(getModelsDevPricingRecord('zhipuai/glm-4.5')).toMatchObject({ input: 0.6, output: 2.2 });
+    });
+
+    it('does not index a bare alias when multiple non-native resellers host the same model id (no arbitrary guess)', () => {
+      setModelsDevPricingSnapshot({
+        catalog: {
+          'reseller-a': {
+            npm: '@ai-sdk/openai-compatible',
+            models: { 'some-model': { name: 'Some Model', cost: { input: 0, output: 0 } } }
+          },
+          'reseller-b': {
+            npm: '@ai-sdk/openai-compatible',
+            models: { 'some-model': { name: 'Some Model', cost: { input: 5, output: 5 } } }
+          }
+        }
+      });
+
+      expect(getModelsDevPricingRecord('some-model')).toBeNull();
+    });
+
+    it('resolves a bare alias to the sole native first-party adapter when resellers also collide on it', () => {
+      setModelsDevPricingSnapshot({
+        catalog: {
+          anthropic: {
+            npm: '@ai-sdk/anthropic',
+            models: { 'claude-haiku-4-5-20251001': { name: 'Claude Haiku 4.5', cost: { input: 1, output: 5 } } }
+          },
+          jiekou: {
+            npm: '@ai-sdk/openai-compatible',
+            models: { 'claude-haiku-4-5-20251001': { name: 'Claude Haiku 4.5', cost: { input: 0.9, output: 4.5 } } }
+          }
+        }
+      });
+
+      expect(getModelsDevPricingRecord('claude-haiku-4-5-20251001')).toMatchObject({ input: 1, output: 5, provider: 'anthropic' });
+    });
+
+    it('still leaves a bare alias unindexed when two different providers both look native', () => {
+      setModelsDevPricingSnapshot({
+        catalog: {
+          anthropic: {
+            npm: '@ai-sdk/anthropic',
+            models: { 'claude-sonnet-4-6': { name: 'Claude Sonnet 4.6', cost: { input: 3, output: 15 } } }
+          },
+          'google-vertex': {
+            npm: '@ai-sdk/google-vertex',
+            models: { 'claude-sonnet-4-6': { name: 'Claude Sonnet 4.6 (Vertex)', cost: { input: 3, output: 15 } } }
+          }
+        }
+      });
+
+      expect(getModelsDevPricingRecord('claude-sonnet-4-6')).toBeNull();
+    });
+  });
 });
 
 describe('Models.dev snapshot round-trip', () => {
@@ -119,5 +193,24 @@ describe('Models.dev snapshot round-trip', () => {
     setModelsDevPricingSnapshot(snapshot);
     const record = getModelsDevPricingRecord('anthropic/claude-haiku-4-5');
     expect(record).toMatchObject({ input: 1, output: 5, cacheRead: 0.1, cacheWrite: 1.25 });
+  });
+
+  it('returns a defensive copy of the catalog so mutating the snapshot cannot alias into the live cache', () => {
+    const catalog = {
+      anthropic: { models: { 'claude-haiku-4-5': { name: 'Claude Haiku 4.5', cost: { input: 1, output: 5 } } } }
+    };
+    setModelsDevPricingSnapshot({ fetchedAt: 1, source: 'models.dev', catalog, error: null });
+
+    const snapshot = getModelsDevPricingSnapshot();
+    snapshot.catalog.anthropic.models['claude-haiku-4-5'].cost.input = 999;
+
+    const record = getModelsDevPricingRecord('anthropic/claude-haiku-4-5');
+    expect(record).toMatchObject({ input: 1 });
+  });
+
+  it('treats an explicit "never fetched" snapshot (fetchedAt: 0) as still stale, not freshly stamped', () => {
+    setModelsDevPricingSnapshot({ fetchedAt: 0, source: 'local', catalog: {}, error: 'boom' });
+    const snapshot = getModelsDevPricingSnapshot();
+    expect(snapshot.fetchedAt).toBe(0);
   });
 });

@@ -152,6 +152,7 @@ export const formatModelPrice = (pricing) => {
 /** @type {Record<string, {label: string, cssClass: string, title: string}>} */
 const PRICING_SOURCE_META = {
     'models.dev': { label: 'Models.dev', cssClass: 'modelsdev', title: 'Pricing sourced from Models.dev' },
+    'models.dev-partial': { label: 'Models.dev*', cssClass: 'modelsdev-partial', title: 'Some rates sourced from Models.dev; others fall back to OpenRouter/local pricing' },
     openrouter: { label: 'OpenRouter', cssClass: 'openrouter', title: 'Pricing sourced from OpenRouter' },
     local: { label: 'Local', cssClass: 'local', title: 'Using local fallback pricing' }
 };
