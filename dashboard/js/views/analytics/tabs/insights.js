@@ -131,13 +131,23 @@ export const calculateDeepInsights = () => {
         ? perModelCacheSavings
         : Math.max(0, totalCacheRead * (avgInputCostPerToken - avgCacheReadCostPerToken));
 
+    // Cache-write tokens have their own (typically higher) rate, not the
+    // input rate, so price them separately rather than blending them into
+    // the input-rate estimate.
+    const avgCacheWriteCostPerToken = Number(pricing?.cacheWrite);
+    const cacheWriteMissingSavings = Number.isFinite(avgCacheWriteCostPerToken)
+        ? Math.max(0, totalCacheWrite * (avgCacheWriteCostPerToken - avgCacheReadCostPerToken))
+        : totalCacheWrite * (1 - cacheDiscountRatio) * avgInputCostPerToken;
+    const inputMissingSavings = totalInput * (1 - cacheDiscountRatio) * avgInputCostPerToken;
+    const missingSavings = inputMissingSavings + cacheWriteMissingSavings;
+
     insights.push({
         icon: cacheRate > 0.5 ? '▲' : '▽',
         title: 'Cache Efficiency',
         value: `${(cacheRate * 100).toFixed(1)}%`,
         description: cacheRate > 0.5
             ? `Excellent! You've saved $${cacheSavings.toFixed(2)} through caching`
-            : `Low cache hit rate - missing $${((totalInput + totalCacheWrite) * (1 - cacheDiscountRatio) * avgInputCostPerToken).toFixed(2)} potential savings`,
+            : `Low cache hit rate - missing $${missingSavings.toFixed(2)} potential savings`,
         detail: `${fmtNum(totalCacheRead)} cached tokens at ${((1 - cacheDiscountRatio) * 100).toFixed(0)}% discount`,
         type: cacheRate > 0.5 ? 'positive' : 'warning'
     });

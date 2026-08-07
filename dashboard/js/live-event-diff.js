@@ -1,5 +1,5 @@
 // dashboard/js/live-event-diff.js
-import { getUsablePricingRate } from './utils.js';
+import { getUsablePricingRate, cacheHitRatePct } from './utils.js';
 
 /**
  * @param {Record<string, {total: number, input?: number, output?: number, cache_read?: number, cache_write?: number, reasoning?: number}>|null} prevTokensByModel
@@ -64,11 +64,7 @@ export function pickLatestEvent(events, pricingByModel) {
     const pricing = pricingByModel?.[biggest.model];
 
     const { inputDelta, outputDelta, cacheReadDelta, cacheWriteDelta, reasoningDelta } = biggest;
-    // cache_write must be included in the denominator - it's genuinely fresh,
-    // non-cached-read volume billed at full input price. See cacheHitRatePct
-    // in utils.js for the same convention.
-    const totalCacheable = inputDelta + cacheReadDelta + cacheWriteDelta;
-    const cachePct = totalCacheable > 0 ? (cacheReadDelta / totalCacheable) * 100 : 0;
+    const cachePct = cacheHitRatePct(inputDelta, cacheReadDelta, cacheWriteDelta);
 
     const deltas = [inputDelta, outputDelta, cacheReadDelta, cacheWriteDelta, reasoningDelta];
     const cost = pricing && typeof pricing === 'object' ? calculateCost(pricing, deltas) : null;
