@@ -4,11 +4,11 @@ import { cacheHitRatePct, getUsablePricingRate } from './utils.js';
 /**
  * Blended real cache-hit rate across the whole fleet, as a percentage.
  * Delegates to the shared cacheHitRatePct helper for the core formula.
- * @param {{total_input?: number, total_cache_read?: number}|null} currentData
+ * @param {{total_input?: number, total_cache_read?: number, total_cache_write?: number}|null} currentData
  * @returns {number}
  */
 export function getRealCacheHitRatePct(currentData) {
-    return cacheHitRatePct(currentData?.total_input, currentData?.total_cache_read);
+    return cacheHitRatePct(currentData?.total_input, currentData?.total_cache_read, currentData?.total_cache_write);
 }
 
 /**
@@ -70,9 +70,24 @@ function computeModelScenario(pricing, stats, hitRate) {
     const fixedCost = (counts.output / 1e6) * outputRate
         + (counts.cacheWrite / 1e6) * cacheWriteRate
         + (counts.reasoning / 1e6) * reasoningRate;
+
+    // hitRate is calibrated against the cache-write-inclusive pool (matches
+    // cacheHitRatePct/getRealCacheHitRatePct, which the slider's label and max
+    // are driven by), but only input+cacheRead tokens are eligible to blend
+    // between inputRate and cacheReadRate here - cache_write tokens are
+    // already billed at their own fixed cacheWriteRate above regardless of
+    // hit rate. Rescale onto the input+cacheRead sub-pool so a given hitRate
+    // means the same thing here as it does in the displayed label/slider
+    // bounds. Without this, requestedPaid at the slider's own max (hitRate ==
+    // the real fleet rate) would not reproduce the model's real spend,
+    // producing a visible jump the instant the user first touches the
+    // slider.
+    const fullPool = cacheableTokens + counts.cacheWrite;
+    const subPoolRate = cacheableTokens > 0 ? Math.min(1, hitRate * fullPool / cacheableTokens) : 0;
+
     const requestedPaid = fixedCost
-        + (cacheableTokens * (1 - hitRate) / 1e6) * inputRate
-        + (cacheableTokens * hitRate / 1e6) * cacheReadRate;
+        + (cacheableTokens * (1 - subPoolRate) / 1e6) * inputRate
+        + (cacheableTokens * subPoolRate / 1e6) * cacheReadRate;
     const actualRate = cacheableTokens > 0 ? counts.cacheRead / cacheableTokens : 0;
     const actualPaid = fixedCost
         + (cacheableTokens * (1 - actualRate) / 1e6) * inputRate

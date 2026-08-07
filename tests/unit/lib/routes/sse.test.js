@@ -3,7 +3,8 @@
  */
 
 mock.module('../../../../lib/cache', () => ({
-  getTokensData: mock()
+  getTokensData: mock(),
+  GIT_BLAME_WARM_CWD: require('../../../../lib/config').PROJECT_ROOT
 }));
 
 const { handleSseRoute } = require('../../../../lib/routes/sse');

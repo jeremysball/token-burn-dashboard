@@ -151,7 +151,7 @@ export function buildLeagueTable(tokensByModel, costsByModel, weeklyData, pricin
 
     const rows = sorted.map(([name, stats], index) => {
         const effectiveRate = effectiveRatePerMillion(stats, pricingByModel?.[name]);
-        const cachePct = cacheHitRatePct(stats.input, stats.cache_read);
+        const cachePct = cacheHitRatePct(stats.input, stats.cache_read, stats.cache_write);
         return {
             rank: index + 1,
             name,

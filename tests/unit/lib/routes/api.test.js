@@ -148,6 +148,17 @@ describe('handleGitBlameRoute cwd validation', () => {
     expect(res.statusCode).toBe(200);
     expect(getGitBlameRouteData).toHaveBeenCalledWith(30, allowedCwd);
   });
+
+  it('defaults an omitted cwd to PROJECT_ROOT instead of the server process cwd, so the initial page load succeeds', async () => {
+    const { PROJECT_ROOT } = require('../../../../lib/config');
+    const req = { url: '/api/git/blame?days=30', headers: { host: 'localhost:7071' } };
+    const res = createMockRes();
+
+    await handleGitBlameRoute(req, res, undefined);
+
+    expect(res.statusCode).toBe(200);
+    expect(getGitBlameRouteData).toHaveBeenCalledWith(30, PROJECT_ROOT);
+  });
 });
 
 describe('createInsightsHandler request validation', () => {
