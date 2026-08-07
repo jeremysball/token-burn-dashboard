@@ -64,7 +64,10 @@ export function pickLatestEvent(events, pricingByModel) {
     const pricing = pricingByModel?.[biggest.model];
 
     const { inputDelta, outputDelta, cacheReadDelta, cacheWriteDelta, reasoningDelta } = biggest;
-    const totalCacheable = inputDelta + cacheReadDelta;
+    // cache_write must be included in the denominator - it's genuinely fresh,
+    // non-cached-read volume billed at full input price. See cacheHitRatePct
+    // in utils.js for the same convention.
+    const totalCacheable = inputDelta + cacheReadDelta + cacheWriteDelta;
     const cachePct = totalCacheable > 0 ? (cacheReadDelta / totalCacheable) * 100 : 0;
 
     const deltas = [inputDelta, outputDelta, cacheReadDelta, cacheWriteDelta, reasoningDelta];

@@ -54,15 +54,20 @@ describe('computeCacheScenario', () => {
         const result = computeCacheScenario(data, 80);
         const h = 0.8;
 
-        const aInput = 800_000, aCacheRead = 20_000_000, aCacheable = aInput + aCacheRead;
+        const aInput = 800_000, aCacheRead = 20_000_000, aCacheWrite = 50_000, aCacheable = aInput + aCacheRead;
         const aActualRate = aCacheRead / aCacheable;
-        const aFixed = (100_000 / 1e6) * 15 + (50_000 / 1e6) * 3.75;
-        const aRequested = aFixed + (aCacheable * (1 - h) / 1e6) * 3 + (aCacheable * h / 1e6) * 0.3;
+        const aFixed = (100_000 / 1e6) * 15 + (aCacheWrite / 1e6) * 3.75;
+        // requestedPaid rescales hitRate (calibrated against the cache-write-
+        // inclusive pool, same as getRealCacheHitRatePct) onto the
+        // input+cacheRead sub-pool actually being blended here.
+        const aSubPoolRate = Math.min(1, h * (aCacheable + aCacheWrite) / aCacheable);
+        const aRequested = aFixed + (aCacheable * (1 - aSubPoolRate) / 1e6) * 3 + (aCacheable * aSubPoolRate / 1e6) * 0.3;
 
-        const bInput = 200_000, bCacheRead = 79_000_000, bCacheable = bInput + bCacheRead;
+        const bInput = 200_000, bCacheRead = 79_000_000, bCacheWrite = 10_000, bCacheable = bInput + bCacheRead;
         const bActualRate = bCacheRead / bCacheable;
-        const bFixed = (50_000 / 1e6) * 10 + (10_000 / 1e6) * 2.5;
-        const bRequested = bFixed + (bCacheable * (1 - h) / 1e6) * 2 + (bCacheable * h / 1e6) * 0.15;
+        const bFixed = (50_000 / 1e6) * 10 + (bCacheWrite / 1e6) * 2.5;
+        const bSubPoolRate = Math.min(1, h * (bCacheable + bCacheWrite) / bCacheable);
+        const bRequested = bFixed + (bCacheable * (1 - bSubPoolRate) / 1e6) * 2 + (bCacheable * bSubPoolRate / 1e6) * 0.15;
 
         const expectedRequested = aRequested + bRequested;
         const expectedActual = aFixed + (aCacheable * (1 - aActualRate) / 1e6) * 3 + (aCacheable * aActualRate / 1e6) * 0.3
@@ -249,6 +254,36 @@ describe('computeCacheScenario', () => {
         const result = computeCacheScenario(data, 99.99999);
         expect(result.paidPct).toBeGreaterThanOrEqual(2);
         expect(result.paidPct).toBeLessThanOrEqual(98);
+    });
+
+    it('requestedPaid at the slider max (the real fleet rate) reproduces actualPaid, not an inflated figure (#117 finding 1)', () => {
+        // Anthropic-shaped single model: tiny fresh input, modest cache_read,
+        // large cache_write. hitRate is calibrated against the cache-write-
+        // inclusive pool (matching getRealCacheHitRatePct, which drives the
+        // slider's label and max), so requestedPaid must rescale onto the
+        // input+cacheRead sub-pool it actually blends over - otherwise the
+        // instant a user drags the slider to its own max, the paid figure
+        // jumps away from the correct actualPaid shown before any drag.
+        const data = {
+            total_input: 2,
+            total_cache_read: 15_584,
+            total_cache_write: 29_124,
+            tokens_by_model: {
+                'anthropic/claude-sonnet-5': { input: 2, cache_read: 15_584, output: 0, cache_write: 29_124, reasoning: 0, total: 44_710 }
+            },
+            pricing_by_model: {
+                'anthropic/claude-sonnet-5': { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 }
+            }
+        };
+        const realRate = getRealCacheHitRatePct(data);
+        expect(realRate).toBeCloseTo(34.85, 1);
+
+        const untouched = computeCacheScenario(data, realRate);
+        expect(untouched.requestedPaid).toBeCloseTo(untouched.actualPaid, 8);
+
+        // True real cost: input + cacheRead + cacheWrite each at their own rate.
+        const expectedRealCost = (2 / 1e6) * 3 + (15_584 / 1e6) * 0.3 + (29_124 / 1e6) * 3.75;
+        expect(untouched.actualPaid).toBeCloseTo(expectedRealCost, 8);
     });
 
     it('returns zero cost when no model has usable pricing', () => {

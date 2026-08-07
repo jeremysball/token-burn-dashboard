@@ -80,7 +80,8 @@ export const calculateDeepInsights = () => {
     // 2. Cache Efficiency - Calculate real savings from model pricing
     const totalCacheRead = data.total_cache_read || 0;
     const totalInput = data.total_input || 0;
-    const cacheRate = cacheHitRatePct(totalInput, totalCacheRead, data.total_cache_write) / 100;
+    const totalCacheWrite = data.total_cache_write || 0;
+    const cacheRate = cacheHitRatePct(totalInput, totalCacheRead, totalCacheWrite) / 100;
 
     // Use each model's own cache discount. Applying the top model's pricing to
     // all cached tokens overstates savings when the workload mixes models.
@@ -136,7 +137,7 @@ export const calculateDeepInsights = () => {
         value: `${(cacheRate * 100).toFixed(1)}%`,
         description: cacheRate > 0.5
             ? `Excellent! You've saved $${cacheSavings.toFixed(2)} through caching`
-            : `Low cache hit rate - missing $${(totalInput * (1 - cacheDiscountRatio) * avgInputCostPerToken).toFixed(2)} potential savings`,
+            : `Low cache hit rate - missing $${((totalInput + totalCacheWrite) * (1 - cacheDiscountRatio) * avgInputCostPerToken).toFixed(2)} potential savings`,
         detail: `${fmtNum(totalCacheRead)} cached tokens at ${((1 - cacheDiscountRatio) * 100).toFixed(0)}% discount`,
         type: cacheRate > 0.5 ? 'positive' : 'warning'
     });

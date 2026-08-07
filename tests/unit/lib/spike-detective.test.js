@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
 const fs = require('fs');
 const os = require('os');
@@ -194,6 +194,99 @@ describe('spike-detective session lookup (Claude + Pi formats)', () => {
     const found = sessions.find(s => s.id === sessionId);
     expect(found).toBeDefined();
     expect(found.tokens).toBe(715); // full session total: 500+200 + 10+5
+  });
+
+  it('finds a session even when the first sampled line is not the chronologically earliest (#117 finding 7)', () => {
+    // approxSessionStartTime's cheap pre-filter must take the *minimum*
+    // timestamp across the sampled lines, not just the first one found -
+    // an out-of-order sample (legacy/cross-device write, EXTRA_SESSION_DIRS)
+    // could otherwise report a start time later than the file's true
+    // earliest usage, wrongly excluding a file whose real content overlaps
+    // the window.
+    const claudeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sd-claude-outoforder-'));
+    const projectDir = path.join(claudeRoot, 'test-project');
+    fs.mkdirSync(projectDir);
+    const sessionId = crypto.randomUUID();
+    const sessionFile = path.join(projectDir, `${sessionId}.jsonl`);
+
+    const trueEarliest = Date.now();
+    const laterFirstLine = trueEarliest + 10 * 60 * 1000; // 10 minutes later
+
+    // First line in the file (and thus first in the 64KB sample) has a
+    // LATER timestamp than the second line - out of chronological order.
+    fs.writeFileSync(sessionFile, [
+      JSON.stringify({
+        type: 'assistant',
+        message: { model: 'claude-sonnet-5', usage: { input_tokens: 10, output_tokens: 5 } },
+        timestamp: new Date(laterFirstLine).toISOString()
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        message: { model: 'claude-sonnet-5', usage: { input_tokens: 500, output_tokens: 200 } },
+        timestamp: new Date(trueEarliest).toISOString()
+      })
+    ].join('\n') + '\n');
+
+    const emptyExtraDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sd-extra-empty-'));
+    tmpDirs.push(claudeRoot, emptyExtraDir);
+    process.env.CLAUDE_PROJECTS_DIR = claudeRoot;
+    process.env.EXTRA_SESSION_DIRS = emptyExtraDir;
+
+    const { getSessionsInWindow } = reloadSpikeDetective();
+    // Window only covers the true-earliest end; the buggy first-line-found
+    // estimate (laterFirstLine) would sit after this window's endTime and
+    // get the file wrongly skipped by the cheap pre-filter.
+    const sessions = getSessionsInWindow(trueEarliest - 5 * 60 * 1000, trueEarliest + 2 * 60 * 1000);
+
+    const found = sessions.find(s => s.id === sessionId);
+    expect(found).toBeDefined();
+    expect(found.tokens).toBe(715); // full session total: 10+5 + 500+200
+  });
+
+  it('reads each session file at most once per investigation (#117 finding 3: no separate preview re-read)', () => {
+    const claudeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sd-claude-singleread-'));
+    const projectDir = path.join(claudeRoot, 'test-project');
+    fs.mkdirSync(projectDir);
+    const sessionId = crypto.randomUUID();
+    const sessionFile = path.join(projectDir, `${sessionId}.jsonl`);
+    const now = Date.now();
+    const iso = new Date(now).toISOString();
+
+    fs.writeFileSync(sessionFile, [
+      JSON.stringify({
+        type: 'user',
+        message: { role: 'user', content: [{ type: 'text', text: 'why the spike' }] },
+        timestamp: iso
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        message: { model: 'claude-sonnet-5', usage: { input_tokens: 100, output_tokens: 50 } },
+        timestamp: iso
+      })
+    ].join('\n') + '\n');
+
+    const emptyExtraDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sd-extra-empty-'));
+    tmpDirs.push(claudeRoot, emptyExtraDir);
+    process.env.CLAUDE_PROJECTS_DIR = claudeRoot;
+    process.env.EXTRA_SESSION_DIRS = emptyExtraDir;
+
+    const { getSessionsInWindow } = reloadSpikeDetective();
+
+    const readFileSyncSpy = spyOn(fs, 'readFileSync');
+    let sessions;
+    let readsOfThisFile;
+    try {
+      sessions = getSessionsInWindow(now - 60000, now + 60000);
+      // mockRestore() below also clears .mock.calls, so snapshot it first.
+      readsOfThisFile = readFileSyncSpy.mock.calls.filter(([p]) => p === sessionFile);
+    } finally {
+      readFileSyncSpy.mockRestore();
+    }
+
+    const found = sessions.find(s => s.id === sessionId);
+    expect(found).toBeDefined();
+    expect(found.previews[0]).toContain('why the spike');
+    expect(readsOfThisFile).toHaveLength(1);
   });
 
   it('still finds a Pi-format nested session (regression guard)', () => {
