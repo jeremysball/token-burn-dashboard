@@ -72,12 +72,19 @@ export const calculateDeepInsights = () => {
         const worst = efficiency[efficiency.length - 1];
         const savings = worst.costPer1M - best.costPer1M;
 
+        // costPer1M is actual spend / actual total tokens (input + output +
+        // cache read + cache write), so it reflects the cache discount this
+        // workload actually earned — it's an effective blended rate, not
+        // the model's sticker input/output pricing shown on the Models tab
+        // (which is why the two numbers can legitimately differ a lot for
+        // a heavily-cached model). Label it as such so the two don't read
+        // as contradictory pricing sources.
         insights.push({
             icon: '#',
             title: 'Most Efficient Model',
             value: best.name.split('/').pop(),
-            description: `Best tokens-per-dollar ratio at $${best.costPer1M.toFixed(2)} per 1M tokens`,
-            detail: `Switching from ${worst.name.split('/').pop()} would save ~$${savings.toFixed(2)} per 1M tokens`,
+            description: `Best effective rate (blended w/ cache discount) at $${best.costPer1M.toFixed(2)} per 1M tokens`,
+            detail: `Switching from ${worst.name.split('/').pop()} would save ~$${savings.toFixed(2)} per 1M tokens at this effective rate`,
             type: 'positive'
         });
     }

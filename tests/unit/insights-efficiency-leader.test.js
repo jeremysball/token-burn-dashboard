@@ -46,4 +46,35 @@ describe('Most Efficient Model insight - free-model ranking (#118 finding 5)', (
         const savings = parseFloat(match[1]);
         expect(savings).toBeGreaterThanOrEqual(0);
     });
+
+    it('labels the rate as an effective/blended rate, not the model sticker price (#118 finding 6)', () => {
+        // A heavily-cached model's blended $/1M-total-tokens rate can sit
+        // far below its sticker input/output pricing shown on the Models
+        // tab (e.g. $0.07 effective vs $0.300 in / $1.20 out sticker) once
+        // cheap cache-read tokens dominate the actual usage mix. That's not
+        // a pricing-source bug, but the description must say so, or the two
+        // numbers read as contradictory pricing sources for the same model.
+        setCurrentData({
+            tokens_by_model: {
+                'minimax/MiniMax-M3': { input: 15_693_056, output: 1_055_997, cache_read: 314_417_035, total: 331_166_088 }
+            },
+            costs_by_model: {
+                'minimax/MiniMax-M3': { total: 24.8401353 }
+            },
+            total_tokens: 331_166_088,
+            total_input: 15_693_056,
+            total_cache_read: 314_417_035,
+            total_cache_write: 0,
+            total_cost: { total: 24.8401353 },
+            files_processed: 0,
+            total_lines: 0
+        });
+
+        const insights = calculateDeepInsights();
+        const insight = insights.find(i => i.title === 'Most Efficient Model');
+        expect(insight).toBeDefined();
+        expect(insight.description).toContain('$0.08 per 1M tokens'); // ~$0.075 blended, matching the reported figure
+        expect(insight.description.toLowerCase()).toContain('effective');
+        expect(insight.description.toLowerCase()).toContain('cache');
+    });
 });
