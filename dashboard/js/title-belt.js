@@ -74,11 +74,33 @@ export function diffModelStats(currModels, baseModels) {
 }
 
 /**
- * @param {Array<{day: string, models: Record<string, any>}>} weeklyData
- * @returns {{thisWeek: Record<string, any>, lastWeek: Record<string, any>|null, weekEndDay: string}|null}
+ * The client only appends one weeklyData snapshot per calendar day it
+ * happens to be open (see dashboard/js/api.js), so an exact "8 consecutive
+ * days present" run essentially never accrues in practice - any missed day
+ * forever blocks scoring until 8 unbroken days rebuild. Find the best
+ * available stand-in for `target` instead: the most recent snapshot at or
+ * before it, or (if every snapshot we have is more recent than `target`,
+ * e.g. under a week of history exists at all) the oldest snapshot
+ * available. `days` and `excludeFrom` are both sorted ascending.
+ * @param {string[]} days
+ * @param {string} target
+ * @param {string} excludeFrom - only consider days strictly before this one
+ * @returns {string|null}
  */
-// eslint-disable-next-line max-statements
-export function computeWeekWindow(weeklyData) {
+function closestBaseline(days, target, excludeFrom) {
+    const earlier = days.filter((d) => d < excludeFrom);
+    if (!earlier.length) return null;
+    const onOrBefore = earlier.filter((d) => d <= target);
+    return onOrBefore.length ? onOrBefore[onOrBefore.length - 1] : earlier[0];
+}
+
+/**
+ * Parse `weeklyData` into a day -> entry map, keeping only syntactically and
+ * calendar-valid ISO days (last-write-wins for duplicates).
+ * @param {Array<{day: string, models: Record<string, any>}>} weeklyData
+ * @returns {Map<string, {day: string, models: Record<string, any>}>}
+ */
+function validDaySnapshots(weeklyData) {
     const valid = new Map();
     for (const entry of weeklyData || []) {
         if (
@@ -89,28 +111,41 @@ export function computeWeekWindow(weeklyData) {
         }
         valid.set(entry.day, entry);
     }
+    return valid;
+}
+
+/** @param {string} day @param {number} amount @returns {string} */
+function shiftDay(day, amount) {
+    const date = new Date(`${day}T00:00:00.000Z`);
+    date.setUTCDate(date.getUTCDate() + amount);
+    return date.toISOString().slice(0, 10);
+}
+
+/**
+ * @param {Array<{day: string, models: Record<string, any>}>} weeklyData
+ * @returns {{thisWeek: Record<string, any>, lastWeek: Record<string, any>|null, weekEndDay: string}|null}
+ */
+export function computeWeekWindow(weeklyData) {
+    const valid = validDaySnapshots(weeklyData);
     const days = [...valid.keys()].sort();
     if (!days.length) return null;
 
-    /** @param {string} day */
-    const byDay = (day) => valid.get(day);
-    /** @param {string} day @param {number} amount */
-    const shiftDay = (day, amount) => {
-        const date = new Date(`${day}T00:00:00.000Z`);
-        date.setUTCDate(date.getUTCDate() + amount);
-        return date.toISOString().slice(0, 10);
-    };
+    /** @param {string} day @returns {{day: string, models: Record<string, any>}} */
+    const byDay = (day) => /** @type {{day: string, models: Record<string, any>}} */ (valid.get(day));
     const latest = days[days.length - 1];
-    const thisStart = shiftDay(latest, -7);
-    const currentKeys = Array.from({ length: 8 }, (_, i) => shiftDay(thisStart, i));
-    if (!currentKeys.every((day) => byDay(day))) return null;
 
-    const thisWeek = diffModelStats(byDay(latest).models, byDay(thisStart).models);
-    const priorEnd = thisStart;
-    const priorStart = shiftDay(latest, -14);
-    const priorKeys = Array.from({ length: 8 }, (_, i) => shiftDay(priorStart, i));
-    const lastWeek = priorKeys.every((day) => byDay(day))
-        ? diffModelStats(byDay(priorEnd).models, byDay(priorStart).models)
+    // Best-effort ~7-day window: fall back to whatever snapshot is closest
+    // to a week ago instead of requiring an exact match. A single missing
+    // day, or a fresh install with under a week of history, no longer
+    // blocks scoring entirely.
+    const thisBaselineDay = closestBaseline(days, shiftDay(latest, -7), latest);
+    const thisWeek = diffModelStats(byDay(latest).models, thisBaselineDay ? byDay(thisBaselineDay).models : {});
+
+    const lastBaselineDay = thisBaselineDay
+        ? closestBaseline(days, shiftDay(latest, -14), thisBaselineDay)
+        : null;
+    const lastWeek = (thisBaselineDay && lastBaselineDay)
+        ? diffModelStats(byDay(thisBaselineDay).models, byDay(lastBaselineDay).models)
         : null;
 
     return { thisWeek, lastWeek, weekEndDay: latest };
