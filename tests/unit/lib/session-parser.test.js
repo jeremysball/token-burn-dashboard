@@ -6,7 +6,7 @@ const { parsePiUsage, parseClaudeUsage, normalizeModelInfo } = require('../../..
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { parseJsonlFile } = require('../../../lib/session-parser');
+const { parseJsonlFile, getCachedFileData, clearFileDataCache } = require('../../../lib/session-parser');
 
 import { describe, expect, it } from 'bun:test';
 
@@ -132,6 +132,37 @@ describe('parseJsonlFile line accounting', () => {
     try {
       expect(parseJsonlFile(file).total_lines).toBe(1);
     } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('getCachedFileData cache key', () => {
+  it('does not collide an omitted collectEvents with an explicit collectEvents:false (#117 review round 2 finding)', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'token-burn-cache-key-'));
+    const file = path.join(dir, 'session.jsonl');
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        type: 'assistant',
+        message: { model: 'claude-3-5-sonnet-20241022', usage: { input_tokens: 1, output_tokens: 1 } },
+        timestamp: '2026-08-07T00:00:00.000Z'
+      }) + '\n',
+      'utf8'
+    );
+
+    try {
+      clearFileDataCache();
+      // Omitting collectEvents defaults to true in parseJsonlFile, so this
+      // call's cache entry must carry events, not the events:[] shape an
+      // explicit collectEvents:false call would produce.
+      const omitted = getCachedFileData(file, {});
+      const explicitFalse = getCachedFileData(file, { collectEvents: false });
+
+      expect(omitted.events.length).toBeGreaterThan(0);
+      expect(explicitFalse.events).toEqual([]);
+    } finally {
+      clearFileDataCache();
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });

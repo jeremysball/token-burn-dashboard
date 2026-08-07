@@ -439,6 +439,18 @@ describe('cacheHitRatePct', () => {
   it('returns 100 when only cacheRead has volume', () => {
     expect(cacheHitRatePct(0, 1000)).toBe(100);
   });
+
+  it('folds cacheWrite into the denominator so Anthropic-style usage does not read as 100%', () => {
+    // Real Anthropic usage shape: tiny fresh input_tokens, most volume in
+    // cache_creation_input_tokens (write) rather than cache_read.
+    expect(cacheHitRatePct(2, 15584, 29124)).toBeCloseTo(34.85, 1);
+    expect(cacheHitRatePct(0, 1000, 0)).toBe(100);
+    expect(cacheHitRatePct(0, 0, 500)).toBe(0);
+  });
+
+  it('defaults cacheWrite to 0 for backward-compatible 2-arg calls', () => {
+    expect(cacheHitRatePct(50, 50)).toBeCloseTo(50, 5);
+  });
 });
 
 describe('isFiniteNumericRate', () => {

@@ -1,6 +1,6 @@
 import {
     fmtNum, currentData, historyData, fileHistoricalData,
-    getPricingForModel, cacheDiscountRatioFromPricing, escapeHtml
+    getPricingForModel, cacheDiscountRatioFromPricing, escapeHtml, cacheHitRatePct
 } from './shared.js';
 import { getGitBlameCache } from './shared.js';
 
@@ -80,7 +80,8 @@ export const calculateDeepInsights = () => {
     // 2. Cache Efficiency - Calculate real savings from model pricing
     const totalCacheRead = data.total_cache_read || 0;
     const totalInput = data.total_input || 0;
-    const cacheRate = totalCacheRead / (totalInput + totalCacheRead || 1);
+    const totalCacheWrite = data.total_cache_write || 0;
+    const cacheRate = cacheHitRatePct(totalInput, totalCacheRead, totalCacheWrite) / 100;
 
     // Use each model's own cache discount. Applying the top model's pricing to
     // all cached tokens overstates savings when the workload mixes models.
@@ -130,13 +131,26 @@ export const calculateDeepInsights = () => {
         ? perModelCacheSavings
         : Math.max(0, totalCacheRead * (avgInputCostPerToken - avgCacheReadCostPerToken));
 
+    // Cache-write tokens have their own (typically higher) rate, not the
+    // input rate, so price them separately rather than blending them into
+    // the input-rate estimate. pricing.cacheWrite is $ per 1M tokens (same
+    // convention as pricing.input/output/cacheRead), so it must be scaled
+    // down to $/token before comparing against avgCacheReadCostPerToken.
+    const rawCacheWriteRate = Number(pricing?.cacheWrite);
+    const avgCacheWriteCostPerToken = rawCacheWriteRate / 1e6;
+    const cacheWriteMissingSavings = Number.isFinite(rawCacheWriteRate)
+        ? Math.max(0, totalCacheWrite * (avgCacheWriteCostPerToken - avgCacheReadCostPerToken))
+        : totalCacheWrite * (1 - cacheDiscountRatio) * avgInputCostPerToken;
+    const inputMissingSavings = totalInput * (1 - cacheDiscountRatio) * avgInputCostPerToken;
+    const missingSavings = inputMissingSavings + cacheWriteMissingSavings;
+
     insights.push({
         icon: cacheRate > 0.5 ? '▲' : '▽',
         title: 'Cache Efficiency',
         value: `${(cacheRate * 100).toFixed(1)}%`,
         description: cacheRate > 0.5
             ? `Excellent! You've saved $${cacheSavings.toFixed(2)} through caching`
-            : `Low cache hit rate - missing $${(totalInput * (1 - cacheDiscountRatio) * avgInputCostPerToken).toFixed(2)} potential savings`,
+            : `Low cache hit rate - missing $${missingSavings.toFixed(2)} potential savings`,
         detail: `${fmtNum(totalCacheRead)} cached tokens at ${((1 - cacheDiscountRatio) * 100).toFixed(0)}% discount`,
         type: cacheRate > 0.5 ? 'positive' : 'warning'
     });
@@ -350,7 +364,7 @@ export const generateLLMInsights = async () => {
             cost: total_cost
         },
         modelCount: models.length,
-        cacheRate: currentData.total_cache_read / (currentData.total_input + currentData.total_cache_read || 1),
+        cacheRate: cacheHitRatePct(currentData.total_input, currentData.total_cache_read, currentData.total_cache_write) / 100,
         inputOutputRatio: currentData.total_input / (currentData.total_output || 1),
         models: models.map(([name, stats]) => {
             const pricing = pricing_by_model?.[name];
@@ -368,7 +382,7 @@ export const generateLLMInsights = async () => {
                 cost: cost
                     ? { input: cost.input, output: cost.output, cacheRead: cost.cache_read, cacheWrite: cost.cache_write, reasoning: cost.reasoning, total: cost.total }
                     : null,
-                cacheRate: stats.cache_read / (stats.input + stats.cache_read || 1),
+                cacheRate: cacheHitRatePct(stats.input, stats.cache_read, stats.cache_write) / 100,
                 pricePerMillion: pricing
                     ? { input: pricing.input, output: pricing.output, cacheRead: pricing.cacheRead, cacheWrite: pricing.cacheWrite, source: pricing.source }
                     : null

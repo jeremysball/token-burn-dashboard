@@ -87,10 +87,14 @@ describe('pickLatestEvent', () => {
     expect(picked.delta).toBe(200);
   });
 
-  it('computes cachePct from cacheReadDelta / (inputDelta + cacheReadDelta)', () => {
+  it('computes cachePct from cacheReadDelta / (inputDelta + cacheReadDelta + cacheWriteDelta)', () => {
+    // cache_write (Anthropic's cache_creation_input_tokens) is genuinely
+    // fresh, non-cached-read volume billed at full input price, same as the
+    // fixed cacheHitRatePct in utils.js - omitting it from the denominator
+    // overstates the hit rate. 50 / (50 + 50 + 5) ≈ 47.6%, not 50%.
     const events = [{ model: 'a/model-1', delta: 100, inputDelta: 50, outputDelta: 10, cacheReadDelta: 50, cacheWriteDelta: 5, reasoningDelta: 15 }];
     const picked = pickLatestEvent(events, pricingByModel);
-    expect(picked.cachePct).toBeCloseTo(50, 0);
+    expect(picked.cachePct).toBeCloseTo(47.619, 2);
   });
 
   it('uses only the cache-read rate for a pure cache-read delta (inputDelta=0)', () => {

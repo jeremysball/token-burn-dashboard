@@ -10,7 +10,8 @@ import { EventEmitter } from 'events';
 
 mock.module('../../../../lib/cache', () => ({
   getTokensData: mock(),
-  getHistoricalData: mock(() => Promise.resolve({ some: 'data' }))
+  getHistoricalData: mock(() => Promise.resolve({ some: 'data' })),
+  GIT_BLAME_WARM_CWD: require('../../../../lib/config').PROJECT_ROOT
 }));
 
 mock.module('../../../../lib/spike-detective', () => ({
