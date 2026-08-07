@@ -89,7 +89,17 @@ export const renderSpikesList = (spikes) => {
     }
 
     const stats = computeSeriesStats(historyData);
-    const validSpikes = spikes.filter(spike => isValidSpikeTime(spike.time));
+    // The server flags a spike by its ratio to the prior 2-point rolling
+    // average alone, which can still fall below the mean of the full
+    // history (a negative z-score) when a bigger spike elsewhere pulled
+    // that mean up. Showing a spike badge next to a negative z-score reads
+    // as contradictory, so require the full-history z-score to agree the
+    // point is at least at the mean before flagging it as a spike. (A
+    // zero z-score from computeZScore's divide-by-zero guard — too little
+    // history to have a real std dev — is not treated as "below average".)
+    const validSpikes = spikes
+        .filter(spike => isValidSpikeTime(spike.time))
+        .filter(spike => computeZScore(spike.tokens, stats) >= 0);
 
     if (validSpikes.length === 0) {
         listEl.innerHTML = '<div class="loading-placeholder">No significant spikes detected</div>';

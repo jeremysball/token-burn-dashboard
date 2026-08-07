@@ -80,6 +80,18 @@ describe('renderSpikesList DOM', () => {
         renderSpikesList([]);
         expect(document.getElementById('spikes-list').textContent).toContain('No significant spikes');
     });
+
+    it('drops a server-flagged spike whose full-history z-score is negative', () => {
+        document.body.innerHTML = '<div id="spikes-list"></div>';
+        // A bigger spike elsewhere in the wider history pulls the mean up
+        // past this point's ratio-flagged value, giving it a negative
+        // z-score even though it beat its own 2-point rolling average.
+        setHistoryData([{ total: 100000 }, { total: 100000 }, { total: 5000000 }]);
+        const spikes = [{ time: 1700000000000, tokens: 130000, ratio: '2.3', previousAvg: 100000 }];
+        renderSpikesList(spikes);
+        expect(document.querySelectorAll('.spike-card')).toHaveLength(0);
+        expect(document.getElementById('spikes-list').textContent).toContain('No significant spikes detected');
+    });
 });
 
 describe('renderInvestigation DOM', () => {
