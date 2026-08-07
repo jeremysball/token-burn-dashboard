@@ -55,18 +55,23 @@ export const calculateDeepInsights = () => {
 
     const insights = [];
 
-    // 1. Efficiency Leader
+    // 1. Efficiency Leader — ranked by actual $/1M-token rate (ascending:
+    // cheapest first). A prior "tokens / (cost || 1)" efficiency metric
+    // disagreed with costPer1M for free/near-free models (cost=0 made it
+    // look artificially efficient there but not here), which could rank a
+    // model as "worst" while its real costPer1M was still the cheapest —
+    // producing a negative "savings" from switching away from it.
     const efficiency = models.map(([name, stats]) => {
         const cost = costs_by_model?.[name]?.total || 0;
         const tokens = stats.total || 1;
-        return { name, efficiency: tokens / (cost || 1), costPer1M: (cost / tokens) * 1e6 };
-    }).sort((a, b) => b.efficiency - a.efficiency);
+        return { name, costPer1M: (cost / tokens) * 1e6 };
+    }).sort((a, b) => a.costPer1M - b.costPer1M);
 
     if (efficiency.length > 0) {
         const best = efficiency[0];
         const worst = efficiency[efficiency.length - 1];
-        const savings = (worst.costPer1M - best.costPer1M) * (best.efficiency * (best.costPer1M / 1e6)) / 1e6;
-        
+        const savings = worst.costPer1M - best.costPer1M;
+
         insights.push({
             icon: '#',
             title: 'Most Efficient Model',
