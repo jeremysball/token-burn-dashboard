@@ -2827,6 +2827,7 @@
         }
 
         .project-fill {
+            display: block;
             height: 100%;
             background: var(--mono-accent);
             border-radius: 4px;
