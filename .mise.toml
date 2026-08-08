@@ -17,8 +17,10 @@ if [ -z "$tailnet_ip" ]; then
 fi
 
 ui_pid=""
+server_pid=""
 cleanup() {
     [ -z "$ui_pid" ] || kill "$ui_pid" 2>/dev/null || true
+    [ -z "$server_pid" ] || kill "$server_pid" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
@@ -54,6 +56,12 @@ if [ -z "$tailnet_ip" ]; then
     echo "Unable to determine a Tailnet IPv4 address." >&2
     exit 1
 fi
+
+server_pid=""
+cleanup() {
+    [ -z "$server_pid" ] || kill "$server_pid" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
 
 bun run build:ui
 HOST="$tailnet_ip" PORT="$port" bun run start &
