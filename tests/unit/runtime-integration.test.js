@@ -66,4 +66,17 @@ describe("Bun delivery integration", () => {
     expect(launcher).toMatch(/curl .*health/);
     expect(launcher).not.toMatch(/\bnpm\b/);
   });
+
+  test("both local modes reap the backgrounded server on exit", async () => {
+    const launcher = await readProjectFile(".mise.toml");
+
+    // The health-check loop gives up with a bare `exit 1`, not a signal, so
+    // only an EXIT trap reaps the backgrounded server. Without one it stays
+    // bound to the port and the next run hits EADDRINUSE.
+    const traps = launcher.match(/trap cleanup EXIT INT TERM/g) ?? [];
+    const serverKills = launcher.match(/kill "\$server_pid"/g) ?? [];
+
+    expect(traps).toHaveLength(2);
+    expect(serverKills).toHaveLength(2);
+  });
 });
