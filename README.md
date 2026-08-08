@@ -245,6 +245,8 @@ The dashboard reads session files from both Pi and Claude Code:
 
 Claude Code discovery can be redirected with `CLAUDE_PROJECTS_DIR`, and
 additional Pi session directories can be supplied with `EXTRA_SESSION_DIRS`.
+To scan *only* directories you name, rather than adding to the defaults above,
+set `PI_SESSION_DIRS` — it replaces the built-in Pi base list outright.
 
 ## Configuration
 
@@ -264,6 +266,7 @@ unset.
 | `TASKFERRY_INSIGHTS_MODEL` | Model passed to taskferry for AI insights (default `opencode/deepseek-v4-flash-free`) |
 | `DASHBOARD_INSIGHTS_SCRATCH_DIR` | Isolated scratch directory for taskferry insights jobs |
 | `EXTRA_SESSION_DIRS` | Comma- or colon-separated additional Pi session directories (appended to `PI_SESSION_BASES`; does not affect Claude Code discovery) |
+| `PI_SESSION_DIRS` | Comma- or colon-separated Pi session directories that *replace* the built-in base list (unlike `EXTRA_SESSION_DIRS`, which appends). Use to scan only named directories; does not affect Claude Code discovery |
 | `CLAUDE_PROJECTS_DIR` | Override the Claude Code projects directory (default `~/.claude/projects`) |
 | `MAX_SESSION_BYTES` | Maximum session file size in bytes (default `104857600`) |
 | `OPENROUTER_MODELS_URL` | OpenRouter models endpoint for live pricing |
