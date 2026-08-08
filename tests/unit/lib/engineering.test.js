@@ -123,6 +123,16 @@ describe('lib/engineering extractFileRefs', () => {
     expect(refs).not.toContain('/home/dev/prooj/src/main.js');
   });
 
+  test('defaults the root to config.PROJECT_ROOT when none is passed', () => {
+    // Guards the default-argument wiring. Every other case pins ROOT
+    // explicitly, so without this nothing exercises the PROJECT_ROOT path.
+    const { PROJECT_ROOT } = require('../../../lib/config');
+    const text = `edited ${PROJECT_ROOT}/some/file.js and /definitely-not-root/x.js`;
+    const refs = extractFileRefs(text);
+    expect(refs).toContain(`${PROJECT_ROOT}/some/file.js`);
+    expect(refs).not.toContain('/definitely-not-root/x.js');
+  });
+
   test('returns empty for a missing or non-string root', () => {
     expect(extractFileRefs('/workspace/a/b.js', '')).toEqual([]);
     // @ts-expect-error deliberately wrong type
