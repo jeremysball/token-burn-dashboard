@@ -58,7 +58,7 @@ describe("Bun delivery integration", () => {
   });
 
   test("launches both local modes with Bun while retaining network safeguards", async () => {
-    const launcher = await readProjectFile("_run.sh");
+    const launcher = await readProjectFile(".mise.toml");
 
     expect(launcher).toContain("bun run dev:ui");
     expect(launcher).toContain("bun run start");

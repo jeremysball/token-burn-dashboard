@@ -303,10 +303,10 @@ body {
 }
 
 .hero-value.odometer { display: flex; align-items: baseline; }
-.odo-digit { display: inline-block; overflow: hidden; height: 1em; width: 0.64em; position: relative; }
+.odo-digit { display: inline-block; overflow: hidden; height: 1em; width: 0.64em; flex-shrink: 0; position: relative; }
 .odo-digit-strip { position: absolute; left: 0; top: 0; transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .odo-digit-strip span { display: block; height: 1em; line-height: 1em; }
-.odo-static { display: inline-block; }
+.odo-static { display: inline-block; flex-shrink: 0; }
 @media (prefers-reduced-motion: reduce) { .odo-digit-strip { transition: none; } }
 
 .cache-hero {

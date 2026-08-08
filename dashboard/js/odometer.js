@@ -61,6 +61,45 @@ const SETTLE_FALLBACK_MS = 650;
 const odometerState = new WeakMap();
 
 /**
+ * Elements that already have a ResizeObserver watching their container, so
+ * a re-render doesn't attach a second observer on top of the first.
+ * @type {WeakSet<HTMLElement>}
+ */
+const observedElements = new WeakSet();
+
+/**
+ * Scale el down uniformly (never up) so its digit columns stay legible when
+ * the fixed per-digit width (design-v2.css `.odo-digit`) is wider than the
+ * container — e.g. an 11-digit total on a narrow mobile card. Without this,
+ * flexbox's default flex-shrink squeezes each digit's clipped box below its
+ * glyph width, rendering corrupted/overlapping digits instead of a smaller
+ * but correctly-shaped number.
+ * @param {HTMLElement} el
+ */
+const fitToContainer = (el) => {
+    el.style.transform = '';
+    const naturalWidth = el.scrollWidth;
+    // el's own clientWidth (not its parent's) is the space actually laid out
+    // for it — the parent's clientWidth includes the parent's own padding,
+    // which overstates what's available and under-scales the fit.
+    const available = el.clientWidth;
+    if (!naturalWidth || !available || naturalWidth <= available) return;
+    const scale = available / naturalWidth;
+    el.style.transform = `scale(${scale})`;
+    el.style.transformOrigin = 'left center';
+};
+
+/** Re-fit el whenever its container is resized (viewport resize, rotation, layout change). @param {HTMLElement} el */
+const observeForFit = (el) => {
+    if (observedElements.has(el) || typeof ResizeObserver === 'undefined') return;
+    const container = el.parentElement;
+    if (!container) return;
+    const observer = new ResizeObserver(() => fitToContainer(el));
+    observer.observe(container);
+    observedElements.add(el);
+};
+
+/**
  * (Re)build el's digit columns from scratch, showing valueStr immediately
  * with no roll animation. Digit glyphs come from the locale codec; non-digit
  * code points (commas, group separators, currency symbols) render as plain
@@ -98,6 +137,8 @@ export function renderOdometer(el, valueStr) {
     });
 
     odometerState.set(el, { digitCols, valueStr, pendingValueStr: null });
+    fitToContainer(el);
+    observeForFit(el);
 }
 
 /**

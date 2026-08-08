@@ -140,4 +140,22 @@ describe('odometer', () => {
       timers.restore();
     }
   });
+
+  it('scales the odometer down to fit when its natural width exceeds its laid-out width', () => {
+    Object.defineProperty(el, 'scrollWidth', { configurable: true, value: 350 });
+    Object.defineProperty(el, 'clientWidth', { configurable: true, value: 150 });
+
+    renderOdometer(el, '31,675,430,516');
+
+    expect(el.style.transform).toBe(`scale(${150 / 350})`);
+  });
+
+  it('leaves the odometer unscaled when it already fits', () => {
+    Object.defineProperty(el, 'scrollWidth', { configurable: true, value: 100 });
+    Object.defineProperty(el, 'clientWidth', { configurable: true, value: 150 });
+
+    renderOdometer(el, '1,234');
+
+    expect(el.style.transform).toBe('');
+  });
 });

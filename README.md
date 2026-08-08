@@ -41,7 +41,10 @@ Real-time token usage analytics dashboard with cost tracking, built with a Monke
 
 ## Quick Start
 
-[Bun](https://bun.sh/) 1.3.11 or newer is required.
+[Bun](https://bun.sh/) 1.3.11 or newer is required either way. Pick whichever
+path matches your setup — both end up running the same server and frontend.
+
+### As a user (plain Bun, no mise)
 
 ```bash
 # Install dependencies
@@ -56,6 +59,34 @@ bun run dev
 # Dashboard will be available at:
 open http://127.0.0.1:7071
 ```
+
+This binds to `127.0.0.1:7071` by default. Set `HOST`/`PORT` to change that
+(see [Configuration](#configuration)).
+
+### As a developer (via mise)
+
+The repo pins its Bun and Node versions in [`.mise.toml`](.mise.toml). If you
+use [mise](https://mise.jdx.dev/) it'll install the pinned toolchain and expose
+two ready-made tasks that also wire up hot-reload and a Tailnet-reachable URL:
+
+```bash
+# Install the pinned toolchain (bun, node)
+mise install
+
+# Dev mode: Bun server + Vite (HMR), bound to your Tailnet IPv4
+mise run dev
+
+# Prod mode: builds the frontend, then runs the Bun server, bound to your Tailnet IPv4
+mise run prod
+```
+
+Both `mise run` tasks require the `tailscale` CLI on `PATH` (they call
+`tailscale ip -4` to pick a bind address) and poll `/api/health` until the
+server is ready, printing the reachable URL once it is. If you don't have
+Tailscale set up, use the plain Bun path above instead — `bun run dev` /
+`bun run start` bind to `127.0.0.1` and don't need it.
+
+### Either way
 
 The dashboard itself needs nothing else to work. The AI Insights tab is the
 one exception: it shells out to the `taskferry` CLI and shows a friendly
@@ -176,7 +207,7 @@ tests/
 - **Models Tab**: Sortable, filterable model table
 - **Compare Tab**: Side-by-side model comparison with bar charts
 - **Timeline Tab**: Time-series with range selection (1h, 24h, 7d, 30d, all)
-- **Calendar Tab**: Daily usage bar chart
+- **Daily Tab**: Daily usage bar chart
 - **Distribution Tab**: Token distribution pie charts
 - **Insights Tab**: Deep analytics with pattern detection
 - **Scale Tab**: Token scale visualization

@@ -67,6 +67,16 @@ describe('normalizeModelInfo first-slash semantics', () => {
     expect(model).toBe('claude-3-opus');
   });
 
+  it('does not mislabel a non-Claude, non-slashed model as anthropic', () => {
+    const { provider, model, modelKey } = normalizeModelInfo(
+      { model: 'MiniMax-M3' },
+      'claude'
+    );
+    expect(provider).toBe('unknown');
+    expect(model).toBe('MiniMax-M3');
+    expect(modelKey).toBe('MiniMax-M3');
+  });
+
   it('pi source keeps provider/model and applies first-slash only to key', () => {
     const { provider, model, modelKey } = normalizeModelInfo(
       { provider: 'openai', model: 'openai/gpt-4o/mini' },

@@ -46,9 +46,21 @@ describe('renderTitleBelt', () => {
     expect(container.textContent.toLowerCase()).toContain('prior calendar week is incomplete');
   });
 
-  it('shows an empty-state message instead of a broken widget with fewer than 8 snapshots', () => {
+  it('scores a best-effort window from the oldest available day with fewer than 8 snapshots, instead of an empty state', () => {
+    // computeWeekWindow's best-effort fallback (title-belt.js) means even a
+    // handful of days produces a real (if approximate) window - a client
+    // that only snapshots once per calendar day it's open essentially never
+    // accrues an exact 8-consecutive-day run in practice, so requiring one
+    // left this widget permanently blank for real usage.
     renderTitleBelt(container, fixtureWeeklyData(3, { 'a/model-1': 1000 }), pricingByModel);
-    expect(container.querySelectorAll('.belt-row').length).toBe(0);
+    expect(container.querySelectorAll('.belt-row')).toHaveLength(4); // 3 real rows + 1 placeholder row
+    expect(container.textContent).toContain('Volume Crown');
+    expect(container.textContent.toLowerCase()).not.toContain('not enough history');
+  });
+
+  it('shows an empty-state message instead of a broken widget with zero valid snapshots', () => {
+    renderTitleBelt(container, [], pricingByModel);
+    expect(container.querySelectorAll('.belt-row')).toHaveLength(0);
     expect(container.textContent.toLowerCase()).toContain('not enough history');
   });
 
