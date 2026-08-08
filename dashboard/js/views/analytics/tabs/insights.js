@@ -55,24 +55,36 @@ export const calculateDeepInsights = () => {
 
     const insights = [];
 
-    // 1. Efficiency Leader
+    // 1. Efficiency Leader — ranked by actual $/1M-token rate (ascending:
+    // cheapest first). A prior "tokens / (cost || 1)" efficiency metric
+    // disagreed with costPer1M for free/near-free models (cost=0 made it
+    // look artificially efficient there but not here), which could rank a
+    // model as "worst" while its real costPer1M was still the cheapest —
+    // producing a negative "savings" from switching away from it.
     const efficiency = models.map(([name, stats]) => {
         const cost = costs_by_model?.[name]?.total || 0;
         const tokens = stats.total || 1;
-        return { name, efficiency: tokens / (cost || 1), costPer1M: (cost / tokens) * 1e6 };
-    }).sort((a, b) => b.efficiency - a.efficiency);
+        return { name, costPer1M: (cost / tokens) * 1e6 };
+    }).sort((a, b) => a.costPer1M - b.costPer1M);
 
     if (efficiency.length > 0) {
         const best = efficiency[0];
         const worst = efficiency[efficiency.length - 1];
-        const savings = (worst.costPer1M - best.costPer1M) * (best.efficiency * (best.costPer1M / 1e6)) / 1e6;
-        
+        const savings = worst.costPer1M - best.costPer1M;
+
+        // costPer1M is actual spend / actual total tokens (input + output +
+        // cache read + cache write), so it reflects the cache discount this
+        // workload actually earned — it's an effective blended rate, not
+        // the model's sticker input/output pricing shown on the Models tab
+        // (which is why the two numbers can legitimately differ a lot for
+        // a heavily-cached model). Label it as such so the two don't read
+        // as contradictory pricing sources.
         insights.push({
             icon: '#',
             title: 'Most Efficient Model',
             value: best.name.split('/').pop(),
-            description: `Best tokens-per-dollar ratio at $${best.costPer1M.toFixed(2)} per 1M tokens`,
-            detail: `Switching from ${worst.name.split('/').pop()} would save ~$${savings.toFixed(2)} per 1M tokens`,
+            description: `Best effective rate (blended w/ cache discount) at $${best.costPer1M.toFixed(2)} per 1M tokens`,
+            detail: `Switching from ${worst.name.split('/').pop()} would save ~$${savings.toFixed(2)} per 1M tokens at this effective rate`,
             type: 'positive'
         });
     }

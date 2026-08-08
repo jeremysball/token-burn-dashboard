@@ -80,6 +80,18 @@ describe('renderSpikesList DOM', () => {
         renderSpikesList([]);
         expect(document.getElementById('spikes-list').textContent).toContain('No significant spikes');
     });
+
+    it('drops a server-flagged spike whose full-history z-score is negative', () => {
+        document.body.innerHTML = '<div id="spikes-list"></div>';
+        // A bigger spike elsewhere in the wider history pulls the mean up
+        // past this point's ratio-flagged value, giving it a negative
+        // z-score even though it beat its own 2-point rolling average.
+        setHistoryData([{ total: 100000 }, { total: 100000 }, { total: 5000000 }]);
+        const spikes = [{ time: 1700000000000, tokens: 130000, ratio: '2.3', previousAvg: 100000 }];
+        renderSpikesList(spikes);
+        expect(document.querySelectorAll('.spike-card')).toHaveLength(0);
+        expect(document.getElementById('spikes-list').textContent).toContain('No significant spikes detected');
+    });
 });
 
 describe('renderInvestigation DOM', () => {
@@ -186,6 +198,23 @@ describe('renderSpikesList safety', () => {
         const spaceEvt = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
         card.dispatchEvent(spaceEvt);
         expect(spaceEvt.defaultPrevented).toBe(true);
+    });
+
+    it('investigates the full hourly bucket the spike came from, not a window centered on its start', () => {
+        global.fetch = mock(() => Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ summary: { totalSessions: 0, totalTokens: 0, totalCost: 0, topModel: 'unknown' }, sessions: [] })
+        }));
+        document.body.innerHTML = '<div id="spikes-list"></div><div id="spike-investigation" style="display:none;"></div><div id="spike-details"></div><div id="spike-sessions"></div>';
+        const bucketStart = 1700000000000;
+        const spikes = [{ time: bucketStart, tokens: 500000, ratio: '5.0', previousAvg: 100000 }];
+        renderSpikesList(spikes);
+        const card = document.querySelector('.spike-card');
+        card.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        const bucketMidpoint = bucketStart + 30 * 60 * 1000;
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining(`/api/spikes/investigate?timestamp=${bucketMidpoint}&window=60`)
+        );
     });
 });
 
