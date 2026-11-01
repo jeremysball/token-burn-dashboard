@@ -26,7 +26,13 @@ import { describe, expect, it, mock } from 'bun:test';
 
 describe('handleSseRoute error responses', () => {
   it('does not leak the raw error message to SSE clients', async () => {
-    cache.getTokensData.mockReturnValue(Promise.reject(new Error('ENOENT: /secret/internal/path')));
+    // mockRejectedValue rejects lazily, on the call. Handing back an already
+    // rejected promise (mockReturnValue) creates one at mock-setup time, and
+    // bun's module mocks are process-wide, so a sibling file that mocked the
+    // same cache module left that promise unawaited and surfaced it as an
+    // unhandled rejection. Lazy rejection keeps the async path the real
+    // getTokensData takes without the orphan promise.
+    cache.getTokensData.mockRejectedValue(new Error('ENOENT: /secret/internal/path'));
     const req = new EventEmitter();
     const res = createMockRes();
 

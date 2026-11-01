@@ -243,6 +243,17 @@ describe('generateGitBlameReport session attribution across adjacent commit wind
     git(repoDir, ['init']);
     git(repoDir, ['config', 'user.email', 'test@example.com']);
     git(repoDir, ['config', 'user.name', 'Test']);
+    // Fixture repos are throwaway, so keep the machine's git configuration out
+    // of them. The global pre-commit refuses commits from a repo's primary
+    // checkout, which every fixture repo is by construction, so without this
+    // the test passes only on machines with no global hooks installed.
+    // Pointing core.hooksPath at an empty directory keeps real `git commit`
+    // calls instead of opting out with --no-verify. Signing is turned off for
+    // the same reason: a global commit.gpgsign has no key for this identity.
+    fs.mkdirSync(path.join(repoDir, '.no-hooks'));
+    git(repoDir, ['config', 'core.hooksPath', '.no-hooks']);
+    git(repoDir, ['config', 'commit.gpgsign', 'false']);
+    git(repoDir, ['config', 'tag.gpgsign', 'false']);
 
     const t0 = Date.now() - 5 * 60 * 1000; // 5 minutes ago, well inside the report window
     commitAt(repoDir, new Date(t0).toISOString(), 'oldest');
